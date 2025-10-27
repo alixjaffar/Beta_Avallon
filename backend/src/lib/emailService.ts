@@ -74,7 +74,7 @@ class EmailService {
         from: 'Hello@avallon.ca',
         to: 'Hello@avallon.ca',
         subject: subject,
-        priority: 'high',
+        priority: 'high' as const,
         headers: {
           'X-Priority': '1',
           'X-MSMail-Priority': 'High',
@@ -150,7 +150,7 @@ class EmailService {
         from: 'Hello@avallon.ca',
         to: userEmail,
         subject: subject,
-        priority: 'high',
+        priority: 'high' as const,
         headers: {
           'X-Priority': '1',
           'X-MSMail-Priority': 'High',
@@ -209,7 +209,7 @@ class EmailService {
           from: 'Hello@avallon.ca',
           to: subscriber.email,
           subject: subject,
-          priority: 'high',
+          priority: 'high' as const,
           headers: {
             'X-Priority': '1',
             'X-MSMail-Priority': 'High',

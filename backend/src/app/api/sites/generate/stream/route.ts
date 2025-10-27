@@ -24,17 +24,17 @@ export async function POST(req: NextRequest) {
         const generator = new ClaudeWebsiteGenerator();
         
         sendProgress('generating_code', 'Generating website code with Claude AI...', 20);
-        const websiteCode = await generator.generateWebsiteCode({
+        const website = await generator.generateWebsite({
           name,
           description,
           mode
         });
 
         sendProgress('creating_repository', 'Creating GitHub repository...', 50);
-        const repoUrl = await generator.createGitHubRepository(name, websiteCode);
+        const repoUrl = website.repoUrl;
 
         sendProgress('deploying_vercel', 'Deploying to Vercel...', 80);
-        const previewUrl = await generator.deployToVercel(name, repoUrl);
+        const previewUrl = website.previewUrl;
 
         sendProgress('completed', 'Website generation completed!', 100);
         
@@ -57,9 +57,10 @@ export async function POST(req: NextRequest) {
         controller.close();
 
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         const errorData = JSON.stringify({
           step: 'error',
-          message: `Generation failed: ${error.message}`,
+          message: `Generation failed: ${errorMessage}`,
           progress: 0,
           error: true
         });

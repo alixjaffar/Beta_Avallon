@@ -31,7 +31,7 @@ export class ClaudeWebsiteGenerator {
 
   async generateWebsite(request: WebsiteGenerationRequest, chatHistory?: any[]): Promise<GeneratedWebsite> {
     try {
-      logInfo('Starting Claude website generation', request);
+      logInfo('Starting Claude website generation', { request: JSON.stringify(request) });
 
       // Step 1: Generate website code using Claude
       const websiteCode = await this.generateWebsiteCode(request, chatHistory);
@@ -52,7 +52,7 @@ export class ClaudeWebsiteGenerator {
         slug: request.name.toLowerCase().replace(/\s+/g, '-'),
         status: 'deployed',
         previewUrl,
-        repoUrl,
+        repoUrl: repoUrl || undefined,
         files: websiteCode,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -450,7 +450,7 @@ REMEMBER: Generate ONLY index.html. Build upon previous changes. Make it look li
     // If no files were parsed, create a basic HTML structure
     if (Object.keys(files).length === 0) {
       logInfo('No files parsed from Claude response, using HTML fallback');
-      files['index.html'] = this.getDefaultHTML({ name: 'Generated Website', description: 'Professional website' });
+      files['index.html'] = this.getDefaultHTML({ name: 'Generated Website', description: 'Professional website', mode: 'full' });
     }
 
     return files;

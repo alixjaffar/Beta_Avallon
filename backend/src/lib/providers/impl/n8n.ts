@@ -113,6 +113,25 @@ export class N8nProvider implements AgentProvider {
     return this.buildEmbedCode(workflowId);
   }
 
+  async deleteAgent(workflowId: string): Promise<void> {
+    if (!isConfigured) {
+      logInfo('n8n not configured, skipping agent deletion', { workflowId });
+      return;
+    }
+
+    try {
+      await axios.delete(
+        `${N8N}/api/v1/workflows/${workflowId}`,
+        { headers: { 'X-N8N-API-KEY': N8N_KEY } }
+      );
+      logInfo('n8n agent deleted', { workflowId });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      logError('n8n deleteAgent error', error, { workflowId });
+      throw new Error(`Failed to delete n8n agent: ${message}`);
+    }
+  }
+
   private buildEmbedCode(workflowId: string): string {
     const base = N8N || 'https://mock-n8n.example.com';
     const webhookUrl = `${base.replace(/\/$/, '')}/webhook/${workflowId}`;

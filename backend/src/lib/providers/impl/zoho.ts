@@ -37,7 +37,7 @@ export class ZohoMailProvider implements EmailProvider {
       this.tokenExpiry = Date.now() + (response.data.expires_in - 60) * 1000; // 60s buffer
       
       logInfo('Zoho access token refreshed');
-      return this.accessToken;
+      return this.accessToken!;
     } catch (error: any) {
       logError('Zoho token refresh failed', error);
       throw new Error('Failed to refresh Zoho access token');

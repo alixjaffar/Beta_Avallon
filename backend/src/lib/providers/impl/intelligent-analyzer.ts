@@ -536,7 +536,7 @@ export class IntelligentAnalyzer {
     }
   }
 
-  private determineStyle(extractedInfo: any, industryAnalysis: any): string {
+  private determineStyle(extractedInfo: any, industryAnalysis: any): 'modern' | 'classic' | 'minimalist' | 'creative' | 'professional' | 'elegant' {
     const styleKeywords = {
       modern: ['modern', 'contemporary', 'cutting-edge', 'innovative', 'tech'],
       classic: ['classic', 'traditional', 'timeless', 'elegant', 'sophisticated'],
@@ -551,22 +551,22 @@ export class IntelligentAnalyzer {
 
     for (const [style, keywords] of Object.entries(styleKeywords)) {
       if (keywords.some(keyword => requestText.includes(keyword) || industry.includes(keyword))) {
-        return style;
+        return style as 'modern' | 'classic' | 'minimalist' | 'creative' | 'professional' | 'elegant';
       }
     }
 
     // Default based on industry
-    const industryDefaults = {
+    const industryDefaults: Record<string, 'modern' | 'classic' | 'minimalist' | 'creative' | 'professional' | 'elegant'> = {
       technology: 'modern',
       healthcare: 'professional',
       finance: 'professional',
-      education: 'friendly',
+      education: 'professional',
       ecommerce: 'modern',
       restaurant: 'creative',
       creative: 'creative'
     };
 
-    return industryDefaults[industryAnalysis.industry] || 'modern';
+    return industryDefaults[industryAnalysis.industry as keyof typeof industryDefaults] || 'modern';
   }
 
   private generateColorScheme(industryAnalysis: any, audienceAnalysis: any): string {
@@ -580,10 +580,10 @@ export class IntelligentAnalyzer {
       creative: '#ec4899'
     };
 
-    return industryColors[industryAnalysis.industry] || '#2563eb';
+    return industryColors[industryAnalysis.industry as keyof typeof industryColors] || '#2563eb';
   }
 
-  private determineLayout(extractedInfo: any, industryAnalysis: any): string {
+  private determineLayout(extractedInfo: any, industryAnalysis: any): 'single-page' | 'multi-page' | 'blog' | 'ecommerce' | 'portfolio' | 'landing' {
     const layoutKeywords = {
       'single-page': ['single page', 'one page', 'landing page'],
       'multi-page': ['multiple pages', 'website', 'site'],
@@ -597,12 +597,12 @@ export class IntelligentAnalyzer {
 
     for (const [layout, keywords] of Object.entries(layoutKeywords)) {
       if (keywords.some(keyword => requestText.includes(keyword))) {
-        return layout;
+        return layout as 'single-page' | 'multi-page' | 'blog' | 'ecommerce' | 'portfolio' | 'landing';
       }
     }
 
     // Default based on industry
-    const industryDefaults = {
+    const industryDefaults: Record<string, 'single-page' | 'multi-page' | 'blog' | 'ecommerce' | 'portfolio' | 'landing'> = {
       technology: 'single-page',
       healthcare: 'multi-page',
       finance: 'multi-page',
@@ -612,10 +612,10 @@ export class IntelligentAnalyzer {
       creative: 'portfolio'
     };
 
-    return industryDefaults[industryAnalysis.industry] || 'single-page';
+    return industryDefaults[industryAnalysis.industry as keyof typeof industryDefaults] || 'single-page';
   }
 
-  private assessComplexity(extractedInfo: any, technicalRequirements: any): string {
+  private assessComplexity(extractedInfo: any, technicalRequirements: any): 'simple' | 'intermediate' | 'advanced' | 'enterprise' {
     const complexityFactors = {
       simple: 0,
       intermediate: 0,
@@ -647,7 +647,7 @@ export class IntelligentAnalyzer {
     const maxComplexity = Object.entries(complexityFactors)
       .sort(([,a], [,b]) => b - a)[0][0];
     
-    return maxComplexity;
+    return maxComplexity as 'simple' | 'intermediate' | 'advanced' | 'enterprise';
   }
 
   private async callClaudeAPI(prompt: string): Promise<string> {

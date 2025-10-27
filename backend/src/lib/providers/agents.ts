@@ -15,4 +15,5 @@ export type CreateAgentResult = {
 export interface AgentProvider {
   createAgent(input: CreateAgentInput): Promise<CreateAgentResult>;
   getEmbedCode(externalId: string): string;
+  deleteAgent(externalId: string): Promise<void>;
 }

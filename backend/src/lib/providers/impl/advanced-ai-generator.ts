@@ -56,9 +56,9 @@ export interface AdvancedWebsiteResponse {
 export class AdvancedAIGenerator {
   private apiKey: string;
   private baseUrl: string;
-  private industryTemplates: Map<string, any>;
-  private styleTemplates: Map<string, any>;
-  private layoutTemplates: Map<string, any>;
+  private industryTemplates: Map<string, any> = new Map();
+  private styleTemplates: Map<string, any> = new Map();
+  private layoutTemplates: Map<string, any> = new Map();
 
   constructor() {
     this.apiKey = process.env.CLAUDE_API_KEY || '';
@@ -190,7 +190,7 @@ export class AdvancedAIGenerator {
 
   async generateAdvancedWebsite(request: AdvancedWebsiteRequest): Promise<AdvancedWebsiteResponse> {
     try {
-      logInfo('Starting advanced website generation', request);
+      logInfo('Starting advanced website generation', { request: JSON.stringify(request) });
 
       // Step 1: Analyze and enhance the request
       const enhancedRequest = await this.analyzeAndEnhanceRequest(request);
@@ -494,7 +494,7 @@ export class AdvancedAIGenerator {
 
   // Helper methods for generating specific files
   private generatePackageJson(request: AdvancedWebsiteRequest): string {
-    const dependencies = {
+    const dependencies: Record<string, string> = {
       'next': '^14.0.0',
       'react': '^18.0.0',
       'react-dom': '^18.0.0',
@@ -553,11 +553,7 @@ export class AdvancedAIGenerator {
     };
 
     if (request.performance) {
-      config.experimental = {
-        ...config.experimental,
-        optimizeCss: true,
-        optimizePackageImports: ['lucide-react', 'framer-motion'],
-      };
+      // Performance optimizations are handled by Next.js automatically
     }
 
     return `/** @type {import('next').NextConfig} */\nconst nextConfig = ${JSON.stringify(config, null, 2)};\n\nmodule.exports = nextConfig;`;

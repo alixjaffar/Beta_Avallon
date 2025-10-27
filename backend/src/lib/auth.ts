@@ -14,13 +14,13 @@ export async function getCurrentUser() {
 
   if (!user) {
     // Get user info from Clerk
-    const { user: clerkUser } = await auth();
-    if (!clerkUser) return null;
+    const { userId: clerkUserId } = await auth();
+    if (!clerkUserId) return null;
 
     user = await prisma.user.create({
       data: {
-        clerkId: userId,
-        email: clerkUser.emailAddresses[0]?.emailAddress || '',
+        clerkId: clerkUserId,
+        email: '', // We'll need to get this from Clerk API if needed
       },
     });
   }

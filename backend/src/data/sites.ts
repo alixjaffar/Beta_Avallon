@@ -64,6 +64,8 @@ export async function createSite(input: CreateSiteInput) {
       status: input.status,
       repoUrl: input.repoUrl || null,
       previewUrl: input.previewUrl || null,
+      vercelProjectId: input.vercelProjectId || null,
+      vercelDeploymentId: input.vercelDeploymentId || null,
       chatHistory: input.chatHistory || [],
       websiteContent: input.websiteContent || null,
       createdAt: new Date().toISOString(),

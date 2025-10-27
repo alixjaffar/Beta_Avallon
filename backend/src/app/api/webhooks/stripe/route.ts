@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
 }
 
 async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
-  const customerId = subscription.customer;
+  const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
   const subscriptionId = subscription.id;
   const status = subscription.status;
   const priceId = subscription.items.data[0]?.price.id;

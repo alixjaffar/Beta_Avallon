@@ -233,8 +233,8 @@ export interface OptimizationOptions {
 export class AdvancedContentGenerator {
   private apiKey: string;
   private baseUrl: string;
-  private contentTemplates: Map<string, any>;
-  private industryContent: Map<string, any>;
+  private contentTemplates: Map<string, any> = new Map();
+  private industryContent: Map<string, any> = new Map();
 
   constructor() {
     this.apiKey = process.env.CLAUDE_API_KEY || '';
@@ -1007,7 +1007,7 @@ export class AdvancedContentGenerator {
         dimensions: { width: 24, height: 24 },
         optimization: {
           compression: false,
-          format: 'svg',
+          format: 'webp' as const,
           quality: 100,
           lazy: false,
           responsive: false

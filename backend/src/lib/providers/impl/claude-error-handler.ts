@@ -15,6 +15,7 @@ export class ClaudeError extends Error {
   public readonly type: ClaudeErrorType;
   public readonly retryable: boolean;
   public readonly userMessage: string;
+  public readonly originalError?: Error;
 
   constructor(
     type: ClaudeErrorType,
@@ -28,10 +29,7 @@ export class ClaudeError extends Error {
     this.type = type;
     this.retryable = retryable;
     this.userMessage = userMessage;
-    
-    if (originalError) {
-      this.cause = originalError;
-    }
+    this.originalError = originalError;
   }
 }
 

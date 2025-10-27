@@ -1,6 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: { serverActions: { bodySizeLimit: '2mb' } },
+  webpack: (config) => {
+    config.watchOptions = {
+      ...config.watchOptions,
+      ignored: ['**/generated-websites/**'],
+    };
+    return config;
+  },
+  outputFileTracingRoot: process.cwd(),
   async headers() {
     return [
       {

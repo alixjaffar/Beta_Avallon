@@ -13,7 +13,7 @@ export function getStripeClient(): Stripe | null {
     return null;
   }
 
-  stripeClient = new Stripe(secretKey, { apiVersion: "2024-09-30.acacia" });
+  stripeClient = new Stripe(secretKey, { apiVersion: "2024-06-20" });
   return stripeClient;
 }
 

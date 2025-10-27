@@ -66,6 +66,11 @@ export default function Domains() {
   const [billing, setBilling] = useState<BillingSummary | null>(null);
   const [dnsInsights, setDnsInsights] = useState<Record<string, DnsInsight>>({});
 
+  const registrarConfigured = providerStatus?.registrar || false;
+  const emailProviderConfigured = providerStatus?.email || false;
+  const domainLimitReached = billing ? billing.usage.domains >= billing.limits.domains : false;
+  const emailLimitReached = billing ? billing.usage.emailAccounts >= billing.limits.emailAccounts : false;
+
   const addToast = (toast: Toast) => {
     setToasts(prev => [...prev, toast]);
   };

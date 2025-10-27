@@ -336,18 +336,6 @@ export class UltraAdvancedGenerator {
     };
   }
 
-  private createContentStrategy(config: UltraAdvancedConfig): any {
-    // Create comprehensive content strategy
-    return {
-      tone: this.determineTone(config),
-      voice: this.defineVoice(config),
-      messaging: this.createMessaging(config),
-      contentTypes: this.defineContentTypes(config),
-      seoKeywords: this.generateSEOKeywords(config),
-      contentCalendar: this.createContentCalendar(config)
-    };
-  }
-
   private determineTone(config: UltraAdvancedConfig): string {
     const tones = {
       'technology': 'innovative, forward-thinking, technical',
@@ -387,7 +375,7 @@ export class UltraAdvancedGenerator {
       'finance': ['financial services', 'banking', 'investment']
     };
     
-    return [...baseKeywords, ...(industryKeywords[config.industry as keyof typeof industryKeywords] || [])];
+    return [...baseKeywords, ...(industryKeywords[config.industry as keyof typeof industryKeywords] || [])].filter((keyword): keyword is string => Boolean(keyword));
   }
 
   private createContentCalendar(config: UltraAdvancedConfig): any {
@@ -417,6 +405,86 @@ export class UltraAdvancedGenerator {
         personality: 'professional, trustworthy, innovative',
         differentiation: 'unique, memorable, distinctive'
       }
+    };
+  }
+
+  private setPerformanceTargets(config: UltraAdvancedConfig): any {
+    return {
+      loadTime: '< 3 seconds',
+      firstContentfulPaint: '< 1.5 seconds',
+      largestContentfulPaint: '< 2.5 seconds',
+      cumulativeLayoutShift: '< 0.1',
+      firstInputDelay: '< 100ms',
+      timeToInteractive: '< 3.5 seconds',
+      lighthouseScore: '> 90',
+      coreWebVitals: 'Good',
+      optimization: {
+        images: 'WebP format, lazy loading',
+        css: 'Critical CSS inlined',
+        js: 'Code splitting, tree shaking',
+        fonts: 'Preload, font-display: swap',
+        caching: 'Service worker, CDN'
+      }
+    };
+  }
+
+  private defineAccessibilityRequirements(config: UltraAdvancedConfig): any {
+    return {
+      wcag: 'AA compliance',
+      keyboardNavigation: 'Full keyboard accessibility',
+      screenReader: 'ARIA labels and semantic HTML',
+      colorContrast: '4.5:1 minimum ratio',
+      focusManagement: 'Visible focus indicators',
+      altText: 'Descriptive alt text for images',
+      headings: 'Proper heading hierarchy',
+      forms: 'Clear labels and error messages',
+      testing: 'Automated and manual testing'
+    };
+  }
+
+  private createSEOStrategy(config: UltraAdvancedConfig): any {
+    return {
+      metaTags: 'Optimized title, description, keywords',
+      structuredData: 'Schema.org markup',
+      sitemap: 'XML sitemap generation',
+      robots: 'Proper robots.txt',
+      canonical: 'Canonical URLs',
+      openGraph: 'Social media optimization',
+      performance: 'Core Web Vitals optimization',
+      content: 'Keyword-optimized content',
+      internalLinking: 'Strategic internal linking',
+      analytics: 'Google Analytics integration'
+    };
+  }
+
+  private defineConversionGoals(config: UltraAdvancedConfig): any {
+    return {
+      primary: 'Lead generation',
+      secondary: 'Brand awareness',
+      metrics: {
+        conversionRate: '> 2%',
+        bounceRate: '< 40%',
+        timeOnSite: '> 2 minutes',
+        pagesPerSession: '> 2.5'
+      },
+      cta: 'Clear, prominent call-to-action buttons',
+      forms: 'Optimized contact forms',
+      trust: 'Social proof and testimonials'
+    };
+  }
+
+  private defineBrandPersonality(config: UltraAdvancedConfig): any {
+    return {
+      tone: 'Professional, trustworthy, innovative',
+      voice: 'Clear, confident, helpful',
+      values: ['Quality', 'Innovation', 'Reliability', 'Customer Focus'],
+      characteristics: {
+        modern: true,
+        professional: true,
+        approachable: true,
+        innovative: true
+      },
+      messaging: 'Clear value proposition and benefits'
     };
   }
 
