@@ -3,6 +3,5 @@
   "buildCommand": "cd backend && npm run build",
   "outputDirectory": "backend/.next",
   "installCommand": "cd backend && npm install",
-  "framework": "nextjs",
-  "rootDirectory": "backend"
+  "framework": "nextjs"
 }
