@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ernst & Young - Professional Services Firm</title>
+    <style>
+        /* Google Font Import */
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+
+        /* Base Styles */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Montserrat', sans-serif;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        a {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        /* Header Styles */
+        header {
+            background: linear-gradient(to right, #004C97, #00A7E1);
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo img {
+            height: 40px;
+        }
+
+        nav ul {
+            display: flex;
+            list-style-type: none;
+        }
+
+        nav li {
+            margin-left: 30px;
+        }
+
+        nav a {
+            color: #fff;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        nav a:hover {
+            color: #E6E6E6;
+        }
+
+        /* Hero Section */
+        .hero {
+            background: url('https://via.placeholder.com/1920x700/004C97/FFFFFF') no-repeat center/cover;
+            padding: 100px 40px;
+            text-align: center;
+            color: #fff;
+        }
+
+        .hero h1 {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+
+        .hero p {
+            font-size: 24px;
+            margin-bottom: 40px;
+        }
+
+        .btn {
+            display: inline-block;
+            background-color: #00A7E1;
+            color: #fff;
+            padding: 12px 30px;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+        }
+
+        .btn:hover {
+            background-color: #0089BD;
+        }
+
+        /* Services Section */
+        .services {
+            padding: 80px 40px;
+            text-align: center;
+        }
+
+        .services h2 {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 40px;
+        }
+
+        .service-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-gap: 40px;
+        }
+
+        .service-card {
+            background-color: #f5f5f5;
+            padding: 30px;
+            border-radius: 5px;
+            transition: transform 0.3s ease;
+        }
+
+        .service-card:hover {
+            transform: translateY(-10px);
+        }
+
+        .service-card h3 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .service-card p {
+            font-size: 16px;
+        }
+
+        /* Footer */
+        footer {
+            background-color: #004C97;
+            color: #fff;
+            padding: 40px;
+            text-align: center;
+        }
+
+        footer p {
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <a href="#">
+                <img src="https://via.placeholder.com/150x40/FFFFFF/000000" alt="Ernst & Young Logo">
+            </a>
+        </div>
+        <nav>
+            <ul>
+                <li><a href="#">About</a></li>
+                <li><a href="#">Services</a></li>
+                <li><a href="#">Industries</a></li>
+                <li><a href="#">Insights</a></li>
+                <li><a href="#">Careers</a></li>
+                <li><a href="#">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section class="hero">
+            <h1>Empowering businesses to grow and innovate</h1>
+            <p>Ernst & Young is a global leader in professional services, providing consulting, assurance, tax, and transaction advisory solutions.</p>
+            <a href="#" class="btn">Learn More</a>
+        </section>
+
+        <section class="services">
+            <h2>Our Services</h2>
+            <div class="service-grid">
+                <div class="service-card">
+                    <h3>Assurance</h3>
+                    <p>We provide assurance services to help organizations build trust and transparency.</p>
+                </div>
+                <div class="service-card">
+                    <h3>Consulting</h3>
+                    <p>Our consulting team helps businesses navigate complex challenges and drive transformation.</p>
+                </div>
+                <div class="service-card">
+                    <h3>Tax</h3>
+                    <p>We offer comprehensive tax services to help clients manage their tax obligations and maximize opportunities.</p>
+                </div>
+                <div class="service-card">
+                    <h3>Transactions</h3>
+                    <p>Our transaction advisory services support clients throughout the deal lifecycle, from strategy to execution.</p>
+                </div>
+                <div class="service-card">
+                    <h3>Strategy and Transactions</h3>
+                    <p>We help clients develop and execute strategies to drive sustainable growth and value.</p>
+                </div>
+                <div class="service-card">
+                    <h3>Technology Consulting</h3>
+                    <p>Our technology consulting services help organizations leverage technology to achieve their goals.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2023 Ernst & Young. All rights reserved.</p>
+    </footer>
+</body>
+</html>

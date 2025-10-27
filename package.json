@@ -1,0 +1,41 @@
+{
+  "name": "avallon-cloud",
+  "version": "1.0.0",
+  "description": "Complete site generation platform with AI-powered backend and modern frontend",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "cd backend && npm run test",
+    "test:frontend": "cd frontend && npm run test"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": [
+    "site-generation",
+    "ai",
+    "claude",
+    "github",
+    "vercel",
+    "nextjs",
+    "react",
+    "typescript"
+  ],
+  "author": "Avallon Cloud",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.76.1"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@avallon-cloud/shared",
+  "version": "1.0.0",
+  "description": "Shared types and utilities for Avallon Cloud platform",
+  "main": "index.ts",
+  "types": "index.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

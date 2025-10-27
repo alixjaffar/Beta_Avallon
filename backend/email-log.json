@@ -1,0 +1,156 @@
+[
+  {
+    "timestamp": "2025-10-27T20:12:56.069Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: Test User",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: Test User\n      - Email: test@example.com\n      - Birthday: 1990-01-01\n      - Email Subscription: Yes\n      - Signup Date:..."
+  },
+  {
+    "timestamp": "2025-10-27T20:12:56.508Z",
+    "type": "welcome",
+    "to": "test@example.com",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "Welcome to Avallon, Test User! Thank you for joining our beta waitlist...."
+  },
+  {
+    "timestamp": "2025-10-27T20:14:22.634Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: Aayush Nautiyal",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: Aayush Nautiyal\n      - Email: aayushnau@gmail.com\n      - Birthday: 2005-02-09\n      - Email Subscription: Yes\n      - Sig..."
+  },
+  {
+    "timestamp": "2025-10-27T20:14:23.073Z",
+    "type": "welcome",
+    "to": "aayushnau@gmail.com",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "Welcome to Avallon, Aayush Nautiyal! Thank you for joining our beta waitlist...."
+  },
+  {
+    "timestamp": "2025-10-27T20:16:41.299Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: John Doe",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: John Doe\n      - Email: john@example.com\n      - Birthday: 1990-01-01\n      - Email Subscription: Yes\n      - Signup Date: ..."
+  },
+  {
+    "timestamp": "2025-10-27T20:16:41.300Z",
+    "type": "welcome",
+    "to": "john@example.com",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "\n      Welcome to Avallon, John Doe!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as our beta ve..."
+  },
+  {
+    "timestamp": "2025-10-27T20:21:59.954Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: Test User 2",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: Test User 2\n      - Email: test2@example.com\n      - Birthday: 1995-05-15\n      - Email Subscription: Yes\n      - Signup Da..."
+  },
+  {
+    "timestamp": "2025-10-27T20:22:00.438Z",
+    "type": "welcome",
+    "to": "test2@example.com",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "\n      Welcome to Avallon, Test User 2!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as our beta..."
+  },
+  {
+    "timestamp": "2025-10-27T20:23:17.012Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: Final Test User",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: Final Test User\n      - Email: finaltest@example.com\n      - Birthday: 1992-12-25\n      - Email Subscription: Yes\n      - S..."
+  },
+  {
+    "timestamp": "2025-10-27T20:23:17.013Z",
+    "type": "welcome",
+    "to": "finaltest@example.com",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "\n      Welcome to Avallon, Final Test User!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as our ..."
+  },
+  {
+    "timestamp": "2025-10-27T20:40:15.864Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: Test Automatic Email",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: Test Automatic Email\n      - Email: autotest@example.com\n      - Birthday: 1990-06-15\n      - Email Subscription: Yes\n     ..."
+  },
+  {
+    "timestamp": "2025-10-27T20:40:17.067Z",
+    "type": "welcome",
+    "to": "autotest@example.com",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "\n      Welcome to Avallon, Test Automatic Email!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as..."
+  },
+  {
+    "timestamp": "2025-10-27T20:40:22.235Z",
+    "type": "bulk-update",
+    "to": "test@example.com",
+    "subject": "Test Bulk Email",
+    "content": "\n          Hi Test User,\n          \n          This is a test bulk email to verify automatic sending is working!\n          \n          Thank you for being part of the Avallon community!\n          \n     ..."
+  },
+  {
+    "timestamp": "2025-10-27T20:40:23.221Z",
+    "type": "bulk-update",
+    "to": "aayushnau@gmail.com",
+    "subject": "Test Bulk Email",
+    "content": "\n          Hi Aayush Nautiyal,\n          \n          This is a test bulk email to verify automatic sending is working!\n          \n          Thank you for being part of the Avallon community!\n          ..."
+  },
+  {
+    "timestamp": "2025-10-27T20:40:24.400Z",
+    "type": "bulk-update",
+    "to": "john@example.com",
+    "subject": "Test Bulk Email",
+    "content": "\n          Hi John Doe,\n          \n          This is a test bulk email to verify automatic sending is working!\n          \n          Thank you for being part of the Avallon community!\n          \n      ..."
+  },
+  {
+    "timestamp": "2025-10-27T20:40:25.403Z",
+    "type": "bulk-update",
+    "to": "test2@example.com",
+    "subject": "Test Bulk Email",
+    "content": "\n          Hi Test User 2,\n          \n          This is a test bulk email to verify automatic sending is working!\n          \n          Thank you for being part of the Avallon community!\n          \n   ..."
+  },
+  {
+    "timestamp": "2025-10-27T20:40:26.414Z",
+    "type": "bulk-update",
+    "to": "finaltest@example.com",
+    "subject": "Test Bulk Email",
+    "content": "\n          Hi Final Test User,\n          \n          This is a test bulk email to verify automatic sending is working!\n          \n          Thank you for being part of the Avallon community!\n          ..."
+  },
+  {
+    "timestamp": "2025-10-27T20:40:27.585Z",
+    "type": "bulk-update",
+    "to": "autotest@example.com",
+    "subject": "Test Bulk Email",
+    "content": "\n          Hi Test Automatic Email,\n          \n          This is a test bulk email to verify automatic sending is working!\n          \n          Thank you for being part of the Avallon community!\n     ..."
+  },
+  {
+    "timestamp": "2025-10-27T20:41:44.172Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: Aayush Nautiyal",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: Aayush Nautiyal\n      - Email: anautiya@uwo.ca\n      - Birthday: 2005-02-09\n      - Email Subscription: Yes\n      - Signup ..."
+  },
+  {
+    "timestamp": "2025-10-27T20:41:45.248Z",
+    "type": "welcome",
+    "to": "anautiya@uwo.ca",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "\n      Welcome to Avallon, Aayush Nautiyal!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as our ..."
+  },
+  {
+    "timestamp": "2025-10-27T20:47:12.103Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: Test Priority Email",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: Test Priority Email\n      - Email: prioritytest@example.com\n      - Birthday: 1990-01-01\n      - Email Subscription: Yes\n  ..."
+  },
+  {
+    "timestamp": "2025-10-27T20:47:13.062Z",
+    "type": "welcome",
+    "to": "prioritytest@example.com",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "\n      Welcome to Avallon, Test Priority Email!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as ..."
+  }
+]

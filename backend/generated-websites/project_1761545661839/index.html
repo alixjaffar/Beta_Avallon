@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bloom Boutique - Modern, Stylish Apparel</title>
+    <style>
+        /* Google Font */
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+
+        /* Global Styles */
+        body {
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            padding: 0;
+            color: #333;
+        }
+
+        a {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        /* Header Styles */
+        header {
+            background-color: #8C1AAE;
+            color: #fff;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        nav ul {
+            list-style-type: none;
+            display: flex;
+            gap: 20px;
+        }
+
+        nav ul li a {
+            font-size: 16px;
+            font-weight: 400;
+        }
+
+        /* Hero Section Styles */
+        .hero {
+            background-color: #F0F2F5;
+            padding: 80px 20px;
+            text-align: center;
+        }
+
+        .hero h1 {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+
+        .hero p {
+            font-size: 18px;
+            margin-bottom: 40px;
+        }
+
+        .cta-button {
+            background-color: #3C82F6;
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+            display: inline-block;
+            transition: background-color 0.3s;
+        }
+
+        .cta-button:hover {
+            background-color: #2963C9;
+        }
+
+        /* Featured Products Styles */
+        .featured-products {
+            padding: 60px 20px;
+        }
+
+        .featured-products h2 {
+            font-size: 36px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 40px;
+        }
+
+        .product {
+            background-color: #fff;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .product img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+        }
+
+        .product-info {
+            padding: 20px;
+        }
+
+        .product-info h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .product-info p {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .add-to-cart {
+            background-color: #3C82F6;
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            display: inline-block;
+            transition: background-color 0.3s;
+        }
+
+        .add-to-cart:hover {
+            background-color: #2963C9;
+        }
+
+        /* Footer Styles */
+        footer {
+            background-color: #8C1AAE;
+            color: #fff;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        footer p {
+            font-size: 14px;
+            margin-bottom: 0;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">Bloom Boutique</div>
+        <nav>
+            <ul>
+                <li><a href="#">Home</a></li>
+                <li><a href="#">Shop</a></li>
+                <li><a href="#">About</a></li>
+                <li><a href="#">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <section class="hero">
+        <h1>Discover Timeless Style</h1>
+        <p>Bloom Boutique offers a curated collection of modern, stylish apparel and accessories.</p>
+        <a href="#" class="cta-button">Shop Now</a>
+    </section>
+
+    <section class="featured-products">
+        <h2>Featured Products</h2>
+        <div class="product-grid">
+            <div class="product">
+                <img src="https://via.placeholder.com/300x200" alt="Product 1">
+                <div class="product-info">
+                    <h3>Floral Midi Dress</h3>
+                    <p>$79.99</p>
+                    <a href="#" class="add-to-cart">Add to Cart</a>
+                </div>
+            </div>
+            <div class="product">
+                <img src="https://via.placeholder.com/300x200" alt="Product 2">
+                <div class="product-info">
+                    <h3>Striped Linen Shirt</h3>
+                    <p>$49.99</p>
+                    <a href="#" class="add-to-cart">Add to Cart</a>
+                </div>
+            </div>
+            <div class="product">
+                <img src="https://via.placeholder.com/300x200" alt="Product 3">
+                <div class="product-info">
+                    <h3>Leather Tote Bag</h3>
+                    <p>$99.99</p>
+                    <a href="#" class="add-to-cart">Add to Cart</a>
+                </div>
+            </div>
+            <div class="product">
+                <img src="https://via.placeholder.com/300x200" alt="Product 4">
+                <div class="product-info">
+                    <h3>Denim Miniskirt</h3>
+                    <p>$59.99</p>
+                    <a href="#" class="add-to-cart">Add to Cart</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <p>&copy; 2023 Bloom Boutique. All rights reserved.</p>
+    </footer>
+</body>
+</html>

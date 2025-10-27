@@ -1,0 +1,15 @@
+# Avallon Cloud – Cursor rules
+# These guide Cursor's AI when refactoring or generating code.
+
+- Always keep the file tree defined by `// FILE:` markers consistent.
+- Prefer TypeScript in `/src` with absolute imports `@/...`.
+- Do not introduce new state managers; keep it React + server actions for now.
+- When editing API client stubs, preserve function names/exports.
+- Any new provider integration must:
+  1) Add env vars to `.env.example`,
+  2) Add a typed client in `src/lib/clients/<provider>.ts`,
+  3) Add input validation with `zod`,
+  4) Return consistent `{ message, result }` JSON.
+- When adding DB persistence, use Prisma and link records to the authenticated `User`.
+- Keep UI minimal and accessible; prefer shadcn/ui only after core flows are stable.
+- Tests (later): Add Vitest; test API handlers and client wrappers.

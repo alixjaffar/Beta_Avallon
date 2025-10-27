@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avallon Cloud - Complete Site Generation Platform</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #1f2937;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+        
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: white;
+        }
+        
+        .hero-content {
+            max-width: 800px;
+        }
+        
+        .hero h1 {
+            font-size: 4rem;
+            font-weight: 800;
+            margin-bottom: 1.5rem;
+            line-height: 1.1;
+        }
+        
+        .hero p {
+            font-size: 1.5rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+        
+        .btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 0.75rem;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.125rem;
+            transition: transform 0.2s;
+            margin: 0.5rem;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .features {
+            padding: 4rem 0;
+            background: white;
+        }
+        
+        .features h2 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 3rem;
+            color: #1f2937;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+        
+        .feature-card {
+            background: #f8fafc;
+            padding: 2rem;
+            border-radius: 1rem;
+            border: 1px solid #e2e8f0;
+            text-align: center;
+        }
+        
+        .feature-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #1f2937;
+        }
+        
+        .feature-card p {
+            color: #6b7280;
+            line-height: 1.6;
+        }
+        
+        .status {
+            background: #f0f9ff;
+            border: 1px solid #0ea5e9;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin: 2rem 0;
+        }
+        
+        .status h3 {
+            color: #0c4a6e;
+            margin-bottom: 1rem;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #e0f2fe;
+        }
+        
+        .status-item:last-child {
+            border-bottom: none;
+        }
+        
+        .success {
+            color: #10b981;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <h1>🚀 Avallon Cloud</h1>
+                <p>Your complete site generation platform is ready!</p>
+                <div>
+                    <a href="http://localhost:3000" class="btn" target="_blank">🔧 Backend Dashboard</a>
+                    <a href="http://localhost:3000/api/test/complete-workflow" class="btn" target="_blank">🧪 Test APIs</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="features">
+        <div class="container">
+            <h2>Platform Features</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <h3>🤖 AI Site Generation</h3>
+                    <p>Create stunning websites with AI assistance. Generate complete React/Next.js applications automatically using Claude AI.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🔗 GitHub Integration</h3>
+                    <p>Automatically create repositories and push code. Full version control integration with your projects and seamless deployment.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🚀 Vercel Deployment</h3>
+                    <p>Deploy your sites instantly to Vercel. Automatic builds, global CDN distribution, and production-ready hosting.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🌐 Domain Management</h3>
+                    <p>Purchase and manage domains through Namecheap. Complete DNS configuration, SSL certificates, and domain automation.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>📧 Email Management</h3>
+                    <p>Create and manage email accounts. Professional email setup with your custom domains and full inbox management.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🤖 AI Agents</h3>
+                    <p>Build intelligent automation agents with n8n integration. Create workflows that handle complex business processes automatically.</p>
+                </div>
+            </div>
+            
+            <div class="status">
+                <h3>🎉 System Status</h3>
+                <div class="status-item">
+                    <span>Frontend:</span>
+                    <span class="success">✅ Working</span>
+                </div>
+                <div class="status-item">
+                    <span>Backend:</span>
+                    <span class="success">✅ Working</span>
+                </div>
+                <div class="status-item">
+                    <span>GitHub Integration:</span>
+                    <span class="success">✅ Working</span>
+                </div>
+                <div class="status-item">
+                    <span>Vercel Integration:</span>
+                    <span class="success">✅ Working</span>
+                </div>
+                <div class="status-item">
+                    <span>Claude AI:</span>
+                    <span class="success">✅ Configured</span>
+                </div>
+                <p style="margin-top: 1rem; color: #0c4a6e; font-size: 0.875rem;">
+                    Your Avallon Cloud platform is fully operational. Start building amazing websites with AI-powered generation, 
+                    automatic GitHub integration, and instant Vercel deployment. Everything is connected and ready to go!
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,11 @@
+export function Hero() {
+  return (
+    <section className="bg-gradient-to-r from-primary-500 to-primary-700 text-white py-20">
+      <div className="container mx-auto px-4 text-center">
+        <h1 className="text-5xl font-bold mb-6">Snowplow Test</h1>
+        <p className="text-xl mb-8">make a snowplow business</p>
+        <button className="btn-primary">Get Started</button>
+      </div>
+    </section>
+  )
+}

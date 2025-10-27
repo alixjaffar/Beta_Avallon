@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ernst & Young - Transforming Businesses, Building a Better Working World</title>
+    <style>
+        /* Global Styles */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            color: #333;
+        }
+
+        /* Header Styles */
+        header {
+            background-color: #0072C6;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo img {
+            max-width: 150px;
+        }
+
+        nav ul {
+            list-style-type: none;
+            display: flex;
+            margin: 0;
+            padding: 0;
+        }
+
+        nav li {
+            margin-left: 20px;
+        }
+
+        nav a {
+            color: #fff;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        /* Hero Section Styles */
+        .hero {
+            background-image: url('https://via.placeholder.com/1920x700');
+            background-size: cover;
+            background-position: center;
+            padding: 100px 20px;
+            text-align: center;
+            color: #fff;
+        }
+
+        .hero h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        .hero p {
+            font-size: 24px;
+            margin-bottom: 40px;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background-color: #0072C6;
+            color: #fff;
+            padding: 12px 30px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        /* Services Section Styles */
+        .services {
+            padding: 80px 20px;
+            text-align: center;
+        }
+
+        .services h2 {
+            font-size: 36px;
+            margin-bottom: 40px;
+        }
+
+        .service-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-gap: 40px;
+        }
+
+        .service-item h3 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .service-item p {
+            font-size: 16px;
+        }
+
+        /* Footer Styles */
+        footer {
+            background-color: #0072C6;
+            color: #fff;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        footer p {
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        /* Responsive Styles */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 36px;
+            }
+
+            .hero p {
+                font-size: 18px;
+            }
+
+            .service-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .service-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <img src="https://via.placeholder.com/150" alt="Ernst & Young Logo">
+        </div>
+        <nav>
+            <ul>
+                <li><a href="#">About</a></li>
+                <li><a href="#">Services</a></li>
+                <li><a href="#">Insights</a></li>
+                <li><a href="#">Careers</a></li>
+                <li><a href="#">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <div class="hero">
+        <h1>Transforming Businesses, Building a Better Working World</h1>
+        <p>Ernst & Young helps organizations unlock their full potential and create long-term value.</p>
+        <a href="#" class="cta-button">Learn More</a>
+    </div>
+
+    <div class="services">
+        <h2>Our Services</h2>
+        <div class="service-grid">
+            <div class="service-item">
+                <h3>Assurance</h3>
+                <p>Our assurance services help build trust and confidence in the capital markets and support sustainable, long-term value creation.</p>
+            </div>
+            <div class="service-item">
+                <h3>Consulting</h3>
+                <p>Our consulting services help organizations navigate the complex business environment and implement strategic, operational, and technological changes.</p>
+            </div>
+            <div class="service-item">
+                <h3>Strategy</h3>
+                <p>Our strategy services help organizations develop and execute their long-term strategic plans, ensuring they are well-positioned for success.</p>
+            </div>
+            <div class="service-item">
+                <h3>Tax</h3>
+                <p>Our tax services help organizations navigate the complex tax landscape and optimize their tax strategies for long-term sustainability.</p>
+            </div>
+            <div class="service-item">
+                <h3>Transactions</h3>
+                <p>Our transaction services help organizations acquire, divest, and integrate assets to drive growth and create value.</p>
+            </div>
+            <div class="service-item">
+                <h3>Technology</h3>
+                <p>Our technology services help organizations harness the power of digital technologies to enhance their operations and drive innovation.</p>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2023 Ernst & Young. All rights reserved.</p>
+        <p>Privacy Policy | Terms of Use</p>
+    </footer>
+</body>
+</html>

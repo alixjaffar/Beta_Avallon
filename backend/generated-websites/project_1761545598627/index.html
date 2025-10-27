@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fitness Studio - Empower Your Body, Energize Your Life</title>
+    <style>
+        /* Google Font - Poppins */
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700&display=swap');
+
+        /* Global Styles */
+        body {
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            padding: 0;
+            color: #333;
+            background-color: #f2f2f2;
+        }
+
+        /* Header Styles */
+        header {
+            background-color: #2980b9;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .logo {
+            font-size: 28px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        nav ul {
+            list-style-type: none;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        nav ul li {
+            margin: 0 10px;
+        }
+
+        nav ul li a {
+            color: #fff;
+            text-decoration: none;
+            font-size: 16px;
+        }
+
+        /* Hero Section Styles */
+        .hero {
+            background-image: linear-gradient(to right, #2980b9, #8e44ad);
+            padding: 80px 20px;
+            text-align: center;
+            color: #fff;
+        }
+
+        .hero h1 {
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+
+        .hero p {
+            font-size: 18px;
+            margin-bottom: 30px;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background-color: #e74c3c;
+            color: #fff;
+            padding: 12px 30px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+
+        .cta-button:hover {
+            background-color: #c0392b;
+        }
+
+        /* Services Section Styles */
+        .services {
+            padding: 60px 20px;
+            text-align: center;
+        }
+
+        .services h2 {
+            font-size: 28px;
+            margin-bottom: 40px;
+        }
+
+        .service-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-gap: 30px;
+        }
+
+        .service-item {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 5px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .service-item h3 {
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+
+        .service-item p {
+            font-size: 16px;
+            color: #666;
+        }
+
+        /* Footer Styles */
+        footer {
+            background-color: #2980b9;
+            color: #fff;
+            padding: 20px;
+            text-align: center;
+        }
+
+        footer p {
+            font-size: 14px;
+            margin: 0;
+        }
+
+        /* Responsive Styles */
+        @media (max-width: 767px) {
+            .service-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">Fitness Studio</div>
+        <nav>
+            <ul>
+                <li><a href="#">Home</a></li>
+                <li><a href="#">Classes</a></li>
+                <li><a href="#">Trainers</a></li>
+                <li><a href="#">Membership</a></li>
+                <li><a href="#">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section class="hero">
+            <h1>Empower Your Body, Energize Your Life</h1>
+            <p>Experience the best fitness classes and personal training at our state-of-the-art studio.</p>
+            <a href="#" class="cta-button">Join Now</a>
+        </section>
+
+        <section class="services">
+            <h2>Our Services</h2>
+            <div class="service-grid">
+                <div class="service-item">
+                    <h3>Group Fitness Classes</h3>
+                    <p>Join our dynamic group classes like Yoga, Pilates, Zumba, and more.</p>
+                </div>
+                <div class="service-item">
+                    <h3>Personal Training</h3>
+                    <p>Work with our certified personal trainers to achieve your fitness goals.</p>
+                </div>
+                <div class="service-item">
+                    <h3>Nutrition Coaching</h3>
+                    <p>Get personalized nutrition guidance to support your healthy lifestyle.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2023 Fitness Studio. All rights reserved.</p>
+    </footer>
+</body>
+</html>

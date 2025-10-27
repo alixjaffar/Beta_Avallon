@@ -1,0 +1,18 @@
+[
+  {
+    "id": "1761596062124",
+    "name": "Aayush Nautiyal",
+    "email": "aayushnau@gmail.com",
+    "birthday": "2005-02-09",
+    "emailSubscription": true,
+    "createdAt": "2025-10-27T20:14:22.124Z"
+  },
+  {
+    "id": "1761597703168",
+    "name": "Aayush Nautiyal",
+    "email": "anautiya@uwo.ca",
+    "birthday": "2005-02-09",
+    "emailSubscription": true,
+    "createdAt": "2025-10-27T20:41:43.168Z"
+  }
+]
