@@ -152,5 +152,19 @@
     "to": "prioritytest@example.com",
     "subject": "Welcome to Avallon Beta Waitlist!",
     "content": "\n      Welcome to Avallon, Test Priority Email!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as ..."
+  },
+  {
+    "timestamp": "2025-10-27T22:15:58.650Z",
+    "type": "bulk-update",
+    "to": "aayushnau@gmail.com",
+    "subject": "Hi",
+    "content": "\n          Hi Aayush Nautiyal,\n          \n          YC\n          \n          Thank you for being part of the Avallon community!\n          \n          Best regards,\n          The Avallon Team\n          H..."
+  },
+  {
+    "timestamp": "2025-10-27T22:15:59.962Z",
+    "type": "bulk-update",
+    "to": "anautiya@uwo.ca",
+    "subject": "Hi",
+    "content": "\n          Hi Aayush Nautiyal,\n          \n          YC\n          \n          Thank you for being part of the Avallon community!\n          \n          Best regards,\n          The Avallon Team\n          H..."
   }
 ]

@@ -165,9 +165,17 @@ const AdminDashboard = () => {
             <h1 className="text-3xl font-bold">Avallon Admin Dashboard</h1>
             <p className="text-muted-foreground">Manage beta signups and send updates</p>
           </div>
-          <Button onClick={fetchData} variant="outline">
-            Refresh Data
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              onClick={() => window.open('http://localhost:3000/admin/emails', '_blank')} 
+              variant="outline"
+            >
+              📧 View Email Logs
+            </Button>
+            <Button onClick={fetchData} variant="outline">
+              Refresh Data
+            </Button>
+          </div>
         </div>
 
         {/* Statistics Cards */}
