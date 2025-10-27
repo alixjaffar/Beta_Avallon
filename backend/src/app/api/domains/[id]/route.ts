@@ -12,11 +12,12 @@ const UpdateDomainSchema = z.object({
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getUser();
-    const domain = await getDomainById(params.id, user.id);
+    const { id } = await params;
+    const domain = await getDomainById(id, user.id);
     
     if (!domain) {
       return NextResponse.json({ error: "Domain not found" }, { status: 404 });
@@ -34,21 +35,22 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getUser();
+    const { id } = await params;
     const body = await req.json();
     
     const validated = UpdateDomainSchema.parse(body);
     
     // Check if domain exists and belongs to user
-    const existingDomain = await getDomainById(params.id, user.id);
+    const existingDomain = await getDomainById(id, user.id);
     if (!existingDomain) {
       return NextResponse.json({ error: "Domain not found" }, { status: 404 });
     }
     
-    const updatedDomain = await updateDomain(params.id, validated);
+    const updatedDomain = await updateDomain(id, validated);
     
     return NextResponse.json({ 
       message: "Domain updated successfully", 
@@ -68,18 +70,19 @@ export async function PUT(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getUser();
+    const { id } = await params;
     
     // Check if domain exists and belongs to user
-    const existingDomain = await getDomainById(params.id, user.id);
+    const existingDomain = await getDomainById(id, user.id);
     if (!existingDomain) {
       return NextResponse.json({ error: "Domain not found" }, { status: 404 });
     }
     
-    await deleteDomain(params.id, user.id);
+    await deleteDomain(id, user.id);
     
     return NextResponse.json({ 
       message: "Domain deleted successfully" 

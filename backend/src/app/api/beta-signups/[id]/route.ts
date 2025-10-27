@@ -3,10 +3,10 @@ import { signupStorage } from '@/lib/signupStorage';
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const signupId = params.id;
+    const { id: signupId } = await params;
 
     const deletedSignup = await signupStorage.deleteSignup(signupId);
 

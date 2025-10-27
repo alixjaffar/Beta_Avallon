@@ -11,11 +11,12 @@ const UpdateEmailAccountSchema = z.object({
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getUser();
-    const emailAccount = await getEmailAccountById(params.id, user.id);
+    const { id } = await params;
+    const emailAccount = await getEmailAccountById(id, user.id);
     
     if (!emailAccount) {
       return NextResponse.json({ error: "Email account not found" }, { status: 404 });
@@ -33,21 +34,22 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getUser();
+    const { id } = await params;
     const body = await req.json();
     
     const validated = UpdateEmailAccountSchema.parse(body);
     
     // Check if email account exists and belongs to user
-    const existingEmailAccount = await getEmailAccountById(params.id, user.id);
+    const existingEmailAccount = await getEmailAccountById(id, user.id);
     if (!existingEmailAccount) {
       return NextResponse.json({ error: "Email account not found" }, { status: 404 });
     }
     
-    const updatedEmailAccount = await updateEmailAccount(params.id, user.id, validated);
+    const updatedEmailAccount = await updateEmailAccount(id, user.id, validated);
     
     return NextResponse.json({ 
       message: "Email account updated successfully", 
@@ -67,18 +69,19 @@ export async function PUT(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getUser();
+    const { id } = await params;
     
     // Check if email account exists and belongs to user
-    const existingEmailAccount = await getEmailAccountById(params.id, user.id);
+    const existingEmailAccount = await getEmailAccountById(id, user.id);
     if (!existingEmailAccount) {
       return NextResponse.json({ error: "Email account not found" }, { status: 404 });
     }
     
-    await deleteEmailAccount(params.id, user.id);
+    await deleteEmailAccount(id, user.id);
     
     return NextResponse.json({ 
       message: "Email account deleted successfully" 

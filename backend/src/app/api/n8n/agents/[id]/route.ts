@@ -13,11 +13,12 @@ const UpdateAgentSchema = z.object({
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getUser();
-    const agent = await getAgentById(params.id, user.id);
+    const { id } = await params;
+    const agent = await getAgentById(id, user.id);
     
     if (!agent) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
@@ -42,21 +43,22 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getUser();
+    const { id } = await params;
     const body = await req.json();
     
     const validated = UpdateAgentSchema.parse(body);
     
     // Check if agent exists and belongs to user
-    const existingAgent = await getAgentById(params.id, user.id);
+    const existingAgent = await getAgentById(id, user.id);
     if (!existingAgent) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
     
-    const updatedAgent = await updateAgent(params.id, validated);
+    const updatedAgent = await updateAgent(id, validated);
     
     // Enrich with embed code if agent is active
     const provider = getAgentProvider();
@@ -83,13 +85,14 @@ export async function PUT(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getUser();
+    const { id } = await params;
     
     // Check if agent exists and belongs to user
-    const existingAgent = await getAgentById(params.id, user.id);
+    const existingAgent = await getAgentById(id, user.id);
     if (!existingAgent) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
@@ -105,7 +108,7 @@ export async function DELETE(
       }
     }
     
-    await deleteAgent(params.id, user.id);
+    await deleteAgent(id, user.id);
     
     return NextResponse.json({ 
       message: "Agent deleted successfully" 
