@@ -1,0 +1,8 @@
+frontend/
+frontend-backup/
+frontend-original/
+node_modules/
+*.log
+.env.local
+.env
+.DS_Store

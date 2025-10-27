@@ -4,9 +4,8 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "next dev -p 3000",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start -p 3000",
-    "postinstall": "prisma generate",
     "test": "vitest",
     "test:watch": "vitest --watch",
     "test:e2e": "playwright test",
