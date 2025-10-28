@@ -2,6 +2,10 @@
   "name": "avallon-cloud",
   "private": true,
   "version": "0.1.0",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "prisma generate && next build",
