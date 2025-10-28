@@ -12,12 +12,17 @@ const nextConfig = {
   outputFileTracingRoot: process.cwd(),
   async rewrites() {
     return [
+      // Explicitly serve frontend for the root path
+      {
+        source: '/',
+        destination: '/api/frontend',
+      },
       // Serve frontend static files
       {
         source: '/static/:path*',
         destination: '/api/static/:path*',
       },
-      // Serve frontend for all non-API routes
+      // Serve frontend for all other non-API/admin/next routes
       {
         source: '/((?!api|admin|_next).*)',
         destination: '/api/frontend',

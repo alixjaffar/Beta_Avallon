@@ -1,17 +1,10 @@
 import { NextResponse } from "next/server";
-import fs from 'fs';
-import path from 'path';
+import { signupStorage } from "@/lib/signupStorage";
 
 export async function GET() {
   try {
-    // Read signups
-    const signupPath = path.join(process.cwd(), 'signups.json');
-    let signups = [];
-    
-    if (fs.existsSync(signupPath)) {
-      const signupData = fs.readFileSync(signupPath, 'utf8');
-      signups = JSON.parse(signupData);
-    }
+    // Get signups from the same source as the beta signups API
+    const signups = await signupStorage.getAllSignups();
 
     return NextResponse.json({ 
       signups: signups.reverse() // Show newest first
