@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  distDir: '.next',
   experimental: { serverActions: { bodySizeLimit: '2mb' } },
   webpack: (config) => {
     config.watchOptions = {
