@@ -102,7 +102,7 @@ const Dashboard = () => {
         description: `Removing "${site.name}"...`,
       });
 
-      const response = await fetch(`http://localhost:3000/api/sites/${site.id}`, {
+      const response = await fetch(`${process.env.NODE_ENV === 'production' ? 'https://beta-avallon1.vercel.app' : 'http://localhost:3000'}/api/sites/${site.id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',

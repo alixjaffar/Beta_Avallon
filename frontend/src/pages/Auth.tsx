@@ -53,7 +53,7 @@ const Auth = () => {
 
     try {
       // Send signup notification to backend
-      const response = await fetch('http://localhost:3000/api/signup-notification', {
+      const response = await fetch(`${process.env.NODE_ENV === 'production' ? 'https://beta-avallon1.vercel.app' : 'http://localhost:3000'}/api/signup-notification`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

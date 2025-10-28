@@ -33,7 +33,7 @@ export function WebsiteCreationModal({ isOpen, onClose, onSuccess }: WebsiteCrea
       setIsGenerating(true);
       
       // Use the new local hosting endpoint
-      const response = await fetch('http://localhost:3000/api/sites/generate', {
+      const response = await fetch(`${process.env.NODE_ENV === 'production' ? 'https://beta-avallon1.vercel.app' : 'http://localhost:3000'}/api/sites/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
