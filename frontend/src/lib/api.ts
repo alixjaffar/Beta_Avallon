@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const API_BASE_URL = process.env.NODE_ENV === 'production'
-  ? 'https://beta-avallon1.vercel.app/api' // Your deployed backend URL
+  ? '/api' // Same domain for full-stack deployment
   : 'http://localhost:3000/api'; // Backend runs on port 3000
 
 const api = axios.create({
