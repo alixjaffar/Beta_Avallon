@@ -40,8 +40,8 @@ const AdminDashboard = () => {
   const fetchData = async () => {
     try {
       const [statsResponse, signupsResponse] = await Promise.all([
-        fetch(`${process.env.NODE_ENV === 'production' ? 'https://beta-avallon1.vercel.app' : 'http://localhost:3000'}/api/beta-signups?type=stats`),
-        fetch(`${process.env.NODE_ENV === 'production' ? 'https://beta-avallon1.vercel.app' : 'http://localhost:3000'}/api/beta-signups?type=all`),
+        fetch(`${process.env.NODE_ENV === 'production' ? 'https://avallon.ca' : 'http://localhost:3000'}/api/beta-signups?type=stats`),
+        fetch(`${process.env.NODE_ENV === 'production' ? 'https://avallon.ca' : 'http://localhost:3000'}/api/beta-signups?type=all`),
       ]);
 
       const statsData = await statsResponse.json();
@@ -73,7 +73,7 @@ const AdminDashboard = () => {
 
     setSendingEmail(true);
     try {
-      const response = await fetch(`${process.env.NODE_ENV === 'production' ? 'https://beta-avallon1.vercel.app' : 'http://localhost:3000'}/api/bulk-email`, {
+      const response = await fetch(`${process.env.NODE_ENV === 'production' ? 'https://avallon.ca' : 'http://localhost:3000'}/api/bulk-email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -117,7 +117,7 @@ const AdminDashboard = () => {
     }
 
     try {
-      const response = await fetch(`${process.env.NODE_ENV === 'production' ? 'https://beta-avallon1.vercel.app' : 'http://localhost:3000'}/api/beta-signups/${signupId}`, {
+      const response = await fetch(`${process.env.NODE_ENV === 'production' ? 'https://avallon.ca' : 'http://localhost:3000'}/api/beta-signups/${signupId}`, {
         method: 'DELETE',
       });
 
@@ -167,7 +167,7 @@ const AdminDashboard = () => {
           </div>
           <div className="flex gap-2">
             <Button 
-              onClick={() => window.open(`${process.env.NODE_ENV === 'production' ? 'https://beta-avallon1.vercel.app' : 'http://localhost:3000'}/admin/emails`, '_blank')} 
+              onClick={() => window.open(`${process.env.NODE_ENV === 'production' ? 'https://avallon.ca' : 'http://localhost:3000'}/admin/emails`, '_blank')} 
               variant="outline"
             >
               📧 View Email Logs
