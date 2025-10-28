@@ -8,7 +8,7 @@ const nextConfig = {
     };
     return config;
   },
-  outputFileTracingRoot: __dirname,
+  outputFileTracingRoot: process.cwd(),
   async headers() {
     return [
       {
