@@ -1,8 +1,29 @@
 {
   "version": 2,
-  "buildCommand": "cd backend && npm ci && npm run build",
-  "outputDirectory": "backend/.next",
-  "installCommand": "cd backend && npm ci",
-  "framework": "nextjs",
-  "rootDirectory": "backend"
+  "builds": [
+    {
+      "src": "backend/package.json",
+      "use": "@vercel/next",
+      "config": {
+        "distDir": ".next"
+      }
+    },
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "backend/api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "frontend/$1"
+    }
+  ]
 }
