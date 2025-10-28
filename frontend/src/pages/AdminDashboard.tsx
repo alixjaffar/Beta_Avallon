@@ -29,10 +29,11 @@ const AdminDashboard = () => {
   const [stats, setStats] = useState<SignupStats | null>(null);
   const [signups, setSignups] = useState<Signup[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [emailSubject, setEmailSubject] = useState("");
   const [emailContent, setEmailContent] = useState("");
   const [sendingEmail, setSendingEmail] = useState(false);
-  const [lastEmailResult, setLastEmailResult] = useState<{sent: number, failed: number, total: number} | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [emailTemplates, setEmailTemplates] = useState([
     {
       name: "Beta Launch Announcement",
@@ -54,9 +55,18 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     fetchData();
+    
+    // Auto-refresh data every 30 seconds
+    const interval = setInterval(fetchData, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (isManualRefresh = false) => {
+    if (isManualRefresh) {
+      setRefreshing(true);
+    }
+    
     try {
       const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://avallon.ca';
       const [statsResponse, signupsResponse] = await Promise.all([
@@ -69,6 +79,14 @@ const AdminDashboard = () => {
 
       setStats(statsData.stats);
       setSignups(signupsData.signups);
+      setLastUpdated(new Date());
+      
+      if (isManualRefresh) {
+        toast({
+          title: "Success",
+          description: "Data refreshed successfully",
+        });
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
       toast({
@@ -78,6 +96,7 @@ const AdminDashboard = () => {
       });
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -214,6 +233,11 @@ const AdminDashboard = () => {
           <div>
             <h1 className="text-3xl font-bold">Avallon Admin Dashboard</h1>
             <p className="text-muted-foreground">Manage beta signups and send updates</p>
+            {lastUpdated && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Last updated: {lastUpdated.toLocaleTimeString()}
+              </p>
+            )}
           </div>
           <div className="flex gap-2">
             <Button 
@@ -225,8 +249,22 @@ const AdminDashboard = () => {
             >
               📧 View Email Logs
             </Button>
-            <Button onClick={fetchData} variant="outline">
-              Refresh Data
+            <Button 
+              onClick={() => fetchData(true)} 
+              variant="outline"
+              disabled={refreshing}
+            >
+              {refreshing ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Refreshing...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh Data
+                </>
+              )}
             </Button>
           </div>
         </div>
