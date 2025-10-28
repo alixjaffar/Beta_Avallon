@@ -58,9 +58,10 @@ const AdminDashboard = () => {
 
   const fetchData = async () => {
     try {
+      const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://avallon.ca';
       const [statsResponse, signupsResponse] = await Promise.all([
-        fetch(`${process.env.NODE_ENV === 'production' ? 'https://avallon.ca' : 'http://localhost:3000'}/api/beta-signups?type=stats`),
-        fetch(`${process.env.NODE_ENV === 'production' ? 'https://avallon.ca' : 'http://localhost:3000'}/api/beta-signups?type=all`),
+        fetch(`${baseUrl}/api/beta-signups?type=stats`),
+        fetch(`${baseUrl}/api/beta-signups?type=all`),
       ]);
 
       const statsData = await statsResponse.json();
@@ -103,7 +104,8 @@ const AdminDashboard = () => {
     setLastEmailResult(null);
     
     try {
-      const response = await fetch(`${process.env.NODE_ENV === 'production' ? 'https://avallon.ca' : 'http://localhost:3000'}/api/bulk-email`, {
+      const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://avallon.ca';
+      const response = await fetch(`${baseUrl}/api/bulk-email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -164,7 +166,8 @@ const AdminDashboard = () => {
     }
 
     try {
-      const response = await fetch(`${process.env.NODE_ENV === 'production' ? 'https://avallon.ca' : 'http://localhost:3000'}/api/beta-signups/${signupId}`, {
+      const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://avallon.ca';
+      const response = await fetch(`${baseUrl}/api/beta-signups/${signupId}`, {
         method: 'DELETE',
       });
 
@@ -214,7 +217,10 @@ const AdminDashboard = () => {
           </div>
           <div className="flex gap-2">
             <Button 
-              onClick={() => window.open(`${process.env.NODE_ENV === 'production' ? 'https://avallon.ca' : 'http://localhost:3000'}/admin/emails`, '_blank')} 
+              onClick={() => {
+                const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://avallon.ca';
+                window.open(`${baseUrl}/admin/emails`, '_blank');
+              }} 
               variant="outline"
             >
               📧 View Email Logs
