@@ -14,5 +14,13 @@
     "birthday": "2005-02-09",
     "emailSubscription": true,
     "createdAt": "2025-10-27T20:41:43.168Z"
+  },
+  {
+    "id": "1761681110344",
+    "name": "Test User",
+    "email": "test@example.com",
+    "birthday": "1990-01-01",
+    "emailSubscription": true,
+    "createdAt": "2025-10-28T19:51:50.344Z"
   }
 ]
