@@ -198,10 +198,28 @@ const Auth = () => {
                           htmlFor="terms"
                           className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                         >
-                          I agree to the Terms of Service
+                          I agree to the{" "}
+                          <Button
+                            variant="link"
+                            className="p-0 h-auto text-sm font-medium underline"
+                            onClick={() => navigate("/terms")}
+                          >
+                            Terms of Service
+                          </Button>{" "}
+                          and{" "}
+                          <Button
+                            variant="link"
+                            className="p-0 h-auto text-sm font-medium underline"
+                            onClick={() => navigate("/privacy")}
+                          >
+                            Privacy Policy
+                          </Button>
                         </label>
                         <p className="text-xs text-muted-foreground">
-                          By creating an account, you agree to our Terms of Service. You acknowledge that Avallon's concept, features, and intellectual property are proprietary and confidential. You agree not to copy, disclose, or attempt to recreate any part of Avallon's platform or business model without explicit written permission from Avallon.
+                          By creating an account, you agree to our Terms of Service and Privacy Policy. 
+                          You acknowledge that Avallon's concept, features, and intellectual property are 
+                          proprietary and confidential. You agree not to copy, disclose, or attempt to recreate 
+                          any part of Avallon's platform or business model without explicit written permission from Avallon.
                         </p>
                       </div>
                     </div>
