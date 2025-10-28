@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "next dev -p 3000",
-    "build": "cd ../frontend && npm install && npm run build && cd ../backend && prisma generate && next build",
+    "build": "prisma generate && next build",
     "start": "next start -p 3000",
     "postbuild": "prisma generate",
     "test": "vitest",
