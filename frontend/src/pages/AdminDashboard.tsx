@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Mail, Calendar, TrendingUp, Send, Trash2 } from "lucide-react";
+import { Users, Mail, Calendar, TrendingUp, Send, Trash2, RefreshCw, AlertCircle, CheckCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface SignupStats {
   totalSignups: number;
@@ -31,6 +32,24 @@ const AdminDashboard = () => {
   const [emailSubject, setEmailSubject] = useState("");
   const [emailContent, setEmailContent] = useState("");
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [lastEmailResult, setLastEmailResult] = useState<{sent: number, failed: number, total: number} | null>(null);
+  const [emailTemplates, setEmailTemplates] = useState([
+    {
+      name: "Beta Launch Announcement",
+      subject: "🚀 Avallon Beta is Here!",
+      content: "We're excited to announce that Avallon beta is now live! You can now access our platform and start creating amazing websites. Log in to your account to get started."
+    },
+    {
+      name: "Feature Update",
+      subject: "✨ New Features Added to Avallon",
+      content: "We've added some exciting new features to Avallon based on your feedback. Check out the latest updates and let us know what you think!"
+    },
+    {
+      name: "Maintenance Notice",
+      subject: "🔧 Scheduled Maintenance - Avallon",
+      content: "We'll be performing scheduled maintenance on our servers. The platform will be temporarily unavailable during this time. We apologize for any inconvenience."
+    }
+  ]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -71,7 +90,18 @@ const AdminDashboard = () => {
       return;
     }
 
+    if (!stats?.emailSubscribers || stats.emailSubscribers === 0) {
+      toast({
+        title: "No Subscribers",
+        description: "There are no email subscribers to send emails to.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSendingEmail(true);
+    setLastEmailResult(null);
+    
     try {
       const response = await fetch(`${process.env.NODE_ENV === 'production' ? 'https://avallon.ca' : 'http://localhost:3000'}/api/bulk-email`, {
         method: 'POST',
@@ -87,12 +117,23 @@ const AdminDashboard = () => {
       const result = await response.json();
 
       if (result.success) {
+        setLastEmailResult({
+          sent: result.sent,
+          failed: result.failed,
+          total: result.totalSubscribers
+        });
+        
         toast({
           title: "Success!",
-          description: `Email sent to ${result.sent} subscribers`,
+          description: `Email sent to ${result.sent} subscribers${result.failed > 0 ? ` (${result.failed} failed)` : ''}`,
         });
+        
+        // Clear form after successful send
         setEmailSubject("");
         setEmailContent("");
+        
+        // Refresh data to get updated stats
+        fetchData();
       } else {
         toast({
           title: "Error",
@@ -101,14 +142,20 @@ const AdminDashboard = () => {
         });
       }
     } catch (error) {
+      console.error('Bulk email error:', error);
       toast({
         title: "Error",
-        description: "Failed to send bulk email. Make sure backend is running.",
+        description: "Failed to send bulk email. Please check your connection and try again.",
         variant: "destructive",
       });
     } finally {
       setSendingEmail(false);
     }
+  };
+
+  const useTemplate = (template: {subject: string, content: string}) => {
+    setEmailSubject(template.subject);
+    setEmailContent(template.content);
   };
 
   const deleteSignup = async (signupId: string, signupName: string) => {
@@ -234,39 +281,103 @@ const AdminDashboard = () => {
         {/* Bulk Email Section */}
         <Card>
           <CardHeader>
-            <CardTitle>Send Update Email</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Send className="w-5 h-5" />
+              Send Update Email
+            </CardTitle>
             <CardDescription>
               Send an update email to all subscribers ({stats?.emailSubscribers || 0} subscribers)
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email-subject">Subject</Label>
-              <Input
-                id="email-subject"
-                placeholder="Enter email subject..."
-                value={emailSubject}
-                onChange={(e) => setEmailSubject(e.target.value)}
-              />
+          <CardContent className="space-y-6">
+            {/* Email Templates */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Quick Templates</Label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {emailTemplates.map((template, index) => (
+                  <Button
+                    key={index}
+                    variant="outline"
+                    className="h-auto p-3 text-left justify-start"
+                    onClick={() => useTemplate(template)}
+                  >
+                    <div>
+                      <div className="font-medium text-sm">{template.name}</div>
+                      <div className="text-xs text-muted-foreground mt-1">{template.subject}</div>
+                    </div>
+                  </Button>
+                ))}
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="email-content">Content</Label>
-              <Textarea
-                id="email-content"
-                placeholder="Enter your update message..."
-                value={emailContent}
-                onChange={(e) => setEmailContent(e.target.value)}
-                rows={6}
-              />
+
+            {/* Email Form */}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email-subject">Subject</Label>
+                <Input
+                  id="email-subject"
+                  placeholder="Enter email subject..."
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email-content">Content</Label>
+                <Textarea
+                  id="email-content"
+                  placeholder="Enter your update message..."
+                  value={emailContent}
+                  onChange={(e) => setEmailContent(e.target.value)}
+                  rows={6}
+                />
+              </div>
             </div>
+
+            {/* Last Email Result */}
+            {lastEmailResult && (
+              <Alert className={lastEmailResult.failed > 0 ? "border-yellow-200 bg-yellow-50" : "border-green-200 bg-green-50"}>
+                <div className="flex items-center gap-2">
+                  {lastEmailResult.failed > 0 ? (
+                    <AlertCircle className="h-4 w-4 text-yellow-600" />
+                  ) : (
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                  )}
+                  <AlertDescription className="text-sm">
+                    <strong>Email Results:</strong> {lastEmailResult.sent} sent, {lastEmailResult.failed} failed out of {lastEmailResult.total} total subscribers
+                  </AlertDescription>
+                </div>
+              </Alert>
+            )}
+
+            {/* Send Button */}
             <Button 
               onClick={sendBulkEmail} 
-              disabled={sendingEmail || !emailSubject.trim() || !emailContent.trim()}
+              disabled={sendingEmail || !emailSubject.trim() || !emailContent.trim() || !stats?.emailSubscribers}
               className="w-full"
+              size="lg"
             >
-              <Send className="w-4 h-4 mr-2" />
-              {sendingEmail ? "Sending..." : "Send to All Subscribers"}
+              {sendingEmail ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 mr-2" />
+                  Send to All Subscribers ({stats?.emailSubscribers || 0})
+                </>
+              )}
             </Button>
+
+            {/* Warning for no subscribers */}
+            {stats?.emailSubscribers === 0 && (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  No email subscribers found. Users need to opt-in to email notifications during signup.
+                </AlertDescription>
+              </Alert>
+            )}
           </CardContent>
         </Card>
 
