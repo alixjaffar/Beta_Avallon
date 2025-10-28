@@ -10,6 +10,20 @@ const nextConfig = {
     return config;
   },
   outputFileTracingRoot: process.cwd(),
+  async rewrites() {
+    return [
+      // Serve frontend static files
+      {
+        source: '/static/:path*',
+        destination: '/api/static/:path*',
+      },
+      // Serve frontend for all non-API routes
+      {
+        source: '/((?!api|admin|_next).*)',
+        destination: '/api/frontend',
+      },
+    ];
+  },
   async headers() {
     return [
       {
