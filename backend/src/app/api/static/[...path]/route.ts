@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { path } = await params;
-    const filePath = join(process.cwd(), '../frontend/dist', ...path);
+    const filePath = join(process.cwd(), '..', 'frontend', 'dist', ...path);
     
     const fileContent = readFileSync(filePath);
     const ext = path[path.length - 1]?.split('.').pop()?.toLowerCase();

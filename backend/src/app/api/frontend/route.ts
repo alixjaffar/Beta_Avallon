@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     
     // If it's the root path, serve index.html
     if (path === '/') {
-      const indexPath = join(process.cwd(), '../frontend/dist/index.html');
+      const indexPath = join(process.cwd(), '..', 'frontend', 'dist', 'index.html');
       const indexContent = readFileSync(indexPath, 'utf-8');
       
       return new NextResponse(indexContent, {
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     }
     
     // For other paths, try to serve the file
-    const filePath = join(process.cwd(), '../frontend/dist', path);
+    const filePath = join(process.cwd(), '..', 'frontend', 'dist', path);
     
     try {
       const fileContent = readFileSync(filePath);
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       });
     } catch (error) {
       // If file not found, serve index.html for SPA routing
-      const indexPath = join(process.cwd(), '../frontend/dist/index.html');
+      const indexPath = join(process.cwd(), '..', 'frontend', 'dist', 'index.html');
       const indexContent = readFileSync(indexPath, 'utf-8');
       
       return new NextResponse(indexContent, {
