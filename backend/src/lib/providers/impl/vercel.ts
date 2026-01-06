@@ -46,7 +46,9 @@ export class VercelProvider implements HostingProvider {
         logInfo('Vercel project already exists', { projectId: existingProjectId, name: existingProject.data.name });
         
         // Disable deployment protection on existing project
-        await this.disableDeploymentProtection(existingProjectId);
+        if (existingProjectId) {
+          await this.disableDeploymentProtection(existingProjectId);
+        }
         
         return {
           projectId: existingProject.data.id,
