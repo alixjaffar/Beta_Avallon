@@ -3,7 +3,7 @@
 ## Current Status ✅
 
 ### Backend (Deployed)
-- **URL**: https://beta-avallon1.vercel.app
+- **URL**: https://beta-avallon.onrender.com
 - **Status**: ✅ Successfully deployed on Vercel
 - **Features**: All API endpoints working, admin dashboard accessible
 
@@ -36,7 +36,7 @@ This runs only the frontend, connected to your deployed backend.
 - ✅ **Edit websites** with AI chat
 
 ### For Admins (Backend)
-- ✅ **Admin dashboard** at https://beta-avallon1.vercel.app/admin/emails
+- ✅ **Admin dashboard** at https://beta-avallon.onrender.com/admin/emails
 - ✅ **View beta signups**
 - ✅ **Send bulk emails**
 - ✅ **Monitor email logs**
@@ -50,7 +50,7 @@ This runs only the frontend, connected to your deployed backend.
 
 ## API Endpoints
 
-All endpoints are available at: `https://beta-avallon1.vercel.app/api/`
+All endpoints are available at: `https://beta-avallon.onrender.com/api/`
 
 - `/beta-signups` - Manage beta signups
 - `/sites` - Website management

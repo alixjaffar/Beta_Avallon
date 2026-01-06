@@ -1852,7 +1852,7 @@ The user wants to add Stripe payment functionality to their website. You MUST:
         
         // Backend API URL - dynamically determine based on environment
         // Use production API URL for deployed sites, localhost for local development
-        let apiUrl = 'https://beta-avallon1.vercel.app/api/stripe/checkout';
+        let apiUrl = 'https://beta-avallon.onrender.com/api/stripe/checkout';
         try {
           if (typeof window !== 'undefined' && window.location && window.location.hostname) {
             const hostname = window.location.hostname;

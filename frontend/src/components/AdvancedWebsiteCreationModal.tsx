@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { X, Sparkles, Globe, Code, Zap, Settings, Palette, Layout, Target, Brain, Rocket } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface AdvancedWebsiteCreationModalProps {
   isOpen: boolean;
@@ -83,6 +84,7 @@ export function AdvancedWebsiteCreationModal({ isOpen, onClose, onSuccess }: Adv
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedExample, setSelectedExample] = useState<string | null>(null);
+  const { toast } = useToast();
   
   // Advanced parameters
   const [industry, setIndustry] = useState("");
@@ -104,6 +106,10 @@ export function AdvancedWebsiteCreationModal({ isOpen, onClose, onSuccess }: Adv
     try {
       setIsGenerating(true);
       
+      const baseUrl = process.env.NODE_ENV === 'production' 
+        ? 'https://beta-avallon.onrender.com' 
+        : 'http://localhost:3000';
+      
       const requestBody = {
         name: `Website ${Date.now()}`,
         description: prompt,
@@ -122,7 +128,7 @@ export function AdvancedWebsiteCreationModal({ isOpen, onClose, onSuccess }: Adv
         performance,
       };
 
-      const response = await fetch(`${process.env.NODE_ENV === 'production' ? 'https://beta-avallon1.vercel.app' : 'http://localhost:3000'}/api/sites/generate`, {
+      const response = await fetch(`${baseUrl}/api/sites/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -136,15 +142,25 @@ export function AdvancedWebsiteCreationModal({ isOpen, onClose, onSuccess }: Adv
 
       const result = await response.json();
       
+      // Website generated with Kirin AI
       if (result.result) {
         onSuccess(result.result);
+        toast({
+          title: "Success!",
+          description: result.message || "Website generated successfully with Kirin!",
+        });
         setPrompt("");
         onClose();
       } else {
         throw new Error(result.error || 'Failed to generate website');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Website generation failed:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to start website generation",
+        variant: "destructive",
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -461,7 +477,7 @@ export function AdvancedWebsiteCreationModal({ isOpen, onClose, onSuccess }: Adv
             <div className="space-y-3 p-4 rounded-lg bg-blue-50 dark:bg-blue-950">
               <div className="flex items-center gap-2">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                <span className="text-sm font-medium">Generating your advanced website...</span>
+                <span className="text-sm font-medium">Generating your website...</span>
               </div>
               <div className="space-y-2 text-sm text-muted-foreground">
                 <div>🧠 Analyzing your requirements with AI</div>

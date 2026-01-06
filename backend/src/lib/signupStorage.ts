@@ -46,7 +46,7 @@ class SignupStorage {
       createdAt: new Date().toISOString(),
     };
 
-    // Check for duplicates
+    // Check for duplicates (this is a secondary check - main check happens in API route)
     const existing = this.signups.find(s => s.email === data.email);
     if (existing) {
       throw new Error('Email already registered for beta');

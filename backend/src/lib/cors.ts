@@ -10,7 +10,7 @@ const ALLOWED_ORIGINS = [
   'http://127.0.0.1:5173',
   'http://127.0.0.1:5174',
   'http://127.0.0.1:3000',
-  'https://beta-avallon1.vercel.app',
+  'https://beta-avallon.onrender.com',
   'https://avallon.ca',
   'https://www.avallon.ca',
 ];

@@ -9,8 +9,7 @@ import type { RegistrarProvider } from '@/lib/providers/registrar';
 import type { EmailProvider } from '@/lib/providers/email';
 import type { HostingProvider } from '@/lib/providers/hosting';
 
-import { LovableProvider, isLovableConfigured } from '@/lib/providers/impl/lovable';
-import { ClaudeProvider, isClaudeConfigured } from '@/lib/providers/impl/claude';
+// Removed Lovable and Claude providers - using Gemini only
 import { N8nProvider, isN8nConfigured } from '@/lib/providers/impl/n8n';
 import { DefaultRegistrar } from '@/lib/providers/impl/registrar';
 import { NamecheapProvider, isNamecheapConfigured } from '@/lib/providers/impl/namecheap';
@@ -19,11 +18,9 @@ import { ZohoMailProvider, isZohoConfigured } from '@/lib/providers/impl/zoho';
 import { VercelProvider, isVercelConfigured } from '@/lib/providers/impl/vercel';
 
 export function getSiteProvider(): SiteProvider {
-  // Use Claude if configured, otherwise fallback to Lovable
-  if (isClaudeConfigured()) {
-    return new ClaudeProvider();
-  }
-  return new LovableProvider();
+  // Using Gemini only - based on open-source AI Website Builder
+  // Note: This function may not be used anymore, but keeping for compatibility
+  throw new Error('getSiteProvider() is deprecated. Use GeminiWebsiteGenerator directly.');
 }
 
 export function getAgentProvider(): AgentProvider {
@@ -53,7 +50,7 @@ export function getHostingProvider(): HostingProvider {
 
 export function getProviderConfigurationStatus() {
   return {
-    lovable: isLovableConfigured(),
+    gemini: !!process.env.GEMINI_API_KEY, // Using Gemini only
     n8n: isN8nConfigured(),
     registrar: isNamecheapConfigured(),
     email: isZohoConfigured(),

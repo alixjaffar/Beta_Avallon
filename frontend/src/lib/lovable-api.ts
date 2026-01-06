@@ -145,7 +145,7 @@ const handleSendMessage = async () => {
       }
       
       // Save to database
-      await fetch(`${process.env.NODE_ENV === 'production' ? 'https://beta-avallon1.vercel.app' : 'http://localhost:3000'}/api/sites/${site.id}`, {
+      await fetch(`${process.env.NODE_ENV === 'production' ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000'}/api/sites/${site.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

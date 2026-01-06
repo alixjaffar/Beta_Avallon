@@ -1,8 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { 
   Send, 
   Github, 
@@ -14,6 +21,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { fetchWithAuth } from '@/lib/fetchWithAuth';
 
 interface WebsiteEditorProps {
   site: {
@@ -23,6 +31,7 @@ interface WebsiteEditorProps {
     status: string;
     previewUrl?: string;
     repoUrl?: string;
+    websiteContent?: Record<string, string>; // Add websiteContent prop
   };
   onUpdate: (site: any) => void;
 }
@@ -34,6 +43,145 @@ interface ChatMessage {
   timestamp: Date;
 }
 
+// Fix broken image URLs in HTML content
+// List of reliable Unsplash image IDs that we know work
+const FALLBACK_IMAGE_IDS = [
+  '1522071820080-37f2cb85c41d', // Business/Office
+  '1497366216548-37526070297c', // Modern workspace
+  '1556761175-4bda37b9dd37', // Business meeting
+  '1556761175-b4136fa58510', // Team collaboration
+  '1552664736-d46ed1db83d9', // Professional
+  '1556761175-5973dc0f32e7', // Business
+  '1556761175-5973dc0f32e8', // Office
+  '1556761175-5973dc0f32e9', // Team
+  '1556761175-5973dc0f32ea', // Technology
+  '1556761175-5973dc0f32eb', // Success
+];
+
+function fixImageUrls(html: string): string {
+  if (!html || typeof html !== 'string') return html;
+  
+  // Fix broken Unsplash URLs in src attributes
+  const brokenSrcPattern = /src=["'](photo-\d+-\d+[^"']*)["']/gi;
+  html = html.replace(brokenSrcPattern, (match, photoId) => {
+    const cleanPhotoId = photoId.split('?')[0].split('&')[0];
+    return `src="https://images.unsplash.com/${cleanPhotoId}?w=800&h=600&fit=crop"`;
+  });
+  
+  // Fix broken Unsplash URLs in CSS url() functions
+  const brokenUrlPattern = /url\(["']?(photo-\d+-\d+[^"')]*)["']?\)/gi;
+  html = html.replace(brokenUrlPattern, (match, photoId) => {
+    const cleanPhotoId = photoId.split('?')[0].split('&')[0];
+    return `url("https://images.unsplash.com/${cleanPhotoId}?w=800&h=600&fit=crop")`;
+  });
+  
+  // Fix broken Unsplash URLs in background-image CSS
+  const brokenBgPattern = /background-image:\s*url\(["']?(photo-\d+-\d+[^"')]*)["']?\)/gi;
+  html = html.replace(brokenBgPattern, (match, photoId) => {
+    const cleanPhotoId = photoId.split('?')[0].split('&')[0];
+    return `background-image: url("https://images.unsplash.com/${cleanPhotoId}?w=800&h=600&fit=crop")`;
+  });
+  
+  // Fix URLs in quotes that are just photo IDs (catch-all)
+  const brokenQuotedPattern = /(["'])(photo-\d+-\d+[^"']*)(["'])/g;
+  html = html.replace(brokenQuotedPattern, (match, quote1, photoId, quote2) => {
+    // Skip if it's already part of a fixed URL
+    if (photoId.includes('images.unsplash.com')) return match;
+    const cleanPhotoId = photoId.split('?')[0].split('&')[0];
+    return `${quote1}https://images.unsplash.com/${cleanPhotoId}?w=800&h=600&fit=crop${quote2}`;
+  });
+  
+  // Add image error handler script to the HTML
+  // This will try fallback images if the original fails to load
+  if (html.includes('</body>') || html.includes('</html>')) {
+    const imageErrorHandler = `
+<script>
+(function() {
+  const fallbackImages = ${JSON.stringify(FALLBACK_IMAGE_IDS)};
+  let fallbackIndex = 0;
+  
+  function getFallbackImageUrl() {
+    if (fallbackIndex >= fallbackImages.length) {
+      fallbackIndex = 0; // Reset to start
+    }
+    const imageId = fallbackImages[fallbackIndex];
+    fallbackIndex++;
+    return 'https://images.unsplash.com/' + imageId + '?w=800&h=600&fit=crop';
+  }
+  
+  function handleImageError(img) {
+    const originalSrc = img.getAttribute('data-original-src') || img.src;
+    
+    // If we haven't tried fallbacks yet, save original src
+    if (!img.getAttribute('data-original-src')) {
+      img.setAttribute('data-original-src', originalSrc);
+      img.setAttribute('data-fallback-attempts', '0');
+    }
+    
+    const attempts = parseInt(img.getAttribute('data-fallback-attempts') || '0');
+    
+    // Try up to 5 fallback images
+    if (attempts < 5) {
+      img.setAttribute('data-fallback-attempts', (attempts + 1).toString());
+      img.src = getFallbackImageUrl();
+      console.log('🔄 Trying fallback image', attempts + 1, 'for:', originalSrc);
+    } else {
+      console.warn('⚠️ All fallback images failed for:', originalSrc);
+      // Hide broken images after all attempts fail
+      img.style.display = 'none';
+    }
+  }
+  
+  // Handle existing images
+  document.addEventListener('DOMContentLoaded', function() {
+    const images = document.querySelectorAll('img');
+    images.forEach(function(img) {
+      if (!img.onerror) {
+        img.onerror = function() { handleImageError(img); };
+      }
+    });
+  });
+  
+  // Handle dynamically added images
+  const observer = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+      mutation.addedNodes.forEach(function(node) {
+        if (node.nodeType === 1) { // Element node
+          if (node.tagName === 'IMG') {
+            node.onerror = function() { handleImageError(node); };
+          }
+          // Also check for images inside added nodes
+          const images = node.querySelectorAll && node.querySelectorAll('img');
+          if (images) {
+            images.forEach(function(img) {
+              if (!img.onerror) {
+                img.onerror = function() { handleImageError(img); };
+              }
+            });
+          }
+        }
+      });
+    });
+  });
+  
+  observer.observe(document.body || document.documentElement, {
+    childList: true,
+    subtree: true
+  });
+})();
+</script>`;
+    
+    // Insert before </body> or </html>
+    if (html.includes('</body>')) {
+      html = html.replace('</body>', imageErrorHandler + '</body>');
+    } else if (html.includes('</html>')) {
+      html = html.replace('</html>', imageErrorHandler + '</html>');
+    }
+  }
+  
+  return html;
+}
+
 export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -41,9 +189,74 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate }) 
   const [previewUrl, setPreviewUrl] = useState(site.previewUrl);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewReady, setPreviewReady] = useState(false);
+  const [previewKey, setPreviewKey] = useState(0); // Force iframe reload when content changes
   const [chatWidth, setChatWidth] = useState(40); // Default 40% width
   const [isResizing, setIsResizing] = useState(false);
+  const [currentWebsiteContent, setCurrentWebsiteContent] = useState<Record<string, string>>((site as any).websiteContent || {});
+  const [currentPage, setCurrentPage] = useState<string>('index.html'); // Multi-page support
+  const [generationProgress, setGenerationProgress] = useState<{step: string; detail: string; percent: number} | null>(null);
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
+  
+  // Get list of available pages (HTML files)
+  const availablePages = Object.keys(currentWebsiteContent).filter(
+    key => key.endsWith('.html') && currentWebsiteContent[key]?.includes('<!DOCTYPE')
+  ).sort((a, b) => {
+    // Sort: index.html first, then alphabetically
+    if (a === 'index.html') return -1;
+    if (b === 'index.html') return 1;
+    return a.localeCompare(b);
+  });
+  
+  // Ensure currentPage exists in available pages
+  const effectiveCurrentPage = availablePages.includes(currentPage) ? currentPage : (availablePages[0] || 'index.html');
+
+  // Inject navigation script into HTML to enable clicking nav links
+  const injectNavigationScript = (html: string): string => {
+    const navScript = `
+<script>
+// Intercept all link clicks for in-preview navigation
+document.addEventListener('click', function(e) {
+  const target = e.target.closest('a');
+  if (target && target.href) {
+    const href = target.getAttribute('href');
+    // Check if it's an internal .html page link
+    if (href && href.endsWith('.html') && !href.startsWith('http') && !href.startsWith('//')) {
+      e.preventDefault();
+      // Post message to parent to switch pages
+      window.parent.postMessage({ type: 'navigate', page: href }, '*');
+    }
+  }
+});
+</script>
+`;
+    // Inject before </body> if it exists, otherwise before </html>
+    if (html.includes('</body>')) {
+      return html.replace('</body>', navScript + '</body>');
+    } else if (html.includes('</html>')) {
+      return html.replace('</html>', navScript + '</html>');
+    }
+    return html + navScript;
+  };
+
+  // Listen for navigation messages from iframe
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'navigate' && event.data.page) {
+        const page = event.data.page;
+        console.log('🔗 Navigation request from iframe:', page);
+        // Check if the page exists in our content
+        if (currentWebsiteContent[page]) {
+          setCurrentPage(page);
+        } else {
+          console.warn('Page not found:', page, 'Available:', Object.keys(currentWebsiteContent));
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [currentWebsiteContent]);
 
   // Resize functionality
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -79,62 +292,254 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate }) 
   }, [isResizing]);
 
   // Initialize with welcome message and check preview
+  // For new sites (status: 'generating'), show prompt to generate website
   useEffect(() => {
+    // If websiteContent is passed directly in site prop, use it immediately for instant preview
+    if (site.websiteContent && typeof site.websiteContent === 'object' && Object.keys(site.websiteContent).length > 0) {
+      console.log('✅ Using websiteContent from site prop (instant preview)', Object.keys(site.websiteContent));
+      setCurrentWebsiteContent(site.websiteContent);
+      // Generate preview immediately - no API call needed
+      checkPreviewReady();
+    }
+    
     const loadSiteData = async () => {
+      // Skip if site.id is not available yet
+      if (!site.id) {
+        const welcomeMessage = site.status === 'generating' || !site.previewUrl
+          ? `Hello! I'm your AI assistant powered by Kirin. Describe the website you'd like me to create. For example: "Create a modern landing page for a SaaS product with a hero section, features grid, and pricing cards"`
+          : `Hello! I'm your AI assistant for "${site.name}". I can help you modify your website. What would you like to change?`;
+        
+        setMessages([{
+          id: '1',
+          role: 'assistant',
+          content: welcomeMessage,
+          timestamp: new Date()
+        }]);
+        return;
+      }
+      
       try {
-        const response = await fetch(`http://localhost:3000/api/sites/${site.id}`);
+        const baseUrl = process.env.NODE_ENV === 'production' ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000';
+        const response = await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`);
         if (response.ok) {
           const siteData = await response.json();
-          if (siteData.chatHistory && siteData.chatHistory.length > 0) {
-            setMessages(siteData.chatHistory);
-          } else {
+          console.log('Loaded site data:', { 
+            hasChatHistory: !!siteData.chatHistory, 
+            chatHistoryLength: siteData.chatHistory?.length || 0,
+            siteId: site.id 
+          });
+          
+          // ALWAYS load chat history and website content if they exist
+          if (siteData.chatHistory && Array.isArray(siteData.chatHistory) && siteData.chatHistory.length > 0) {
+            // Convert timestamps to Date objects if they're strings
+            const formattedMessages = siteData.chatHistory.map((msg: any) => ({
+              ...msg,
+              timestamp: msg.timestamp ? (typeof msg.timestamp === 'string' ? new Date(msg.timestamp) : msg.timestamp) : new Date()
+            }));
+            setMessages(formattedMessages);
+            console.log('✅ Chat history loaded:', formattedMessages.length, 'messages');
+          }
+          
+          // ALWAYS load websiteContent if available (even if no chat history)
+          if (siteData.websiteContent && typeof siteData.websiteContent === 'object') {
+            const contentKeys = Object.keys(siteData.websiteContent);
+            // Only process if websiteContent has actual content (not empty object)
+            if (contentKeys.length > 0) {
+              setCurrentWebsiteContent(siteData.websiteContent);
+              // Update the site object with websiteContent
+              onUpdate({ ...site, websiteContent: siteData.websiteContent });
+              console.log('✅ Website content loaded:', contentKeys.length, 'files', { keys: contentKeys });
+              
+              // Update preview URL if we have websiteContent - check multiple possible keys
+              const htmlContent = siteData.websiteContent['index.html'] || 
+                                 siteData.websiteContent['Index.html'] ||
+                                 siteData.websiteContent['INDEX.HTML'] ||
+                                 Object.values(siteData.websiteContent).find((content: any) => 
+                                   typeof content === 'string' && 
+                                   (content.includes('<!DOCTYPE') || content.includes('<html') || content.includes('<body'))
+                                 ) as string | undefined;
+              
+              if (htmlContent && htmlContent.trim().length > 0) {
+                let cleanedHtml = htmlContent.trim();
+                // Clean up any markdown markers
+                if (cleanedHtml.startsWith('```')) {
+                  cleanedHtml = cleanedHtml.replace(/^```[a-z]*\s*\n?/i, '');
+                }
+                if (cleanedHtml.endsWith('```')) {
+                  cleanedHtml = cleanedHtml.replace(/\n?```$/i, '');
+                }
+                cleanedHtml = cleanedHtml.trim();
+                
+                if (cleanedHtml.includes('<!DOCTYPE') || cleanedHtml.includes('<html') || cleanedHtml.includes('<body')) {
+                  // Fix broken image URLs before creating blob
+                  cleanedHtml = fixImageUrls(cleanedHtml);
+                  // Inject navigation script for in-preview link clicking
+                  cleanedHtml = injectNavigationScript(cleanedHtml);
+                  
+                  // Use Blob URL instead of data URL for Safari compatibility
+                  // Clean up old blob URL if it exists
+                  if (previewUrl && previewUrl.startsWith('blob:')) {
+                    try {
+                      URL.revokeObjectURL(previewUrl);
+                    } catch (e) {
+                      // Ignore errors
+                    }
+                  }
+                  
+                  const blob = new Blob([cleanedHtml], { type: 'text/html;charset=utf-8' });
+                  const blobUrl = URL.createObjectURL(blob);
+                  
+                  // Force iframe reload
+                  const newKey = previewKey + 1;
+                  setPreviewKey(newKey);
+                  setPreviewUrl(blobUrl);
+                  setPreviewReady(false);
+                  
+              // Ensure iframe loads - don't try to access contentDocument (causes cross-origin error)
+              setTimeout(() => {
+                const iframe = document.getElementById('preview-iframe') as HTMLIFrameElement;
+                if (iframe) {
+                  iframe.src = blobUrl;
+                  // Blob URLs will render automatically, no need to verify content
+                  setPreviewReady(true);
+                  setIsPreviewLoading(false);
+                  console.log('✅ Preview loaded from saved content', { 
+                    htmlLength: cleanedHtml.length, 
+                    blobUrl: blobUrl.substring(0, 50) + '...',
+                    previewKey: newKey
+                  });
+                }
+              }, 50);
+                } else {
+                  console.warn('⚠️ HTML content found but invalid:', cleanedHtml.substring(0, 200));
+                }
+              } else {
+                console.warn('⚠️ No HTML content found in websiteContent:', contentKeys);
+              }
+            } else {
+              console.log('⚠️ websiteContent is empty object, skipping preview load');
+            }
+          }
+          
+          // Only show welcome message if no chat history exists
+          if (!siteData.chatHistory || !Array.isArray(siteData.chatHistory) || siteData.chatHistory.length === 0) {
             // Only set welcome message if no chat history exists
+            // For new sites (status: 'generating'), prompt user to describe their website
+            const welcomeMessage = site.status === 'generating' || !site.previewUrl
+              ? `Hello! I'm your AI assistant powered by Kirin. Describe the website you'd like me to create. For example: "Create a modern landing page for a SaaS product with a hero section, features grid, and pricing cards"`
+              : `Hello! I'm your AI assistant for "${site.name}". I can help you modify your website. What would you like to change?`;
+            
             setMessages([{
               id: '1',
               role: 'assistant',
-              content: `Hello! I'm your AI assistant for "${site.name}". I can help you modify your website. What would you like to change?`,
+              content: welcomeMessage,
               timestamp: new Date()
             }]);
           }
         } else {
           // Fallback to welcome message if site data can't be loaded
+          const welcomeMessage = site.status === 'generating' || !site.previewUrl
+            ? `Hello! I'm your AI assistant powered by Kirin. Describe the website you'd like me to create. For example: "Create a modern landing page for a SaaS product with a hero section, features grid, and pricing cards"`
+            : `Hello! I'm your AI assistant for "${site.name}". I can help you modify your website. What would you like to change?`;
+          
           setMessages([{
             id: '1',
             role: 'assistant',
-            content: `Hello! I'm your AI assistant for "${site.name}". I can help you modify your website. What would you like to change?`,
+            content: welcomeMessage,
             timestamp: new Date()
           }]);
         }
       } catch (error) {
         console.error('Error loading site data:', error);
         // Fallback to welcome message
+        const welcomeMessage = site.status === 'generating' || !site.previewUrl
+          ? `Hello! I'm your AI assistant powered by Kirin. Describe the website you'd like me to create. For example: "Create a modern landing page for a SaaS product with a hero section, features grid, and pricing cards"`
+          : `Hello! I'm your AI assistant for "${site.name}". I can help you modify your website. What would you like to change?`;
+        
         setMessages([{
           id: '1',
           role: 'assistant',
-          content: `Hello! I'm your AI assistant for "${site.name}". I can help you modify your website. What would you like to change?`,
+          content: welcomeMessage,
           timestamp: new Date()
         }]);
       }
       
-      // Always check preview ready
-      if (site.previewUrl) {
+      // Always check preview ready (immediately if we have content)
+      if (site.previewUrl || (currentWebsiteContent && Object.keys(currentWebsiteContent).length > 0)) {
         checkPreviewReady();
       }
     };
 
     loadSiteData();
-  }, [site.name, site.id]);
+  }, [site.name, site.id, site.websiteContent]); // Include websiteContent to trigger preview when available
 
-  // Update preview whenever messages change (with debouncing)
+  // Cleanup blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      // Clean up blob URLs to prevent memory leaks
+      if (previewUrl && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  // Save site data when component unmounts or before page unload
+  useEffect(() => {
+    const saveOnExit = async () => {
+      if (site.id && (messages.length > 0 || Object.keys(currentWebsiteContent).length > 0)) {
+        try {
+          const baseUrl = process.env.NODE_ENV === 'production' ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000';
+          await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              chatHistory: messages.map(msg => ({
+                ...msg,
+                timestamp: msg.timestamp instanceof Date ? msg.timestamp.toISOString() : typeof msg.timestamp === 'string' ? msg.timestamp : new Date().toISOString()
+              })),
+              websiteContent: currentWebsiteContent,
+              previewUrl: previewUrl || site.previewUrl,
+              status: site.status || 'deployed',
+            }),
+          });
+          console.log('✅ Site saved on exit', { 
+            messageCount: messages.length,
+            filesCount: Object.keys(currentWebsiteContent).length 
+          });
+        } catch (error) {
+          console.error('❌ Error saving site on exit:', error);
+        }
+      }
+    };
+
+    // Save before page unload
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      saveOnExit();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Also save when component unmounts
+      saveOnExit();
+    };
+  }, [site.id, messages, currentWebsiteContent, previewUrl, site.previewUrl, site.status]);
+
+  // Update preview whenever messages change (immediate for faster preview)
   useEffect(() => {
     if (site.previewUrl && messages.length > 0) {
-      const timeoutId = setTimeout(() => {
-        checkPreviewReady();
-      }, 500); // Debounce to prevent rapid updates
-      
-      return () => clearTimeout(timeoutId);
+      // Check immediately - no debounce for faster preview
+      checkPreviewReady();
     }
   }, [messages]);
+  
+  // Update preview when current page changes (multi-page support)
+  useEffect(() => {
+    if (availablePages.length > 1 && currentWebsiteContent && currentWebsiteContent[effectiveCurrentPage]) {
+      console.log('📄 Page changed, regenerating preview:', effectiveCurrentPage);
+      checkPreviewReady();
+    }
+  }, [effectiveCurrentPage, availablePages.length]);
 
   const [previewContent, setPreviewContent] = useState('');
 
@@ -2518,6 +2923,18 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate }) 
   };
 
   const generateAdvancedSnowplowContent = (userRequest: string, textColor: string, data: any) => {
+    // Extract business name from request
+    const extractBusinessName = (req: string): string => {
+      const lowerReq = req.toLowerCase();
+      if (lowerReq.includes('snow') || lowerReq.includes('snowplow') || lowerReq.includes('plow')) {
+        return 'Smart Snowplow Co';
+      } else if (lowerReq.includes('car') && (lowerReq.includes('detail') || lowerReq.includes('wash') || lowerReq.includes('auto'))) {
+        return 'Premium Auto Detailing';
+      } else if (lowerReq.includes('restaurant') || lowerReq.includes('food')) {
+        return 'Fine Dining Restaurant';
+      }
+      return 'Business Name';
+    };
     const businessName = extractBusinessName(userRequest) || 'Smart Snowplow Co';
     const primaryColor = '#1E3A8A'; // Deep blue
     const accentColor = '#3B82F6'; // Bright blue
@@ -4750,32 +5167,102 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate }) 
   };
 
   const checkPreviewReady = async () => {
-    if (!site.previewUrl) return;
+    // First, check if we already have content in currentWebsiteContent (fastest path)
+    // This works even without previewUrl
+    // Use effectiveCurrentPage for multi-page support
+    const pageToShow = effectiveCurrentPage || 'index.html';
+    if (currentWebsiteContent && typeof currentWebsiteContent === 'object' && currentWebsiteContent[pageToShow]) {
+      let htmlContent = currentWebsiteContent[pageToShow];
+      
+      // Clean up any markdown markers
+      htmlContent = htmlContent.trim();
+      if (htmlContent.startsWith('```')) {
+        htmlContent = htmlContent.replace(/^```[a-z]*\s*\n?/i, '');
+      }
+      if (htmlContent.endsWith('```')) {
+        htmlContent = htmlContent.replace(/\n?```$/i, '');
+      }
+      htmlContent = htmlContent.trim();
+      
+      // Ensure it's valid HTML
+      if (htmlContent.includes('<!DOCTYPE') || htmlContent.includes('<html') || htmlContent.includes('<body')) {
+        htmlContent = fixImageUrls(htmlContent);
+        // Inject navigation script for in-preview link clicking
+        htmlContent = injectNavigationScript(htmlContent);
+        const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+        const blobUrl = URL.createObjectURL(blob);
+        
+        if (previewUrl && previewUrl.startsWith('blob:')) {
+          try {
+            URL.revokeObjectURL(previewUrl);
+          } catch (e) {}
+        }
+        
+        setPreviewUrl(blobUrl);
+        setPreviewReady(true);
+        console.log('✅ Preview loaded from currentWebsiteContent (instant)', { htmlLength: htmlContent.length, page: pageToShow });
+        return;
+      }
+    }
     
-    // First, try to get the actual Claude-generated content from the site
+    // Try to get the actual AI-generated content from the site (with timeout)
     try {
-      const response = await fetch(`http://localhost:3000/api/sites/${site.id}`);
+      const baseUrl = process.env.NODE_ENV === 'production' ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000';
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+      
+      const response = await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      
       if (response.ok) {
         const siteData = await response.json();
         if (siteData.websiteContent && typeof siteData.websiteContent === 'object') {
-          // Use the actual Claude-generated content
-          const claudeContent = siteData.websiteContent;
-          console.log('Using Claude-generated content:', claudeContent);
+          const geminiContent = siteData.websiteContent;
+          console.log('Using AI-generated content from API:', geminiContent);
           
-          // If we have an index.html file from Claude, use it directly
-          if (claudeContent['index.html']) {
-            const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(claudeContent['index.html'])}`;
-            setPreviewUrl(dataUrl);
-            setPreviewReady(true);
-            return;
+          if (geminiContent['index.html']) {
+            let htmlContent = geminiContent['index.html'];
+            htmlContent = htmlContent.trim();
+            if (htmlContent.startsWith('```')) {
+              htmlContent = htmlContent.replace(/^```[a-z]*\s*\n?/i, '');
+            }
+            if (htmlContent.endsWith('```')) {
+              htmlContent = htmlContent.replace(/\n?```$/i, '');
+            }
+            htmlContent = htmlContent.trim();
+            
+            if (htmlContent.includes('<!DOCTYPE') || htmlContent.includes('<html') || htmlContent.includes('<body')) {
+              htmlContent = fixImageUrls(htmlContent);
+              // Inject navigation script for in-preview link clicking
+              htmlContent = injectNavigationScript(htmlContent);
+              const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+              const blobUrl = URL.createObjectURL(blob);
+              
+              if (previewUrl && previewUrl.startsWith('blob:')) {
+                try {
+                  URL.revokeObjectURL(previewUrl);
+                } catch (e) {}
+              }
+              
+              setPreviewUrl(blobUrl);
+              setPreviewReady(true);
+              console.log('✅ Preview loaded from API', { htmlLength: htmlContent.length });
+              return;
+            }
           }
         }
       }
-    } catch (error) {
-      console.error('Error fetching site data:', error);
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.warn('⚠️ API request timed out, using fallback content');
+      } else {
+        console.error('Error fetching site data:', error);
+      }
     }
     
-    // Fallback to generating content based on chat messages
+    // Fallback to generating content based on chat messages (only if no content available)
     const lastUserMessage = messages.filter(m => m.role === 'user').pop();
     const lastAssistantMessage = messages.filter(m => m.role === 'assistant').pop();
     
@@ -4784,193 +5271,222 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate }) 
     let textColor = 'white';
     let mainText = site.name;
     
-    // Debug logging
-    console.log('Preview generation:', {
-      lastUserMessage: lastUserMessage?.content,
-      messagesCount: messages.length,
-      siteName: site.name
-    });
-    
-    // Advanced prompt parsing - much more intelligent like Lovable/DeepSeek
-    let websiteType = 'simple';
-    let extractedData = {};
-    
-    // If there are chat messages, use the last user request to generate content
-    if (lastUserMessage) {
-      const userRequest = lastUserMessage.content.toLowerCase();
-      
-      // Extract business name from the request - IMPROVED LOGIC
-      if (userRequest.includes('make a') || userRequest.includes('create a')) {
-        const businessMatch = userRequest.match(/(?:make a|create a)\s+([^.!?]+?)(?:\s+(?:website|site|business))?/);
-        if (businessMatch) {
-          const extractedName = businessMatch[1].trim().replace(/\s+/g, ' ');
-          // Only use extracted name if it's not a generic instruction
-          if (!extractedName.includes('text') && !extractedName.includes('color') && !extractedName.includes('black')) {
-            mainText = extractedName;
-          }
-        }
-      }
-      
-      // Also check for other patterns like "I want a", "build me a", etc.
-      if (!mainText || mainText === site.name) {
-        const patterns = [
-          /(?:I want a|build me a|create me a|make me a)\s+([^.!?]+?)(?:\s+(?:website|site|business))?/,
-          /(?:I need a|I'm looking for a)\s+([^.!?]+?)(?:\s+(?:website|site|business))?/,
-          /(?:help me create|help me make)\s+([^.!?]+?)(?:\s+(?:website|site|business))?/
-        ];
-        
-        for (const pattern of patterns) {
-          const match = userRequest.match(pattern);
-          if (match) {
-            mainText = match[1].trim().replace(/\s+/g, ' ');
-            break;
-          }
-        }
-      }
-      
-      // Check for specific styling requests - IMPROVED LOGIC
-      if (userRequest.includes('black') && userRequest.includes('text')) {
-        textColor = 'black';
-        backgroundColor = 'white';
-      } else if (userRequest.includes('white') && userRequest.includes('text')) {
-        textColor = 'white';
-        backgroundColor = 'black';
-      } else if (userRequest.includes('red') && userRequest.includes('white')) {
-        backgroundColor = 'white';
-        textColor = 'red';
-      } else if (userRequest.includes('bright red')) {
-        textColor = '#ff0000';
-      }
-      
-      // Advanced prompt parsing - much more intelligent like Lovable/DeepSeek
-      websiteType = detectWebsiteType(userRequest);
-      extractedData = extractAdvancedData(userRequest);
-      
-      if (websiteType === 'business') {
-        // Check for specific business types
-        if (userRequest.toLowerCase().includes('snow') || userRequest.toLowerCase().includes('snowplow') || userRequest.toLowerCase().includes('plow')) {
-          dynamicContent = generateAdvancedSnowplowContent(userRequest, textColor, extractedData);
-        } else if (userRequest.toLowerCase().includes('car') && (userRequest.toLowerCase().includes('detail') || userRequest.toLowerCase().includes('wash') || userRequest.toLowerCase().includes('auto'))) {
-          dynamicContent = generateAdvancedAutoDetailingContent(userRequest, textColor, extractedData);
-        } else if (userRequest.toLowerCase().includes('restaurant') || userRequest.toLowerCase().includes('food') || userRequest.toLowerCase().includes('dining')) {
-          dynamicContent = generateAdvancedRestaurantContent(userRequest, textColor, extractedData);
-        } else if (userRequest.toLowerCase().includes('landscap') || userRequest.toLowerCase().includes('lawn') || userRequest.toLowerCase().includes('garden')) {
-          dynamicContent = generateBusinessContent(userRequest, textColor, extractedData);
-        } else if (userRequest.toLowerCase().includes('construction') || userRequest.toLowerCase().includes('contractor') || userRequest.toLowerCase().includes('building')) {
-          dynamicContent = generateBusinessContent(userRequest, textColor, extractedData);
-        } else {
-          dynamicContent = generateBusinessContent(userRequest, textColor, extractedData);
-        }
-      } else if (websiteType === 'portfolio') {
-        dynamicContent = generateAdvancedPortfolioContent(userRequest, textColor, extractedData);
-      } else if (websiteType === 'ecommerce') {
-        dynamicContent = generateAdvancedEcommerceContent(userRequest, textColor, extractedData);
-      } else if (websiteType === 'blog') {
-        dynamicContent = generateAdvancedBlogContent(userRequest, textColor, extractedData);
-      } else if (websiteType === 'restaurant') {
-        dynamicContent = generateAdvancedRestaurantContent(userRequest, textColor, extractedData);
-      } else if (websiteType === 'news') {
-        dynamicContent = generateNewsContent(userRequest, textColor, extractedData);
-      } else if (websiteType === 'landing') {
-        dynamicContent = generateAdvancedLandingContent(userRequest, textColor, extractedData);
-      } else if (websiteType === 'creative') {
-        dynamicContent = generateCreativeContent(userRequest, textColor, extractedData);
-      } else {
-        // Universal fallback - handle ANY prompt intelligently
-        dynamicContent = generateUniversalContent(userRequest, textColor, extractedData);
-      }
-    } else {
-      // Default content if no chat messages
+    // If we have no content at all, show a simple loading message instead of waiting
+    if (!lastUserMessage && !currentWebsiteContent) {
+      console.warn('⚠️ No content available for preview, showing placeholder');
       dynamicContent = `
         <div class="main-content">
-          <h1 style="color: ${textColor}; font-size: 3rem;">
-            ${site.name}
-          </h1>
-          <p style="color: ${textColor}; font-size: 1.2rem;">
-            Your AI-generated website is ready!
-          </p>
+          <h1>${site.name}</h1>
+          <p>Website is being generated...</p>
+          <p style="margin-top: 2rem; opacity: 0.7;">Please wait while your website is created.</p>
         </div>
       `;
-    }
-    
-    // If we have specific content (like auto detailing), use it directly
-    // Otherwise, use the generic template
-    let htmlContent;
-    
-    console.log('Dynamic content type:', typeof dynamicContent);
-    console.log('Dynamic content length:', dynamicContent?.length);
-    console.log('Contains DOCTYPE:', dynamicContent?.includes('<!DOCTYPE html>'));
-    
-    if (dynamicContent && dynamicContent.includes('<!DOCTYPE html>')) {
-      // This is a complete HTML page (like auto detailing)
-      console.log('Using complete HTML page');
-      htmlContent = dynamicContent;
     } else {
-      // This is just content snippet, wrap it in generic template
-      console.log('Using generic template');
-      htmlContent = `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>${site.name}</title>
-          <style>
-              * { margin: 0; padding: 0; box-sizing: border-box; }
-              body { 
-                  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                  background: ${backgroundColor};
-                  color: ${textColor};
-                  min-height: 100vh;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  transition: all 0.3s ease;
-              }
-              .main-content {
-                  text-align: center;
-                  max-width: 1000px;
-                  padding: 2rem;
-                  animation: fadeIn 0.5s ease-in;
-              }
-              @keyframes fadeIn {
-                  from { opacity: 0; transform: translateY(20px); }
-                  to { opacity: 1; transform: translateY(0); }
-              }
-              .update-indicator {
-                  position: fixed;
-                  top: 20px;
-                  right: 20px;
-                  background: rgba(0,0,0,0.8);
-                  color: white;
-                  padding: 10px 20px;
-                  border-radius: 25px;
-                  font-size: 0.9rem;
-                  animation: pulse 2s infinite;
-              }
-              @keyframes pulse {
-                  0%, 100% { opacity: 0.7; }
-                  50% { opacity: 1; }
-              }
-          </style>
-      </head>
-      <body>
-          ${dynamicContent || '<div class="main-content"><h1>Loading...</h1></div>'}
-          <div class="update-indicator">
-              🔄 Live Preview
+      // Debug logging
+      console.log('Preview generation:', {
+        lastUserMessage: lastUserMessage?.content,
+        messagesCount: messages.length,
+        siteName: site.name
+      });
+      
+      // Advanced prompt parsing - much more intelligent like Lovable/DeepSeek
+      let websiteType = 'simple';
+      let extractedData = {};
+      
+      // If there are chat messages, use the last user request to generate content
+      if (lastUserMessage) {
+        const userRequest = lastUserMessage.content.toLowerCase();
+        
+        // Extract business name from the request - IMPROVED LOGIC
+        if (userRequest.includes('make a') || userRequest.includes('create a')) {
+          const businessMatch = userRequest.match(/(?:make a|create a)\s+([^.!?]+?)(?:\s+(?:website|site|business))?/);
+          if (businessMatch) {
+            const extractedName = businessMatch[1].trim().replace(/\s+/g, ' ');
+            // Only use extracted name if it's not a generic instruction
+            if (!extractedName.includes('text') && !extractedName.includes('color') && !extractedName.includes('black')) {
+              mainText = extractedName;
+            }
+          }
+        }
+        
+        // Also check for other patterns like "I want a", "build me a", etc.
+        if (!mainText || mainText === site.name) {
+          const patterns = [
+            /(?:I want a|build me a|create me a|make me a)\s+([^.!?]+?)(?:\s+(?:website|site|business))?/,
+            /(?:I need a|I'm looking for a)\s+([^.!?]+?)(?:\s+(?:website|site|business))?/,
+            /(?:help me create|help me make)\s+([^.!?]+?)(?:\s+(?:website|site|business))?/
+          ];
+          
+          for (const pattern of patterns) {
+            const match = userRequest.match(pattern);
+            if (match) {
+              mainText = match[1].trim().replace(/\s+/g, ' ');
+              break;
+            }
+          }
+        }
+        
+        // Check for specific styling requests - IMPROVED LOGIC
+        if (userRequest.includes('black') && userRequest.includes('text')) {
+          textColor = 'black';
+          backgroundColor = 'white';
+        } else if (userRequest.includes('white') && userRequest.includes('text')) {
+          textColor = 'white';
+          backgroundColor = 'black';
+        } else if (userRequest.includes('red') && userRequest.includes('white')) {
+          backgroundColor = 'white';
+          textColor = 'red';
+        } else if (userRequest.includes('bright red')) {
+          textColor = '#ff0000';
+        }
+        
+        // Advanced prompt parsing - much more intelligent like Lovable/DeepSeek
+        websiteType = detectWebsiteType(userRequest);
+        extractedData = extractAdvancedData(userRequest);
+        
+        if (websiteType === 'business') {
+          // Check for specific business types
+          if (userRequest.toLowerCase().includes('snow') || userRequest.toLowerCase().includes('snowplow') || userRequest.toLowerCase().includes('plow')) {
+            dynamicContent = generateAdvancedSnowplowContent(userRequest, textColor, extractedData);
+          } else if (userRequest.toLowerCase().includes('car') && (userRequest.toLowerCase().includes('detail') || userRequest.toLowerCase().includes('wash') || userRequest.toLowerCase().includes('auto'))) {
+            dynamicContent = generateAdvancedAutoDetailingContent(userRequest, textColor, extractedData);
+          } else if (userRequest.toLowerCase().includes('restaurant') || userRequest.toLowerCase().includes('food') || userRequest.toLowerCase().includes('dining')) {
+            dynamicContent = generateAdvancedRestaurantContent(userRequest, textColor, extractedData);
+          } else if (userRequest.toLowerCase().includes('landscap') || userRequest.toLowerCase().includes('lawn') || userRequest.toLowerCase().includes('garden')) {
+            dynamicContent = generateBusinessContent(userRequest, textColor, extractedData);
+          } else if (userRequest.toLowerCase().includes('construction') || userRequest.toLowerCase().includes('contractor') || userRequest.toLowerCase().includes('building')) {
+            dynamicContent = generateBusinessContent(userRequest, textColor, extractedData);
+          } else {
+            dynamicContent = generateBusinessContent(userRequest, textColor, extractedData);
+          }
+        } else if (websiteType === 'portfolio') {
+          dynamicContent = generateAdvancedPortfolioContent(userRequest, textColor, extractedData);
+        } else if (websiteType === 'ecommerce') {
+          dynamicContent = generateEcommerceContent(userRequest, textColor);
+        } else if (websiteType === 'blog') {
+          dynamicContent = generateBlogContent(userRequest, textColor);
+        } else if (websiteType === 'restaurant') {
+          dynamicContent = generateAdvancedRestaurantContent(userRequest, textColor, extractedData);
+        } else if (websiteType === 'news') {
+          dynamicContent = generateNewsContent(userRequest, textColor, extractedData);
+        } else if (websiteType === 'landing') {
+          dynamicContent = generateBusinessContent(userRequest, textColor, extractedData);
+        } else if (websiteType === 'creative') {
+          dynamicContent = generateCreativeContent(userRequest, textColor, extractedData);
+        } else {
+          // Universal fallback - handle ANY prompt intelligently
+          dynamicContent = generateBusinessContent(userRequest, textColor, extractedData);
+        }
+      } else {
+        // Default content if no chat messages
+        dynamicContent = `
+          <div class="main-content">
+            <h1 style="color: ${textColor}; font-size: 3rem;">
+              ${site.name}
+            </h1>
+            <p style="color: ${textColor}; font-size: 1.2rem;">
+              Your AI-generated website is ready!
+            </p>
           </div>
-      </body>
-      </html>`;
+        `;
+      }
+      
+      // If we have specific content (like auto detailing), use it directly
+      // Otherwise, use the generic template
+      let htmlContent;
+      
+      console.log('Dynamic content type:', typeof dynamicContent);
+      console.log('Dynamic content length:', dynamicContent?.length);
+      console.log('Contains DOCTYPE:', dynamicContent?.includes('<!DOCTYPE html>'));
+      
+      if (dynamicContent && dynamicContent.includes('<!DOCTYPE html>')) {
+        // This is a complete HTML page (like auto detailing)
+        console.log('Using complete HTML page');
+        htmlContent = dynamicContent;
+      } else {
+        // This is just content snippet, wrap it in generic template
+        console.log('Using generic template');
+        htmlContent = `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>${site.name}</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { 
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    background: ${backgroundColor};
+                    color: ${textColor};
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    transition: all 0.3s ease;
+                }
+                .main-content {
+                    text-align: center;
+                    max-width: 1000px;
+                    padding: 2rem;
+                    animation: fadeIn 0.5s ease-in;
+                }
+                @keyframes fadeIn {
+                    from { opacity: 0; transform: translateY(20px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                .update-indicator {
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: rgba(0,0,0,0.8);
+                    color: white;
+                    padding: 10px 20px;
+                    border-radius: 25px;
+                    font-size: 0.9rem;
+                    animation: pulse 2s infinite;
+                }
+                @keyframes pulse {
+                    0%, 100% { opacity: 0.7; }
+                    50% { opacity: 1; }
+                }
+            </style>
+        </head>
+        <body>
+            ${dynamicContent || '<div class="main-content"><h1>Loading...</h1></div>'}
+            <div class="update-indicator">
+                🔄 Live Preview
+            </div>
+        </body>
+        </html>`;
+      }
+      
+      // Fix broken image URLs before creating blob
+      htmlContent = fixImageUrls(htmlContent);
+      // Inject navigation script for in-preview link clicking
+      htmlContent = injectNavigationScript(htmlContent);
+      
+      // Use Blob URL instead of data URL for Safari compatibility
+      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+      const blobUrl = URL.createObjectURL(blob);
+      
+      // Clean up old blob URL if it exists
+      if (previewUrl && previewUrl.startsWith('blob:')) {
+        try {
+          URL.revokeObjectURL(previewUrl);
+        } catch (e) {
+          // Ignore errors when revoking old URLs
+        }
+      }
+      
+      setPreviewUrl(blobUrl);
+      setPreviewReady(true);
+      
+      // Debug logging
+      console.log('✅ Preview URL set (blob):', blobUrl.substring(0, 50) + '...');
+      console.log('Content type detected:', websiteType);
+      console.log('Main text:', mainText);
     }
-    
-    const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`;
-    setPreviewUrl(dataUrl);
-    setPreviewReady(true);
-    
-    // Debug logging
-    console.log('Preview URL set:', dataUrl.substring(0, 100) + '...');
-    console.log('Content type detected:', websiteType);
-    console.log('Main text:', mainText);
   };
 
   // Generate preview content from messages
@@ -4990,17 +5506,17 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate }) 
     } else if (analysis.type === 'portfolio') {
       return generateAdvancedPortfolioContent(lastUserMessage.content, '#ffffff', analysis);
     } else if (analysis.type === 'ecommerce') {
-      return generateAdvancedEcommerceContent(lastUserMessage.content, '#ffffff', analysis);
+      return generateEcommerceContent(lastUserMessage.content, '#ffffff');
     } else if (analysis.type === 'blog') {
-      return generateAdvancedBlogContent(lastUserMessage.content, '#ffffff', analysis);
+      return generateBlogContent(lastUserMessage.content, '#ffffff');
     } else if (analysis.type === 'landing') {
-      return generateAdvancedLandingContent(lastUserMessage.content, '#ffffff', analysis);
+      return generateBusinessContent(lastUserMessage.content, '#ffffff', analysis);
     } else if (analysis.type === 'news') {
       return generateNewsContent(lastUserMessage.content, '#ffffff', analysis);
     } else if (analysis.type === 'creative') {
-      return generateAdvancedCreativeContent(lastUserMessage.content, '#ffffff', analysis);
+      return generateCreativeContent(lastUserMessage.content, '#ffffff', analysis);
     } else {
-      return generateUniversalContent(lastUserMessage.content, '#ffffff', analysis);
+      return generateBusinessContent(lastUserMessage.content, '#ffffff', analysis);
     }
   };
 
@@ -5014,73 +5530,466 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate }) 
       timestamp: new Date()
     };
 
-    const newMessages = [...messages, userMessage];
+    // Ensure all existing messages have proper Date timestamps before adding new one
+    const normalizedMessages = messages.map(msg => ({
+      ...msg,
+      timestamp: msg.timestamp instanceof Date 
+        ? msg.timestamp 
+        : typeof msg.timestamp === 'string' 
+          ? new Date(msg.timestamp) 
+          : new Date()
+    }));
+    
+    const newMessages = [...normalizedMessages, userMessage];
     setMessages(newMessages);
+    const inputValue = input; // Save input value before clearing
     setInput('');
     setIsLoading(true);
 
+    // ============= PROGRESS SIMULATION =============
+    // Detect if this is a clone request for more detailed progress
+    const isCloneRequest = /copy|clone|replicate|recreate|make it like|make it look like|same as|similar to/i.test(inputValue);
+    const isMultiPage = /multi-?page|multiple pages|full website|complete website/i.test(inputValue);
+    
+    // Progress steps based on request type
+    const cloneSteps = [
+      { step: '🔍 Analyzing request', detail: 'Understanding what you want to build...', percent: 5 },
+      { step: '🌐 Fetching target website', detail: 'Downloading HTML and CSS...', percent: 15 },
+      { step: '🎨 Extracting color palette', detail: 'Identifying all colors used...', percent: 25 },
+      { step: '🔤 Analyzing typography', detail: 'Detecting fonts and text styles...', percent: 35 },
+      { step: '📐 Mapping layout structure', detail: 'Understanding grid and sections...', percent: 45 },
+      { step: '🖼️ Cataloging images', detail: 'Finding all images and their contexts...', percent: 55 },
+      { step: '📝 Building HTML structure', detail: 'Creating the page skeleton...', percent: 65 },
+      { step: '🖌️ Applying styles', detail: 'Matching the visual design...', percent: 75 },
+      { step: '✨ Adding animations', detail: 'Implementing hover effects and transitions...', percent: 85 },
+      { step: '🔧 Final polish', detail: 'Optimizing for responsiveness...', percent: 95 },
+    ];
+    
+    const generateSteps = [
+      { step: '🔍 Analyzing your request', detail: 'Understanding what you want...', percent: 10 },
+      { step: '🎨 Designing layout', detail: 'Planning sections and structure...', percent: 25 },
+      { step: '📝 Generating HTML', detail: 'Building the page structure...', percent: 40 },
+      { step: '🖌️ Applying styles', detail: 'Adding colors, fonts, and spacing...', percent: 55 },
+      { step: '🖼️ Adding images', detail: 'Selecting relevant imagery...', percent: 70 },
+      { step: '✨ Adding interactions', detail: 'Implementing hover effects...', percent: 85 },
+      { step: '🔧 Finalizing', detail: 'Polishing the final result...', percent: 95 },
+    ];
+    
+    const multiPageSteps = [
+      { step: '🔍 Analyzing request', detail: 'Planning multi-page structure...', percent: 5 },
+      { step: '🎨 Creating design system', detail: 'Defining colors, fonts, components...', percent: 15 },
+      { step: '📄 Generating index.html', detail: 'Building the homepage...', percent: 30 },
+      { step: '📄 Generating about.html', detail: 'Creating the about page...', percent: 45 },
+      { step: '📄 Generating services.html', detail: 'Building the services page...', percent: 60 },
+      { step: '📄 Generating contact.html', detail: 'Creating the contact page...', percent: 75 },
+      { step: '🔗 Linking pages', detail: 'Ensuring navigation works...', percent: 85 },
+      { step: '✨ Final polish', detail: 'Adding animations and effects...', percent: 95 },
+    ];
+    
+    const modifySteps = [
+      { step: '🔍 Understanding changes', detail: 'Analyzing your modification request...', percent: 20 },
+      { step: '📝 Updating code', detail: 'Making the requested changes...', percent: 50 },
+      { step: '✨ Applying changes', detail: 'Integrating updates...', percent: 80 },
+      { step: '🔧 Verifying', detail: 'Ensuring everything works...', percent: 95 },
+    ];
+    
+    // Select appropriate steps
+    const hasWebsiteContent = currentWebsiteContent && typeof currentWebsiteContent === 'object' && Object.keys(currentWebsiteContent).length > 0;
+    const isNewSiteForProgress = site.status === 'generating' || !hasWebsiteContent;
+    
+    let progressSteps = modifySteps;
+    if (isNewSiteForProgress) {
+      if (isCloneRequest) {
+        progressSteps = cloneSteps;
+      } else if (isMultiPage) {
+        progressSteps = multiPageSteps;
+      } else {
+        progressSteps = generateSteps;
+      }
+    }
+    
+    // Start progress simulation
+    let stepIndex = 0;
+    setGenerationProgress(progressSteps[0]);
+    
+    // Calculate timing based on expected operation length
+    const totalTime = isCloneRequest ? 180000 : (isMultiPage ? 150000 : 60000); // 3min for clone, 2.5min for multi-page, 1min for normal
+    const stepTime = totalTime / progressSteps.length;
+    
+    progressIntervalRef.current = setInterval(() => {
+      stepIndex++;
+      if (stepIndex < progressSteps.length) {
+        setGenerationProgress(progressSteps[stepIndex]);
+      }
+    }, stepTime);
+
     try {
-      // Send message to AI for website modification
-      const response = await fetch(`${process.env.NODE_ENV === 'production' ? 'https://beta-avallon1.vercel.app' : 'http://localhost:3000'}/api/sites/modify`, {
+      const baseUrl = process.env.NODE_ENV === 'production' ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000';
+      
+      // For new sites (status: 'generating' or no websiteContent), generate website
+      // For existing sites, modify website
+      // CRITICAL: Check both site status AND currentWebsiteContent state
+      const hasWebsiteContent = currentWebsiteContent && typeof currentWebsiteContent === 'object' && Object.keys(currentWebsiteContent).length > 0;
+      const isNewSite = site.status === 'generating' || !hasWebsiteContent;
+      
+      console.log('🔍 Site check:', {
+        status: site.status,
+        hasWebsiteContent,
+        isNewSite,
+        currentWebsiteContentKeys: currentWebsiteContent ? Object.keys(currentWebsiteContent) : []
+      });
+      
+      // Ensure site.id exists before making API calls
+      if (!site.id) {
+        throw new Error('Site ID is missing. Please refresh and try again.');
+      }
+      
+      // Generate name from prompt if it's a new site
+      const generateNameFromPrompt = (prompt: string): string => {
+        const lowerPrompt = prompt.toLowerCase();
+        
+        // Extract business type or main subject
+        if (lowerPrompt.includes('car') && (lowerPrompt.includes('detail') || lowerPrompt.includes('wash') || lowerPrompt.includes('auto'))) {
+          return 'Auto Detailing Website';
+        } else if (lowerPrompt.includes('snow') || lowerPrompt.includes('snowplow') || lowerPrompt.includes('plow')) {
+          return 'Snow Removal Services';
+        } else if (lowerPrompt.includes('restaurant') || lowerPrompt.includes('food') || lowerPrompt.includes('dining')) {
+          return 'Restaurant Website';
+        } else if (lowerPrompt.includes('landscap') || lowerPrompt.includes('lawn') || lowerPrompt.includes('garden')) {
+          return 'Landscaping Services';
+        } else if (lowerPrompt.includes('construction') || lowerPrompt.includes('contractor') || lowerPrompt.includes('building')) {
+          return 'Construction Company';
+        } else if (lowerPrompt.includes('portfolio')) {
+          return 'Portfolio Website';
+        } else if (lowerPrompt.includes('ecommerce') || lowerPrompt.includes('store') || lowerPrompt.includes('shop')) {
+          return 'E-commerce Store';
+        } else if (lowerPrompt.includes('blog')) {
+          return 'Blog Website';
+        } else if (lowerPrompt.includes('saas') || lowerPrompt.includes('software')) {
+          return 'SaaS Product';
+        } else {
+          // Try to extract a meaningful name from the prompt
+          const words = prompt.split(/\s+/).filter(w => w.length > 3);
+          if (words.length > 0) {
+            // Capitalize first letter of first few words
+            const nameWords = words.slice(0, 3).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+            return nameWords.join(' ') + ' Website';
+          }
+          return `Website ${Date.now()}`;
+        }
+      };
+      
+      // Use proven Gemini endpoint for reliable HTML generation
+      const endpoint = isNewSite ? '/api/sites/generate' : '/api/sites/modify';
+      
+      const requestBody = isNewSite 
+        ? {
+            name: generateNameFromPrompt(input.trim()),
+            description: input.trim(),
+            mode: 'full' as const,
+          }
+        : {
+            siteId: site.id,
+            message: input.trim(),
+            chatHistory: newMessages.map(msg => ({
+              ...msg,
+              timestamp: msg.timestamp instanceof Date ? msg.timestamp.toISOString() : typeof msg.timestamp === 'string' ? msg.timestamp : new Date().toISOString()
+            })),
+            currentCode: currentWebsiteContent || {} // Pass current website content for modification (empty object if none)
+          };
+      
+      // Validate request body
+      if (isNewSite && (!requestBody.description || requestBody.description.length < 3)) {
+        throw new Error('Please provide a website description (at least 3 characters)');
+      }
+      
+      const response = await fetchWithAuth(`${baseUrl}${endpoint}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          siteId: site.id,
-          message: input,
-          chatHistory: newMessages, // Send updated chat history for context
-          currentCode: {} // We'll get this from the site
-        })
+        body: JSON.stringify(requestBody)
       });
 
-      const result = await response.json();
-      
-      if (result.success) {
-        const assistantMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: result.message || 'I\'ve updated your website! The changes should be visible in the preview.',
-          timestamp: new Date()
-        };
-
-        const finalMessages = [...newMessages, assistantMessage];
-        setMessages(finalMessages);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
         
-        // Save chat history and website content to database
-        try {
-          await fetch(`http://localhost:3000/api/sites/${site.id}`, {
-            method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              chatHistory: finalMessages,
-              websiteContent: result.websiteContent || generatePreviewContent(finalMessages),
-            }),
-          });
-        } catch (saveError) {
-          console.error('Error saving chat history:', saveError);
+        // Handle insufficient credits error (402 Payment Required)
+        if (response.status === 402 && errorData.credits) {
+          const creditError = new Error(errorData.message || `Insufficient credits. You need ${errorData.credits.required} credits but only have ${errorData.credits.current}.`);
+          (creditError as any).isCreditError = true;
+          (creditError as any).credits = errorData.credits;
+          throw creditError;
         }
         
-        // Update preview URL if it changed
-        if (result.previewUrl) {
-          setPreviewUrl(result.previewUrl);
+        const errorMessage = errorData.error || errorData.message || `HTTP ${response.status}: ${response.statusText}`;
+        const errorDetails = errorData.details ? ` Details: ${errorData.details}` : '';
+        console.error('API Error:', errorData);
+        throw new Error(errorMessage + errorDetails);
+      }
+      
+        const result = await response.json();
+        
+        // Handle API response - get websiteContent from various response formats
+        const websiteContent = result.websiteContent || result.result?.websiteContent || result.fileMap;
+        
+        console.log('📦 API Response received:', {
+          success: result.success,
+          hasWebsiteContent: !!websiteContent,
+          websiteContentKeys: websiteContent ? Object.keys(websiteContent) : [],
+          hasResult: !!result.result
+        });
+        
+        // Check if generation actually failed (success: false)
+        if (result.success === false) {
+          throw new Error(result.message || result.error || 'Website generation failed');
+        }
+        
+        // Handle both generate and modify responses
+        if (result.success || result.result) {
+          // Use chat history from result if provided (modify endpoint returns it)
+          // Otherwise build it from existing messages + new assistant message
+          let finalMessages: ChatMessage[];
+          
+          if (result.chatHistory && Array.isArray(result.chatHistory)) {
+            // Backend returned complete chat history - use it directly
+            finalMessages = result.chatHistory.map((msg: any) => ({
+              ...msg,
+              timestamp: msg.timestamp ? (typeof msg.timestamp === 'string' ? new Date(msg.timestamp) : msg.timestamp) : new Date()
+            }));
+            console.log('✅ Using chat history from backend:', finalMessages.length, 'messages');
+          } else {
+            // Build chat history from existing messages + new assistant message
+            const assistantMessage: ChatMessage = {
+              id: (Date.now() + 1).toString(),
+              role: 'assistant',
+              content: result.message || (isNewSite ? '✅ I\'ve generated your website using the new spec-first architecture! The preview should appear shortly.' : 'I\'ve updated your website! The changes should be visible in the preview.'),
+              timestamp: new Date()
+            };
+            
+            finalMessages = [...newMessages, assistantMessage].map(msg => ({
+              ...msg,
+              timestamp: msg.timestamp instanceof Date 
+                ? msg.timestamp 
+                : typeof msg.timestamp === 'string' 
+                  ? new Date(msg.timestamp) 
+                  : new Date()
+            }));
+          }
+          
+          setMessages(finalMessages);
+          const updatedSite = result.result || result;
+          
+          console.log('🔍 Extracted websiteContent:', {
+            hasWebsiteContent: !!websiteContent,
+            isObject: typeof websiteContent === 'object',
+            keys: websiteContent ? Object.keys(websiteContent) : [],
+            hasIndexHtml: websiteContent && !!websiteContent['index.html'],
+            indexHtmlLength: websiteContent && websiteContent['index.html'] ? websiteContent['index.html'].length : 0
+          });
+          
+          // CRITICAL: Update current website content state for future modifications
+          if (websiteContent && typeof websiteContent === 'object' && Object.keys(websiteContent).length > 0) {
+            setCurrentWebsiteContent(websiteContent);
+            console.log('✅ Website content updated:', Object.keys(websiteContent).length, 'files', { keys: Object.keys(websiteContent) });
+          } else {
+            console.error('❌ No websiteContent found in response:', { result });
+          }
+          
+          // Save chat history and website content to database (backend should have already saved, but ensure sync)
+          try {
+            const saveResponse = await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`, {
+              method: 'PATCH',
+              body: JSON.stringify({
+                chatHistory: finalMessages.map(msg => ({
+                  ...msg,
+                  timestamp: msg.timestamp instanceof Date ? msg.timestamp.toISOString() : typeof msg.timestamp === 'string' ? msg.timestamp : new Date().toISOString()
+                })),
+                websiteContent: websiteContent || currentWebsiteContent,
+                status: isNewSite ? 'deployed' : site.status,
+                previewUrl: result.previewUrl || updatedSite?.previewUrl || site.previewUrl,
+              }),
+            });
+            
+            if (!saveResponse.ok) {
+              const errorData = await saveResponse.json().catch(() => ({}));
+              console.error('⚠️ Failed to save chat history:', errorData);
+            } else {
+              console.log('✅ Chat history and website content saved successfully', { 
+                messageCount: finalMessages.length,
+                filesCount: websiteContent ? Object.keys(websiteContent).length : 0
+              });
+            }
+          } catch (saveError) {
+            console.error('⚠️ Error saving chat history:', saveError);
+          }
+        
+        // CRITICAL: Update preview with new website content immediately
+        if (websiteContent && typeof websiteContent === 'object' && Object.keys(websiteContent).length > 0) {
+          console.log('🎨 Updating preview with websiteContent...');
+          
+          // Try multiple possible keys for HTML content
+          const htmlContent = websiteContent['index.html'] || 
+                             websiteContent['Index.html'] ||
+                             websiteContent['INDEX.HTML'] ||
+                             Object.values(websiteContent).find((content: any) => 
+                               typeof content === 'string' && 
+                               (content.includes('<!DOCTYPE') || content.includes('<html') || content.includes('<body'))
+                             ) as string | undefined;
+          
+          if (htmlContent) {
+            console.log('✅ Found HTML content, processing...', { 
+              key: websiteContent['index.html'] ? 'index.html' : 'other',
+              length: htmlContent.length 
+            });
+            
+            let processedHtml = htmlContent.trim();
+            
+            // Clean up any markdown markers that might have slipped through
+            if (processedHtml.startsWith('```')) {
+              processedHtml = processedHtml.replace(/^```[a-z]*\s*\n?/i, '');
+            }
+            if (processedHtml.endsWith('```')) {
+              processedHtml = processedHtml.replace(/\n?```$/i, '');
+            }
+            processedHtml = processedHtml.trim();
+            
+            // Ensure it's valid HTML
+            if (processedHtml.includes('<!DOCTYPE') || processedHtml.includes('<html') || processedHtml.includes('<body')) {
+              // Fix broken image URLs before creating blob
+              processedHtml = fixImageUrls(processedHtml);
+              
+              // Validate HTML has actual content (not just empty tags)
+              const tempDiv = document.createElement('div');
+              tempDiv.innerHTML = processedHtml;
+              const hasContent = tempDiv.textContent && tempDiv.textContent.trim().length > 0;
+              
+              if (!hasContent && processedHtml.length < 500) {
+                console.error('❌ HTML appears to be empty or invalid:', processedHtml.substring(0, 500));
+                throw new Error('Generated HTML appears to be empty. Please try again.');
+              }
+              
+              // Inject navigation script for in-preview link clicking
+              processedHtml = injectNavigationScript(processedHtml);
+              
+              // Use Blob URL instead of data URL for Safari compatibility
+              const blob = new Blob([processedHtml], { type: 'text/html;charset=utf-8' });
+              const blobUrl = URL.createObjectURL(blob);
+              
+              // Clean up old blob URL if it exists
+              if (previewUrl && previewUrl.startsWith('blob:')) {
+                try {
+                  URL.revokeObjectURL(previewUrl);
+                } catch (e) {
+                  // Ignore errors when revoking old URLs
+                }
+              }
+              
+              // Force iframe reload by updating key
+              const newKey = previewKey + 1;
+              setPreviewKey(newKey);
+              setPreviewUrl(blobUrl);
+              setPreviewReady(true); // Set ready immediately - blob URLs work instantly
+              setIsPreviewLoading(false);
+              
+              console.log('✅ Preview updated with new AI-generated content (instant)', { 
+                htmlLength: processedHtml.length,
+                blobUrl: blobUrl.substring(0, 50) + '...',
+                previewKey: newKey,
+                hasContent
+              });
+            } else {
+              console.error('❌ Invalid HTML content:', processedHtml.substring(0, 200));
+              // Fallback: regenerate preview from messages
+              checkPreviewReady();
+            }
+          } else {
+            console.error('❌ No HTML content found in websiteContent:', { 
+              keys: Object.keys(websiteContent),
+              values: Object.keys(websiteContent).map(k => typeof websiteContent[k])
+            });
+            // Fallback: regenerate preview from messages
+            checkPreviewReady();
+          }
+        } else {
+          console.error('❌ No websiteContent to update preview with:', { 
+            hasWebsiteContent: !!websiteContent,
+            isObject: websiteContent && typeof websiteContent === 'object',
+            keys: websiteContent && typeof websiteContent === 'object' ? Object.keys(websiteContent) : []
+          });
+          
+          // Fallback: try preview URL if provided
+          if (result.previewUrl || updatedSite?.previewUrl) {
+            console.log('🔄 Using preview URL fallback:', result.previewUrl || updatedSite?.previewUrl);
+            setPreviewUrl(result.previewUrl || updatedSite.previewUrl);
+            checkPreviewReady(); // Check immediately, no delay
+          } else {
+            console.log('⚠️ No preview URL available, checking preview ready...');
+            checkPreviewReady();
+          }
+        }
+
+        // Update site status if it was a new site
+        if (isNewSite && updatedSite) {
+          onUpdate({ ...site, ...updatedSite, status: 'deployed' });
+        }
+
+        // Update credits if provided in response
+        if (result.credits?.remaining !== undefined && (window as any).onCreditsUpdate) {
+          (window as any).onCreditsUpdate(result.credits.remaining);
         }
 
         toast({
-          title: "Website Updated",
-          description: "Your changes have been applied successfully!",
+          title: isNewSite ? "Website Generated" : "Website Updated",
+          description: isNewSite 
+            ? `Your website has been generated successfully with Kirin! ${result.credits ? `(${result.credits.remaining} credits remaining)` : ''}` 
+            : `Your changes have been applied successfully! ${result.credits ? `(${result.credits.remaining} credits remaining)` : ''}`,
         });
       } else {
-        throw new Error(result.error || 'Failed to update website');
+        throw new Error(result.error || (isNewSite ? 'Failed to generate website' : 'Failed to update website'));
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating website:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update website. Please try again.",
-        variant: "destructive",
-      });
+      
+      // Add user message back if request failed
+      setInput(inputValue);
+      
+      // Handle credit errors specially
+      if (error.isCreditError && error.credits) {
+        toast({
+          title: "Insufficient Credits",
+          description: error.message || `You need ${error.credits.required} credits but only have ${error.credits.current}. Please upgrade your plan to get more credits.`,
+          variant: "destructive",
+          action: (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                // Trigger upgrade modal if available
+                if ((window as any).openPricingModal) {
+                  (window as any).openPricingModal();
+                } else {
+                  window.location.href = '/dashboard?upgrade=true';
+                }
+              }}
+            >
+              Upgrade Plan
+            </Button>
+          ),
+        });
+      } else {
+        // Show regular error message
+        const errorMessage = error.message || "Failed to update website. Please try again.";
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
     } finally {
+      // Clear progress simulation
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+      setGenerationProgress(null);
       setIsLoading(false);
     }
   };
@@ -5114,33 +6023,56 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate }) 
     }
   };
 
-  const handleDeployToVercel = async () => {
+  const [isDeploying, setIsDeploying] = useState(false);
+  const [deploymentModal, setDeploymentModal] = useState<{ show: boolean; url?: string; repoUrl?: string }>({ show: false });
+
+  const handleDeploy = async () => {
+    setIsDeploying(true);
     try {
-      const response = await fetch('/api/sites/deploy/vercel', {
+      const response = await fetchWithAuth('/api/sites/deploy/vercel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ siteId: site.id })
       });
 
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = 'Failed to deploy';
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.error || errorJson.details || errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+
       const result = await response.json();
       
       if (result.success) {
-        onUpdate({ ...site, previewUrl: result.previewUrl });
+        onUpdate({ ...site, previewUrl: result.previewUrl, repoUrl: result.repoUrl, status: 'live' });
         setPreviewUrl(result.previewUrl);
+        setDeploymentModal({ 
+          show: true, 
+          url: result.previewUrl,
+          repoUrl: result.repoUrl 
+        });
         toast({
-          title: "Deployed to Vercel",
-          description: `Your website is now live at ${result.previewUrl}`,
+          title: "Deployment Successful!",
+          description: "Your website is now live on Vercel.",
         });
       } else {
-        throw new Error(result.error || 'Failed to deploy to Vercel');
+        throw new Error(result.error || 'Failed to deploy');
       }
-    } catch (error) {
-      console.error('Error deploying to Vercel:', error);
+    } catch (error: any) {
+      console.error('Error deploying:', error);
       toast({
         title: "Deployment Failed",
-        description: "Failed to deploy to Vercel. Please try again.",
+        description: error.message || "Failed to deploy. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsDeploying(false);
     }
   };
 
@@ -5173,22 +6105,22 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate }) 
             </div>
             <div className="flex gap-2">
               <Button
-                variant="outline"
+                variant="default"
                 size="sm"
-                onClick={handleDeployToGitHub}
-                disabled={!!site.repoUrl}
+                onClick={handleDeploy}
+                disabled={isDeploying || !!(site.previewUrl?.includes('vercel') && site.repoUrl)}
               >
-                <Github className="w-4 h-4 mr-2" />
-                {site.repoUrl ? 'Deployed' : 'Deploy to GitHub'}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDeployToVercel}
-                disabled={!!site.previewUrl?.includes('vercel')}
-              >
-                <Globe className="w-4 h-4 mr-2" />
-                {site.previewUrl?.includes('vercel') ? 'Deployed' : 'Deploy to Vercel'}
+                {isDeploying ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Deploying...
+                  </>
+                ) : (
+                  <>
+                    <Globe className="w-4 h-4 mr-2" />
+                    {site.previewUrl?.includes('vercel') && site.repoUrl ? 'Deployed' : 'Deploy'}
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -5196,32 +6128,80 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate }) 
 
         {/* Chat Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
+          {messages.map((message) => {
+            // Ensure timestamp is a Date object
+            const timestamp = message.timestamp instanceof Date 
+              ? message.timestamp 
+              : typeof message.timestamp === 'string' 
+                ? new Date(message.timestamp) 
+                : new Date();
+            
+            return (
               <div
-                className={`max-w-[80%] rounded-lg p-3 ${
-                  message.role === 'user'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted'
-                }`}
+                key={message.id}
+                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                <p className="text-sm">{message.content}</p>
-                <p className="text-xs opacity-70 mt-1">
-                  {message.timestamp.toLocaleTimeString()}
-                </p>
+                <div
+                  className={`max-w-[80%] rounded-lg p-3 ${
+                    message.role === 'user'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted'
+                  }`}
+                >
+                  <p className="text-sm">{message.content}</p>
+                  <p className="text-xs opacity-70 mt-1">
+                    {timestamp.toLocaleTimeString()}
+                  </p>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {isLoading && (
             <div className="flex justify-start">
-              <div className="bg-muted rounded-lg p-3">
-                <div className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className="text-sm">AI is thinking...</span>
-                </div>
+              <div className="bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 rounded-xl p-4 max-w-md">
+                {generationProgress ? (
+                  <div className="space-y-3">
+                    {/* Progress Header */}
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
+                          <Sparkles className="w-5 h-5 text-white animate-pulse" />
+                        </div>
+                        <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-background animate-pulse" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-foreground">{generationProgress.step}</div>
+                        <div className="text-xs text-muted-foreground">{generationProgress.detail}</div>
+                      </div>
+                    </div>
+                    
+                    {/* Progress Bar */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Progress</span>
+                        <span className="text-indigo-500 font-medium">{generationProgress.percent}%</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500 ease-out"
+                          style={{ width: `${generationProgress.percent}%` }}
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Animated Dots */}
+                    <div className="flex items-center justify-center gap-1 pt-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+                    <span className="text-sm">AI is thinking...</span>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -5272,74 +6252,180 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate }) 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Globe className="w-5 h-5 text-primary" />
-              <h3 className="text-lg font-semibold">Live Preview</h3>
+              <h3 className="text-lg font-semibold">Preview</h3>
+              {site.previewUrl?.includes('vercel') && (
+                <a 
+                  href={site.previewUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 px-2 py-1 bg-green-500/10 text-green-500 text-xs rounded-full hover:bg-green-500/20 transition-colors"
+                >
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                  Live
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={refreshPreview}
                 disabled={isPreviewLoading}
+                title="Refresh preview"
               >
-                <RefreshCw className={`w-4 h-4 mr-2 ${isPreviewLoading ? 'animate-spin' : ''}`} />
-                Refresh
+                <RefreshCw className={`w-4 h-4 ${isPreviewLoading ? 'animate-spin' : ''}`} />
               </Button>
-              {previewUrl && (
+              {site.previewUrl?.includes('vercel') && (
                 <Button
-                  variant="outline"
+                  variant="default"
                   size="sm"
-                  onClick={() => {
-                    // Create a new window with the preview URL
-                    const newWindow = window.open(previewUrl, '_blank', 'noopener,noreferrer');
-                    if (!newWindow) {
-                      // Fallback if popup is blocked
-                      window.location.href = previewUrl;
-                    }
-                  }}
+                  onClick={() => window.open(site.previewUrl, '_blank', 'noopener,noreferrer')}
+                  className="bg-green-600 hover:bg-green-700"
                 >
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  Open in New Tab
+                  <ExternalLink className="w-4 h-4 mr-1" />
+                  View Live Site
                 </Button>
               )}
             </div>
           </div>
+          
+          {/* Multi-Page Tabs - Show when there are multiple HTML files */}
+          {availablePages.length > 1 && (
+            <div className="mt-3 flex items-center gap-1 overflow-x-auto pb-1">
+              <span className="text-xs text-muted-foreground mr-2 flex-shrink-0">Pages:</span>
+              {availablePages.map((page) => (
+                <button
+                  key={page}
+                  onClick={() => {
+                    setCurrentPage(page);
+                    // Trigger preview refresh with new page
+                    setTimeout(() => refreshPreview(), 100);
+                  }}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 flex-shrink-0 ${
+                    effectiveCurrentPage === page
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+                  }`}
+                >
+                  {page.replace('.html', '')}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Preview Content */}
         <div className="flex-1 relative">
           {previewUrl ? (
-            previewReady ? (
-              <iframe
-                id="preview-iframe"
-                src={previewUrl}
-                className="w-full h-full border-0"
-                title="Website Preview"
-                onLoad={() => setIsPreviewLoading(false)}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                  <h3 className="text-lg font-semibold mb-2">Starting Preview...</h3>
-                  <p className="text-muted-foreground">
-                    Setting up your website preview...
-                  </p>
-                </div>
-              </div>
-            )
+            <iframe
+              key={previewKey}
+              id="preview-iframe"
+              src={previewUrl}
+              className="w-full h-full border-0"
+              title="Website Preview"
+              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
+              style={{ backgroundColor: '#ffffff' }}
+              onLoad={() => {
+                setIsPreviewLoading(false);
+                setPreviewReady(true);
+                console.log('✅ Preview iframe loaded successfully', { 
+                  previewUrl: (previewUrl || '').substring(0, 50) + '...', 
+                  previewKey 
+                });
+              }}
+              onError={(e) => {
+                console.error('❌ Preview iframe load error:', e);
+                setIsPreviewLoading(false);
+                setPreviewReady(false);
+              }}
+            />
           ) : (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
                 <Sparkles className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No Preview Available</h3>
                 <p className="text-muted-foreground">
-                  The website preview will appear here once it's generated.
+                  {currentWebsiteContent && Object.keys(currentWebsiteContent).length > 0
+                    ? 'Generating preview from saved content...'
+                    : 'The website preview will appear here once it\'s generated.'}
                 </p>
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* Deployment Success Modal */}
+      <Dialog open={deploymentModal.show} onOpenChange={(open) => setDeploymentModal({ ...deploymentModal, show: open })}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Globe className="w-5 h-5 text-green-500" />
+              Deployment Successful!
+            </DialogTitle>
+            <DialogDescription>
+              Your website has been deployed to GitHub and Vercel.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {deploymentModal.url && (
+              <div>
+                <label className="text-sm font-medium mb-2 block">Live URL:</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={deploymentModal.url}
+                    className="flex-1 px-3 py-2 border rounded-md bg-muted text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      navigator.clipboard.writeText(deploymentModal.url || '');
+                      toast({ title: "Copied to clipboard!" });
+                    }}
+                  >
+                    Copy
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => window.open(deploymentModal.url, '_blank')}
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+            {deploymentModal.repoUrl && (
+              <div>
+                <label className="text-sm font-medium mb-2 block">GitHub Repository:</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={deploymentModal.repoUrl}
+                    className="flex-1 px-3 py-2 border rounded-md bg-muted text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => window.open(deploymentModal.repoUrl, '_blank')}
+                  >
+                    <Github className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={() => setDeploymentModal({ show: false })}>
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -12,6 +12,19 @@ import { checkLimit } from "@/lib/billing/limits";
 import { logError } from "@/lib/log";
 import { trackEvent } from "@/lib/monitoring";
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-email',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: corsHeaders,
+  });
+}
+
 const Body = z.object({ 
   name: z.string().min(2).max(100), 
   prompt: z.string().min(4).max(2000) 
@@ -24,16 +37,24 @@ export async function POST(req: NextRequest) {
     const parsed = Body.safeParse(json);
     
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
+      return NextResponse.json({ error: parsed.error.format() }, { status: 400, headers: corsHeaders });
     }
 
     const { name, prompt } = parsed.data;
 
-    const limitCheck = await checkLimit(user.id, 'agents');
-    if (!limitCheck.allowed) {
-      return NextResponse.json({
-        error: `Agent limit reached. You have ${limitCheck.current}/${limitCheck.limit} agents. Upgrade your plan to create more.`,
-      }, { status: 403 });
+    // Check limits (skip if database unavailable)
+    let limitCheck;
+    try {
+      limitCheck = await checkLimit(user.id, 'agents');
+      if (!limitCheck.allowed) {
+        return NextResponse.json({
+          error: `Agent limit reached. You have ${limitCheck.current}/${limitCheck.limit} agents. Upgrade your plan to create more.`,
+        }, { status: 403, headers: corsHeaders });
+      }
+    } catch (limitError: any) {
+      // If limit check fails (e.g., database unavailable), allow creation
+      logError('Limit check failed, allowing agent creation', limitError);
+      limitCheck = { allowed: true, current: 0, limit: 999 };
     }
 
     // Create Agent in database first with inactive status
@@ -45,14 +66,16 @@ export async function POST(req: NextRequest) {
     });
 
     try {
-      // Call provider API
+      // Call provider API - create agent and automatically activate workflow
+      // Set N8N_AUTO_ACTIVATE=false in env to disable auto-activation
+      const shouldAutoActivate = process.env.N8N_AUTO_ACTIVATE !== 'false';
       const provider = getAgentProvider();
-      const result = await provider.createAgent({ name, prompt });
+      const result = await provider.createAgent({ name, prompt, activate: shouldAutoActivate });
 
-      // Update agent with n8nId and set status to active on success
+      // Update agent with n8nId and set status based on activation
       const updatedAgent = await updateAgent(agent.id, {
         n8nId: result.externalId || null,
-        status: "active",
+        status: shouldAutoActivate ? "active" : "inactive", // Auto-activate if enabled
       });
 
       const responseBody = { 
@@ -72,18 +95,27 @@ export async function POST(req: NextRequest) {
         status: updatedAgent.status,
       });
 
-      return NextResponse.json(responseBody);
-    } catch (apiError) {
+      return NextResponse.json(responseBody, { headers: corsHeaders });
+    } catch (apiError: unknown) {
       // If n8n API fails, keep agent but mark as inactive
       await updateAgent(agent.id, { status: "inactive" });
-      throw apiError;
+      const errorMessage = apiError instanceof Error ? apiError.message : 'Unknown error';
+      logError('n8n API error during agent creation', apiError);
+      return NextResponse.json({ 
+        error: `Failed to create agent in n8n: ${errorMessage}`,
+        details: errorMessage.includes('ECONNREFUSED') ? 'Cannot connect to n8n. Make sure n8n is running and accessible.' : errorMessage
+      }, { status: 500, headers: corsHeaders });
     }
   } catch (error: unknown) {
     logError('Create agent failed', error);
-    if (error instanceof Error && error.message === 'Authentication required') {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    if (errorMessage === 'Authentication required') {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401, headers: corsHeaders });
     }
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ 
+      error: errorMessage || "Internal server error",
+      details: errorMessage
+    }, { status: 500, headers: corsHeaders });
   }
 }
 
@@ -96,12 +128,12 @@ export async function GET(req: NextRequest) {
       ...agent,
       embedCode: agent.n8nId ? provider.getEmbedCode(agent.n8nId) : null,
     }));
-    return NextResponse.json({ agents: enrichedAgents });
+    return NextResponse.json({ agents: enrichedAgents }, { headers: corsHeaders });
   } catch (error: unknown) {
     logError('List agents failed', error);
     if (error instanceof Error && error.message === 'Authentication required') {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+      return NextResponse.json({ error: "Authentication required" }, { status: 401, headers: corsHeaders });
     }
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500, headers: corsHeaders });
   }
 }

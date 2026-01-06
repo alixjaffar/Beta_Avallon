@@ -6,18 +6,32 @@ import { useNavigate } from "react-router-dom";
 const PrivacyPolicy = () => {
   const navigate = useNavigate();
 
+  const handleBack = () => {
+    // Always go back to auth page to ensure user can continue signup
+    navigate('/auth');
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="mb-6">
-          <Button
-            variant="ghost"
-            onClick={() => navigate(-1)}
-            className="mb-4"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
+          <div className="flex items-center gap-2 mb-4">
+            <Button
+              variant="ghost"
+              onClick={handleBack}
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+            <span className="text-muted-foreground">or</span>
+            <Button
+              variant="link"
+              onClick={() => navigate('/auth')}
+              className="p-0"
+            >
+              Return to Sign Up
+            </Button>
+          </div>
           <h1 className="text-3xl font-bold">Avallon Privacy Policy</h1>
           <p className="text-muted-foreground mt-2">Effective Date: January 2025</p>
         </div>

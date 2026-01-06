@@ -1,0 +1,36 @@
+#!/usr/bin/expect -f
+set timeout 600
+set VPS_IP "159.89.113.242"
+set VPS_USER "root"
+set VPS_PASS "AVallon1231402@rooot"
+
+spawn scp -o StrictHostKeyChecking=no /Users/alijaffar/Documents/GitHub/Beta_Avallon/infra/setup-on-server.sh ${VPS_USER}@${VPS_IP}:/tmp/setup-on-server.sh
+expect {
+    "password:" {
+        send "${VPS_PASS}\r"
+        exp_continue
+    }
+    eof
+}
+
+spawn ssh -o StrictHostKeyChecking=no ${VPS_USER}@${VPS_IP}
+expect "password:"
+send "${VPS_PASS}\r"
+expect "# "
+
+send "chmod +x /tmp/setup-on-server.sh\r"
+expect "# "
+
+send "/tmp/setup-on-server.sh\r"
+expect {
+    "# " {
+        # Script completed
+    }
+    timeout {
+        puts "Script is still running or timed out"
+    }
+}
+
+send "exit\r"
+expect eof
+

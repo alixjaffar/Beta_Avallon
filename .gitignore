@@ -1,0 +1,8 @@
+
+# Sensitive backup files
+.env.infra
+backend/.env.backup
+backend/.env.backup.*
+backend/.env.bak
+*.env.backup*
+*.env.bak

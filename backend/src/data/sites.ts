@@ -84,18 +84,31 @@ export async function createSite(input: CreateSiteInput) {
 
 export async function listSitesByUser(userId: string) {
   try {
+    // Reload sites from file to ensure we have latest data
+    loadSites();
     const userSites = sites.filter(site => site.ownerId === userId);
     logInfo('Sites listed from file storage', { userId, count: userSites.length });
     return userSites;
   } catch (error) {
     logError('Error listing sites:', error);
+    // Return empty array on error instead of throwing
     return [];
   }
 }
 
 export async function getSiteById(id: string, userId: string) {
   try {
-    const site = sites.find(site => site.id === id && site.ownerId === userId);
+    // First try to find by exact match
+    let site = sites.find(site => site.id === id && site.ownerId === userId);
+    
+    // In development, fallback to finding by ID only
+    if (!site && process.env.NODE_ENV === 'development') {
+      site = sites.find(site => site.id === id);
+      if (site) {
+        logInfo('Site found by ID only (dev mode)', { siteId: id, actualOwner: site.ownerId, requestedUser: userId });
+      }
+    }
+    
     logInfo('Site retrieved from file storage', { siteId: id, found: !!site });
     return site;
   } catch (error) {
@@ -116,7 +129,17 @@ export async function updateSite(id: string, userId: string, data: {
   websiteContent?: any | null;
 }) {
   try {
-    const siteIndex = sites.findIndex(site => site.id === id && site.ownerId === userId);
+    // First try to find by exact match
+    let siteIndex = sites.findIndex(site => site.id === id && site.ownerId === userId);
+    
+    // In development, fallback to finding by ID only
+    if (siteIndex === -1 && process.env.NODE_ENV === 'development') {
+      siteIndex = sites.findIndex(site => site.id === id);
+      if (siteIndex !== -1) {
+        logInfo('Site found by ID only for update (dev mode)', { siteId: id });
+      }
+    }
+    
     if (siteIndex === -1) {
       logError('Site not found for update', { siteId: id, userId });
       return null;
@@ -145,6 +168,32 @@ export async function deleteSite(id: string, userId: string) {
     }
     
     const deletedSite = sites.splice(siteIndex, 1)[0];
+    
+    // Also delete the generated website files
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const generatedDir = path.join(process.cwd(), 'generated-websites');
+      
+      // Find and delete project directories that match this site
+      if (fs.existsSync(generatedDir)) {
+        const projects = fs.readdirSync(generatedDir);
+        for (const project of projects) {
+          if (project.startsWith('project_')) {
+            // Check if this project belongs to this site by checking previewUrl pattern
+            const projectPath = path.join(generatedDir, project);
+            if (deletedSite.previewUrl && deletedSite.previewUrl.includes(project)) {
+              fs.rmSync(projectPath, { recursive: true, force: true });
+              logInfo('Deleted project directory', { project, siteId: id });
+            }
+          }
+        }
+      }
+    } catch (fileError) {
+      logError('Error deleting project files:', fileError);
+      // Continue even if file deletion fails
+    }
+    
     saveSites();
     logInfo('Site deleted from file storage', { siteId: id });
     return deletedSite;

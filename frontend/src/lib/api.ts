@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const API_BASE_URL = process.env.NODE_ENV === 'production'
-  ? 'https://beta-avallon1.vercel.app/api' // Your deployed backend URL
+  ? 'https://beta-avallon.onrender.com/api' // Your deployed backend URL
   : 'http://localhost:3000/api'; // Backend runs on port 3000
 
 const api = axios.create({
@@ -9,6 +9,24 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 5000, // 5 second timeout for all API calls
+});
+
+// Add user email to all requests for proper data isolation
+api.interceptors.request.use((config) => {
+  // Get user email from localStorage session
+  try {
+    const sessionData = localStorage.getItem('avallon_session');
+    if (sessionData) {
+      const session = JSON.parse(sessionData);
+      if (session.email) {
+        config.headers['x-user-email'] = session.email;
+      }
+    }
+  } catch (error) {
+    // Ignore errors - user email is optional
+  }
+  return config;
 });
 
 export interface Site {

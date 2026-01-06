@@ -1,0 +1,85 @@
+// Script to set credits for a specific user using direct database connection
+import { Client } from 'pg';
+
+async function setUserCredits() {
+  const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+  });
+
+  try {
+    await client.connect();
+    console.log('✅ Connected to database');
+
+    const userEmail = process.argv[2] || 'alij123402@gmail.com';
+    const credits = parseInt(process.argv[3] || '20');
+    
+    console.log(`🔄 Setting credits for user: ${userEmail} to ${credits}...`);
+    
+    // First check if user exists
+    const checkResult = await client.query(
+      'SELECT id, email, credits FROM "User" WHERE email = $1',
+      [userEmail]
+    );
+    
+    if (checkResult.rows.length === 0) {
+      console.log(`❌ User not found. Creating user with email: ${userEmail}`);
+      // Create user
+      const insertResult = await client.query(
+        `INSERT INTO "User" (id, email, credits, "createdAt", "updatedAt") 
+         VALUES (gen_random_uuid()::text, $1, $2, NOW(), NOW()) 
+         RETURNING id, email, credits`,
+        [userEmail, credits]
+      );
+      console.log(`✅ Created user with ${credits} credits:`, insertResult.rows[0]);
+    } else {
+      // Update existing user
+      const updateResult = await client.query(
+        'UPDATE "User" SET credits = $1, "updatedAt" = NOW() WHERE email = $2 RETURNING id, email, credits',
+        [credits, userEmail]
+      );
+      console.log(`✅ Updated user credits to ${credits}:`, updateResult.rows[0]);
+    }
+    
+    // Verify the update
+    const verifyResult = await client.query(
+      'SELECT id, email, credits FROM "User" WHERE email = $1',
+      [userEmail]
+    );
+    
+    if (verifyResult.rows.length > 0) {
+      console.log(`\n✅ User credits verified:`, {
+        email: verifyResult.rows[0].email,
+        credits: verifyResult.rows[0].credits,
+      });
+    }
+    
+    // Show all users for verification
+    const allUsersResult = await client.query(
+      'SELECT id, email, credits FROM "User" ORDER BY "createdAt" DESC'
+    );
+    
+    console.log('\n📊 All users in database:');
+    allUsersResult.rows.forEach(u => {
+      console.log(`  - ${u.email}: ${u.credits} credits`);
+    });
+    
+    // Also update ALL users with 0 or null credits to 20
+    const fixResult = await client.query(
+      'UPDATE "User" SET credits = 20 WHERE credits IS NULL OR credits < 20'
+    );
+    console.log(`\n✅ Also fixed ${fixResult.rowCount} users with low credits`);
+    
+  } catch (error: any) {
+    console.error('❌ Error setting credits:', error.message);
+    console.error('Full error:', error);
+    process.exit(1);
+  } finally {
+    await client.end();
+  }
+}
+
+setUserCredits();
+
+
+
+

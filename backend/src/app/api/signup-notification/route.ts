@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { emailService } from "@/lib/emailService";
 import { signupStorage } from "@/lib/signupStorage";
+import { prisma } from "@/lib/db";
 import { z } from "zod";
 
 const SignupSchema = z.object({
@@ -14,6 +15,38 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const validatedData = SignupSchema.parse(body);
+
+    // Check for duplicate accounts in database FIRST
+    try {
+      const existingUser = await prisma.user.findUnique({
+        where: { email: validatedData.email },
+      });
+
+      if (existingUser) {
+        return NextResponse.json(
+          { error: "An account with this email already exists. Please log in instead." },
+          { status: 409 }
+        );
+      }
+    } catch (dbError) {
+      // If database check fails, still check signups.json as fallback
+      console.warn("Database check failed, falling back to signups.json check:", dbError);
+    }
+
+    // Check for duplicate in signups.json
+    try {
+      const existingSignups = await signupStorage.getAllSignups();
+      const existingSignup = existingSignups.find(s => s.email === validatedData.email);
+      
+      if (existingSignup) {
+        return NextResponse.json(
+          { error: "This email is already registered. Please log in instead." },
+          { status: 409 }
+        );
+      }
+    } catch (signupError) {
+      console.warn("Signups.json check failed:", signupError);
+    }
 
     // Store signup in file-based storage
     const signup = await signupStorage.createSignup({

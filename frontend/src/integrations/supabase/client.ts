@@ -9,16 +9,52 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY |
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// Check if we should use mock mode (no real Supabase configured or force mock)
+// For MVP, we're using mock authentication, so disable all network calls
+const isMockMode = true; // Force mock mode for MVP - disable Supabase network calls
+
 // Create a mock client that doesn't actually connect to Supabase
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     storage: localStorage,
-    persistSession: true,
-    autoRefreshToken: true,
+    persistSession: false, // Disable persistence to prevent token storage
+    autoRefreshToken: false, // CRITICAL: Disable auto-refresh to prevent network calls
+    detectSessionInUrl: false, // Disable URL detection
+    flowType: 'pkce', // Use PKCE flow (doesn't require server-side)
+  },
+  global: {
+    // Override fetch to prevent all network calls in mock mode
+    fetch: () => Promise.reject(new Error('Mock mode - Supabase network calls disabled')),
   }
 });
 
-// Override auth methods to prevent errors
-supabase.auth.getSession = () => Promise.resolve({ data: { session: null }, error: null });
-supabase.auth.onAuthStateChange = () => ({ data: { subscription: { unsubscribe: () => {} } } });
-supabase.auth.signOut = () => Promise.resolve({ error: null });
+// Override auth methods to prevent errors in mock mode
+if (isMockMode) {
+  // Mock all auth methods to prevent network calls
+  supabase.auth.getSession = () => Promise.resolve({ data: { session: null }, error: null });
+  supabase.auth.onAuthStateChange = () => ({ 
+    data: { 
+      subscription: { 
+        unsubscribe: () => {},
+        id: 'mock-subscription'
+      } 
+    } 
+  });
+  supabase.auth.signOut = () => Promise.resolve({ error: null });
+  supabase.auth.signInWithPassword = () => Promise.resolve({ 
+    data: { user: null, session: null }, 
+    error: { message: 'Mock mode - use mock login', status: 400 } 
+  });
+  supabase.auth.signInWithOAuth = () => Promise.reject(new Error('Mock mode - Supabase OAuth disabled'));
+  supabase.auth.signUp = () => Promise.resolve({ 
+    data: { user: null, session: null }, 
+    error: { message: 'Mock mode - use mock signup', status: 400 } 
+  });
+  
+  // Prevent token refresh attempts
+  const originalRefreshSession = supabase.auth.refreshSession;
+  supabase.auth.refreshSession = () => Promise.resolve({ 
+    data: { session: null, user: null }, 
+    error: null 
+  });
+}

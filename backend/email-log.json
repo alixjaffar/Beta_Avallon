@@ -194,5 +194,460 @@
     "to": "test@example.com",
     "subject": "Welcome to Avallon Beta Waitlist!",
     "content": "\n      Welcome to Avallon, Test User!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as our beta v..."
+  },
+  {
+    "timestamp": "2025-12-01T21:37:11.572Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: Adam Lewis",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: Adam Lewis\n      - Email: ajaffar5@uwo.ca\n      - Birthday: 2005-05-10\n      - Email Subscription: Yes\n      - Signup Date:..."
+  },
+  {
+    "timestamp": "2025-12-01T21:37:12.962Z",
+    "type": "welcome",
+    "to": "ajaffar5@uwo.ca",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "\n      Welcome to Avallon, Adam Lewis!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as our beta ..."
+  },
+  {
+    "timestamp": "2025-12-01T22:09:12.994Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: Hello Avallon",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: Hello Avallon\n      - Email: hello@avallon.ca\n      - Birthday: 2005-12-05\n      - Email Subscription: Yes\n      - Signup D..."
+  },
+  {
+    "timestamp": "2025-12-01T22:09:14.528Z",
+    "type": "welcome",
+    "to": "hello@avallon.ca",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "\n      Welcome to Avallon, Hello Avallon!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as our be..."
+  },
+  {
+    "timestamp": "2025-12-02T01:34:31.794Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: Mehmet Akbayir",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: Mehmet Akbayir\n      - Email: meh.akbayir@gmail.com\n      - Birthday: 2005-04-09\n      - Email Subscription: Yes\n      - Si..."
+  },
+  {
+    "timestamp": "2025-12-02T01:34:33.020Z",
+    "type": "welcome",
+    "to": "meh.akbayir@gmail.com",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "\n      Welcome to Avallon, Mehmet Akbayir!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as our b..."
+  },
+  {
+    "timestamp": "2025-12-03T18:30:20.198Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: Yusuf Debreez",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: Yusuf Debreez\n      - Email: fortnite.crlife@gmail.com\n      - Birthday: 2005-03-31\n      - Email Subscription: Yes\n      -..."
+  },
+  {
+    "timestamp": "2025-12-03T18:30:20.881Z",
+    "type": "welcome",
+    "to": "fortnite.crlife@gmail.com",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "\n      Welcome to Avallon, Yusuf Debreez!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as our be..."
+  },
+  {
+    "timestamp": "2025-12-03T19:23:26.233Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: resolvio",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: resolvio\n      - Email: iloveresolvio@gmail.com\n      - Birthday: 2025-12-11\n      - Email Subscription: Yes\n      - Signup..."
+  },
+  {
+    "timestamp": "2025-12-03T19:23:27.217Z",
+    "type": "welcome",
+    "to": "iloveresolvio@gmail.com",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "\n      Welcome to Avallon, resolvio!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as our beta ve..."
+  },
+  {
+    "timestamp": "2025-12-03T21:13:20.608Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: Aleema Jaffar",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: Aleema Jaffar\n      - Email: aleemacheema@gmail.com\n      - Birthday: 2007-09-27\n      - Email Subscription: Yes\n      - Si..."
+  },
+  {
+    "timestamp": "2025-12-03T21:13:21.854Z",
+    "type": "welcome",
+    "to": "aleemacheema@gmail.com",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "\n      Welcome to Avallon, Aleema Jaffar!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as our be..."
+  },
+  {
+    "timestamp": "2025-12-03T22:09:19.049Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: hi",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: hi\n      - Email: superman123@gmail.com\n      - Birthday: 2025-12-19\n      - Email Subscription: Yes\n      - Signup Date: 1..."
+  },
+  {
+    "timestamp": "2025-12-03T22:09:20.467Z",
+    "type": "welcome",
+    "to": "superman123@gmail.com",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "\n      Welcome to Avallon, hi!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as our beta version ..."
+  },
+  {
+    "timestamp": "2025-12-05T00:29:54.386Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: Adam Smith",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: Adam Smith\n      - Email: jadad75367@docsfy.com\n      - Birthday: 20004-03-23\n      - Email Subscription: Yes\n      - Signu..."
+  },
+  {
+    "timestamp": "2025-12-05T00:29:55.626Z",
+    "type": "welcome",
+    "to": "jadad75367@docsfy.com",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "\n      Welcome to Avallon, Adam Smith!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as our beta ..."
+  },
+  {
+    "timestamp": "2025-12-05T23:42:06.791Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: Ali Jafa",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: Ali Jafa\n      - Email: yakomof366@bialode.com\n      - Birthday: 2004-03-02\n      - Email Subscription: Yes\n      - Signup ..."
+  },
+  {
+    "timestamp": "2025-12-05T23:42:08.468Z",
+    "type": "welcome",
+    "to": "yakomof366@bialode.com",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "\n      Welcome to Avallon, Ali Jafa!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as our beta ve..."
+  },
+  {
+    "timestamp": "2025-12-05T23:42:42.637Z",
+    "type": "new-user-welcome",
+    "to": "yakomof366@bialode.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, yakomof366!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      ..."
+  },
+  {
+    "timestamp": "2025-12-08T21:08:07.764Z",
+    "type": "new-user-welcome",
+    "to": "alij123402@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, alij123402!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      ..."
+  },
+  {
+    "timestamp": "2025-12-10T23:11:42.339Z",
+    "type": "new-user-welcome",
+    "to": "aayushnau@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, aayushnau!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      -..."
+  },
+  {
+    "timestamp": "2025-12-10T23:13:37.065Z",
+    "type": "new-user-welcome",
+    "to": "ajaffar5@uwo.ca",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, ajaffar5!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      - ..."
+  },
+  {
+    "timestamp": "2025-12-15T00:05:37.246Z",
+    "type": "new-user-welcome",
+    "to": "alij123402@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, alij123402!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      ..."
+  },
+  {
+    "timestamp": "2025-12-15T00:06:24.666Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: Mehmet Akbayir",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: Mehmet Akbayir\n      - Email: mikehawk33455@gmail.com\n      - Birthday: 2005-12-03\n      - Email Subscription: No\n      - S..."
+  },
+  {
+    "timestamp": "2025-12-15T00:06:26.333Z",
+    "type": "new-user-welcome",
+    "to": "mikehawk33455@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, mikehawk33455!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n   ..."
+  },
+  {
+    "timestamp": "2025-12-15T00:09:35.452Z",
+    "type": "new-user-welcome",
+    "to": "mikehawk33455@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, mikehawk33455!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n   ..."
+  },
+  {
+    "timestamp": "2025-12-15T00:10:23.973Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: Ali Jaffar",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: Ali Jaffar\n      - Email: antonyli@gmail.com\n      - Birthday: 2004-12-11\n      - Email Subscription: Yes\n      - Signup Da..."
+  },
+  {
+    "timestamp": "2025-12-15T00:10:25.202Z",
+    "type": "welcome",
+    "to": "antonyli@gmail.com",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "\n      Welcome to Avallon, Ali Jaffar!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as our beta ..."
+  },
+  {
+    "timestamp": "2025-12-15T00:10:27.224Z",
+    "type": "new-user-welcome",
+    "to": "antonyli@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, antonyli!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      - ..."
+  },
+  {
+    "timestamp": "2025-12-15T01:12:13.227Z",
+    "type": "new-user-welcome",
+    "to": "aayushnau@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, aayushnau!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      -..."
+  },
+  {
+    "timestamp": "2025-12-21T01:02:06.470Z",
+    "type": "new-user-welcome",
+    "to": "ajaffar5@uwo.ca",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, ajaffar5!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      - ..."
+  },
+  {
+    "timestamp": "2025-12-23T00:34:29.778Z",
+    "type": "new-user-welcome",
+    "to": "aayushnau@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, aayushnau!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      -..."
+  },
+  {
+    "timestamp": "2025-12-24T05:01:35.652Z",
+    "type": "new-user-welcome",
+    "to": "aayushnau@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, aayushnau!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      -..."
+  },
+  {
+    "timestamp": "2025-12-24T05:55:02.079Z",
+    "type": "new-user-welcome",
+    "to": "aayushnau@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, aayushnau!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      -..."
+  },
+  {
+    "timestamp": "2025-12-27T03:25:00.219Z",
+    "type": "new-user-welcome",
+    "to": "alij123402@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, alij123402!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      ..."
+  },
+  {
+    "timestamp": "2025-12-28T00:54:17.577Z",
+    "type": "new-user-welcome",
+    "to": "aayushnau@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, aayushnau!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      -..."
+  },
+  {
+    "timestamp": "2025-12-28T02:12:01.818Z",
+    "type": "new-user-welcome",
+    "to": "alij123402@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, alij123402!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      ..."
+  },
+  {
+    "timestamp": "2025-12-29T03:30:53.578Z",
+    "type": "new-user-welcome",
+    "to": "testuser@example.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, testuser!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      - ..."
+  },
+  {
+    "timestamp": "2025-12-29T03:47:33.010Z",
+    "type": "new-user-welcome",
+    "to": "alij123402@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, alij123402!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      ..."
+  },
+  {
+    "timestamp": "2025-12-29T03:50:49.884Z",
+    "type": "signup-notification",
+    "to": "Hello@avallon.ca",
+    "subject": "New Beta Signup: Aleema Jaffar",
+    "content": "\n      New Beta Signup Notification\n      \n      User Details:\n      - Name: Aleema Jaffar\n      - Email: Aleemacheema@gmail.com\n      - Birthday: 2007-09-26\n      - Email Subscription: Yes\n      - Si..."
+  },
+  {
+    "timestamp": "2025-12-29T03:50:51.134Z",
+    "type": "welcome",
+    "to": "Aleemacheema@gmail.com",
+    "subject": "Welcome to Avallon Beta Waitlist!",
+    "content": "\n      Welcome to Avallon, Aleema Jaffar!\n      \n      Thank you for joining our beta waitlist! We're excited to have you on board.\n      \n      What's Next?\n      - We'll notify you as soon as our be..."
+  },
+  {
+    "timestamp": "2025-12-29T03:50:53.722Z",
+    "type": "new-user-welcome",
+    "to": "Aleemacheema@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, Aleemacheema!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n    ..."
+  },
+  {
+    "timestamp": "2025-12-29T03:50:55.027Z",
+    "type": "new-user-welcome",
+    "to": "Aleemacheema@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, Aleemacheema!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n    ..."
+  },
+  {
+    "timestamp": "2026-01-01T02:12:25.235Z",
+    "type": "new-user-welcome",
+    "to": "alij123402@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, alij123402!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      ..."
+  },
+  {
+    "timestamp": "2026-01-03T15:28:16.046Z",
+    "type": "new-user-welcome",
+    "to": "aayushnau@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, aayushnau!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      -..."
+  },
+  {
+    "timestamp": "2026-01-05T15:34:16.539Z",
+    "type": "new-user-welcome",
+    "to": "aayushnau@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, aayushnau!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      -..."
+  },
+  {
+    "timestamp": "2026-01-05T15:53:54.266Z",
+    "type": "new-user-welcome",
+    "to": "aayushnau@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, aayushnau!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      -..."
+  },
+  {
+    "timestamp": "2026-01-05T15:53:56.016Z",
+    "type": "new-user-welcome",
+    "to": "aayushnau@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, aayushnau!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      -..."
+  },
+  {
+    "timestamp": "2026-01-05T15:53:56.436Z",
+    "type": "new-user-welcome",
+    "to": "aayushnau@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, aayushnau!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      -..."
+  },
+  {
+    "timestamp": "2026-01-05T15:53:56.862Z",
+    "type": "new-user-welcome",
+    "to": "aayushnau@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, aayushnau!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      -..."
+  },
+  {
+    "timestamp": "2026-01-05T15:53:57.189Z",
+    "type": "new-user-welcome",
+    "to": "aayushnau@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, aayushnau!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      -..."
+  },
+  {
+    "timestamp": "2026-01-05T20:22:10.208Z",
+    "type": "new-user-welcome",
+    "to": "aayushnau@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, aayushnau!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      -..."
+  },
+  {
+    "timestamp": "2026-01-06T01:37:52.517Z",
+    "type": "new-user-welcome",
+    "to": "aayushnau@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, aayushnau!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      -..."
+  },
+  {
+    "timestamp": "2026-01-06T14:23:17.880Z",
+    "type": "new-user-welcome",
+    "to": "alij123402@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, alij123402!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      ..."
+  },
+  {
+    "timestamp": "2026-01-06T14:49:16.965Z",
+    "type": "new-user-welcome",
+    "to": "alij123402@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, alij123402!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      ..."
+  },
+  {
+    "timestamp": "2026-01-06T16:02:00.957Z",
+    "type": "new-user-welcome",
+    "to": "allij123402@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, allij123402!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n     ..."
+  },
+  {
+    "timestamp": "2026-01-06T16:02:01.714Z",
+    "type": "new-user-welcome",
+    "to": "allij123402@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, allij123402!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n     ..."
+  },
+  {
+    "timestamp": "2026-01-06T16:02:56.025Z",
+    "type": "new-user-welcome",
+    "to": "alij123402@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, alij123402!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      ..."
+  },
+  {
+    "timestamp": "2026-01-06T17:02:56.470Z",
+    "type": "new-user-welcome",
+    "to": "alij123402@Gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, alij123402!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      ..."
+  },
+  {
+    "timestamp": "2026-01-06T17:02:57.181Z",
+    "type": "new-user-welcome",
+    "to": "alij123402@Gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, alij123402!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      ..."
+  },
+  {
+    "timestamp": "2026-01-06T17:03:20.438Z",
+    "type": "new-user-welcome",
+    "to": "alij123402@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, alij123402!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      ..."
+  },
+  {
+    "timestamp": "2026-01-06T18:11:00.289Z",
+    "type": "new-user-welcome",
+    "to": "alij123402@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, alij123402!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      ..."
+  },
+  {
+    "timestamp": "2026-01-06T18:28:22.698Z",
+    "type": "new-user-welcome",
+    "to": "alij123402@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, alij123402!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      ..."
+  },
+  {
+    "timestamp": "2026-01-06T18:28:49.733Z",
+    "type": "new-user-welcome",
+    "to": "aayushnau@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, aayushnau!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      -..."
+  },
+  {
+    "timestamp": "2026-01-06T18:54:15.414Z",
+    "type": "new-user-welcome",
+    "to": "alij123402@gmail.com",
+    "subject": "Welcome to Avallon! 🎉",
+    "content": "\n      Welcome to Avallon, alij123402!\n      \n      Thank you for joining Avallon! We're excited to have you on board.\n      \n      You now have access to:\n      - AI-powered website generation\n      ..."
   }
 ]

@@ -7,6 +7,19 @@ import { requireStripeClient } from "@/lib/clients/stripe";
 import { logError } from "@/lib/log";
 import { trackEvent } from "@/lib/monitoring";
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-email',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: corsHeaders,
+  });
+}
+
 const Body = z.object({
   plan: z.enum(["pro", "business"]),
   interval: z.enum(["monthly", "yearly"]).default("monthly"),
@@ -40,7 +53,12 @@ export async function POST(req: NextRequest) {
 
     const priceId = resolvePriceId(plan, interval);
     if (!priceId) {
-      return NextResponse.json({ error: "Selected plan is not configured." }, { status: 503 });
+      return NextResponse.json({ 
+        error: `Stripe price ID for ${plan} (${interval}) is not configured. Please set STRIPE_PRICE_${plan.toUpperCase()}_${interval.toUpperCase()} in your environment variables.` 
+      }, { 
+        status: 503,
+        headers: corsHeaders,
+      });
     }
 
     let stripe;
@@ -48,16 +66,21 @@ export async function POST(req: NextRequest) {
       stripe = requireStripeClient();
     } catch (stripeError: unknown) {
       logError('Stripe client not configured', stripeError);
-      return NextResponse.json({ error: "Stripe is not configured." }, { status: 503 });
+      return NextResponse.json({ 
+        error: "Stripe is not configured. Please set STRIPE_SECRET_KEY in your environment variables." 
+      }, { 
+        status: 503,
+        headers: corsHeaders,
+      });
     }
 
     const subscription = await prisma.subscription.findFirst({
       where: { userId: user.id },
     });
 
-    const origin = req.headers.get("origin") || process.env.APP_URL || "http://localhost:3000";
-    const successUrl = `${origin}/studio/billing?status=success`;
-    const cancelUrl = `${origin}/studio/billing?status=cancelled`;
+    const origin = req.headers.get("origin") || process.env.APP_URL || "http://localhost:8080";
+    const successUrl = `${origin}/dashboard?upgrade=success`;
+    const cancelUrl = `${origin}/dashboard?upgrade=cancelled`;
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -71,10 +94,12 @@ export async function POST(req: NextRequest) {
       ],
       success_url: successUrl,
       cancel_url: cancelUrl,
-      client_reference_id: user.clerkId,
+      client_reference_id: user.id, // Use user.id instead of clerkId for compatibility
       metadata: {
         plan,
         interval,
+        userId: user.id,
+        userEmail: user.email || '',
       },
     });
 
@@ -85,10 +110,15 @@ export async function POST(req: NextRequest) {
       sessionId: session.id,
     });
 
-    return NextResponse.json({ url: session.url, id: session.id });
+    return NextResponse.json({ url: session.url, id: session.id }, {
+      headers: corsHeaders,
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     logError('Create checkout session failed', error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { 
+      status: 500,
+      headers: corsHeaders,
+    });
   }
 }

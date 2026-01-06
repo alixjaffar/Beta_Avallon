@@ -1,0 +1,25 @@
+# Copy this EXACT text and paste it after N8N_SECURE_COOKIE=true in docker-compose.yml
+# Make sure indentation matches (6 spaces + dash + space)
+
+      # SMTP Configuration for sending invitation emails
+      # Using Hello@avallon.ca (Google Workspace) via Gmail SMTP
+      - N8N_EMAIL_MODE=smtp
+      - N8N_SMTP_HOST=smtp.gmail.com
+      - N8N_SMTP_PORT=587
+      - N8N_SMTP_USER=Hello@avallon.ca
+      - N8N_SMTP_PASS=oagqtgpxwcldyibn
+      - N8N_SMTP_SENDER=Hello@avallon.ca
+      - N8N_SMTP_SECURE=false
+
+
+
+
+
+
+
+
+
+
+
+
+

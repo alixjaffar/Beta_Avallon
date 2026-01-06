@@ -163,7 +163,7 @@ export function generateStripeIntegrationCode(stripeIntegration: StripeIntegrati
       button.disabled = true;
       
       // Determine API URL - use production for deployed sites, localhost for local dev
-      let apiUrl = 'https://beta-avallon1.vercel.app/api/stripe/checkout';
+      let apiUrl = 'https://beta-avallon.onrender.com/api/stripe/checkout';
       try {
         if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
           apiUrl = 'http://localhost:3000/api/stripe/checkout';

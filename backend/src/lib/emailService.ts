@@ -199,6 +199,89 @@ class EmailService {
     }
   }
 
+  async sendNewUserWelcomeEmail(userEmail: string, userName: string): Promise<boolean> {
+    const subject = 'Welcome to Avallon! 🎉';
+    const content = `
+      Welcome to Avallon, ${userName}!
+      
+      Thank you for joining Avallon! We're excited to have you on board.
+      
+      You now have access to:
+      - AI-powered website generation
+      - 15 free credits to get started
+      - Professional website creation tools
+      
+      Get started by creating your first website in the dashboard!
+      
+      If you have any questions, feel free to reach out to us at Hello@avallon.ca
+      
+      Best regards,
+      The Avallon Team
+    `;
+
+    try {
+      const mailOptions = {
+        from: 'Hello@avallon.ca',
+        to: userEmail,
+        subject: subject,
+        priority: 'high' as const,
+        headers: {
+          'X-Priority': '1',
+          'X-MSMail-Priority': 'High',
+          'Importance': 'high',
+          'X-Mailer': 'Avallon Platform',
+          'X-Auto-Response-Suppress': 'All',
+        },
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">Welcome to Avallon, ${userName}! 🎉</h2>
+            
+            <p>Thank you for joining Avallon! We're excited to have you on board.</p>
+            
+            <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="color: #555; margin-top: 0;">You now have access to:</h3>
+              <ul style="color: #555;">
+                <li>✨ AI-powered website generation</li>
+                <li>🎁 15 free credits to get started</li>
+                <li>🚀 Professional website creation tools</li>
+                <li>💼 Custom domain support</li>
+              </ul>
+            </div>
+
+            <div style="background-color: #e8f4fd; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+              <p style="margin: 0 0 15px 0; font-weight: bold;">Ready to create your first website?</p>
+              <a href="https://beta-avallon.onrender.com/dashboard" 
+                 style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+                Go to Dashboard
+              </a>
+            </div>
+
+            <p>If you have any questions, feel free to reach out to us at <a href="mailto:Hello@avallon.ca">Hello@avallon.ca</a></p>
+            
+            <p style="color: #666; font-size: 14px;">
+              Best regards,<br>
+              The Avallon Team
+            </p>
+          </div>
+        `,
+      };
+
+      await this.transporter.sendMail(mailOptions);
+      console.log('✅ New user welcome email sent successfully to', userEmail);
+      
+      // Also log for backup
+      this.logEmail('new-user-welcome', userEmail, subject, content);
+      
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to send new user welcome email:', error);
+      // Log the email for manual sending as fallback
+      this.logEmail('new-user-welcome', userEmail, subject, content);
+      console.log('📧 Email logged for manual sending as fallback');
+      return false;
+    }
+  }
+
   async sendBulkUpdateEmail(subscribers: Array<{email: string, name: string}>, subject: string, content: string): Promise<{sent: number, failed: number}> {
     let sent = 0;
     let failed = 0;

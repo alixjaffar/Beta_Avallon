@@ -29,17 +29,7 @@ const nextConfig = {
       },
     ];
   },
-  async headers() {
-    return [
-      {
-        source: '/api/:path*',
-        headers: [
-          { key: 'Access-Control-Allow-Origin', value: '*' },
-          { key: 'Access-Control-Allow-Methods', value: 'GET, POST, PUT, DELETE, OPTIONS' },
-          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
-        ],
-      },
-    ];
-  },
+  // CORS headers are now handled at the route level via getCorsHeaders()
+  // to support credentials-based requests (cannot use wildcard '*' with credentials)
 };
 export default nextConfig;

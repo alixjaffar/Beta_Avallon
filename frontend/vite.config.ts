@@ -6,7 +6,17 @@ import path from "path";
 export default defineConfig({
   server: {
     host: "::",
-    port: 8080,
+    port: 5173,
+    hmr: {
+      overlay: true,
+    },
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
   plugins: [
     react(),
@@ -14,6 +24,27 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  optimizeDeps: {
+    force: false, // Set to true if you need to force re-optimization
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      'framer-motion',
+      'lucide-react',
+      'class-variance-authority',
+    ],
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'ui-vendor': ['framer-motion', 'lucide-react'],
+        },
+      },
     },
   },
 });

@@ -1,6 +1,6 @@
 // CHANGELOG: 2025-01-15 - Real-time progress tracking for website generation
 import { NextRequest } from "next/server";
-import { ClaudeWebsiteGenerator } from "@/lib/providers/impl/claude-website-generator";
+import { GeminiWebsiteGenerator } from "@/lib/providers/impl/gemini-website-generator";
 
 export async function POST(req: NextRequest) {
   const { name, description, mode } = await req.json();
@@ -21,9 +21,9 @@ export async function POST(req: NextRequest) {
       try {
         sendProgress('initializing', 'Starting website generation...', 0);
 
-        const generator = new ClaudeWebsiteGenerator();
+        const generator = new GeminiWebsiteGenerator();
         
-        sendProgress('generating_code', 'Generating website code with Claude AI...', 20);
+        sendProgress('generating_code', 'Generating website code with Kirin...', 20);
         const website = await generator.generateWebsite({
           name,
           description,
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
       'Connection': 'keep-alive',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-email',
     },
   });
 }

@@ -5,6 +5,7 @@
 export type CreateAgentInput = {
   name: string;
   prompt: string;
+  activate?: boolean; // Whether to activate the workflow immediately (default: true)
 };
 
 export type CreateAgentResult = {

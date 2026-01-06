@@ -8,32 +8,93 @@ datasource db {
 }
 
 model User {
-  id             String        @id @default(cuid())
-  clerkId        String        @unique
-  email          String        @unique
-  createdAt      DateTime      @default(now())
-  sites          Site[]
-  agents         Agent[]
-  domains        Domain[]
-  emailAccounts  EmailAccount[]
-  subscriptions  Subscription[]
+  id            String         @id @default(cuid())
+  clerkId       String         @unique
+  email         String         @unique
+  n8nPassword   String? // Encrypted n8n password for automatic login
+  n8nUserId     String? // n8n user ID
+  credits       Int            @default(20) // Credits for AI website generation (free plan gets 20 credits)
+  createdAt     DateTime       @default(now())
+  sites         Site[]
+  agents        Agent[]
+  domains       Domain[]
+  emailAccounts EmailAccount[]
+  subscriptions Subscription[]
+  Project       Project[]
 }
 
 model Site {
-  id               String   @id @default(cuid())
-  ownerId          String
-  owner            User     @relation(fields: [ownerId], references: [id])
-  name             String
-  slug             String   @unique
-  status           String   @default("draft") // draft | building | live
-  repoUrl          String?
-  previewUrl       String?
-  customDomain     String?
-  vercelProjectId  String?  // Vercel project ID
+  id                 String   @id @default(cuid())
+  ownerId            String
+  owner              User     @relation(fields: [ownerId], references: [id])
+  name               String
+  slug               String   @unique
+  status             String   @default("draft") // draft | building | live
+  repoUrl            String?
+  previewUrl         String?
+  customDomain       String?
+  vercelProjectId    String? // Vercel project ID
   vercelDeploymentId String? // Latest deployment ID
-  domains          Domain[]
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  domains            Domain[]
+  // New spec-first architecture
+  projectId          String?  @unique
+  project            Project? @relation(fields: [projectId], references: [id])
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+// New models for spec-first architecture
+model Project {
+  id            String        @id @default(cuid())
+  ownerId       String
+  owner         User          @relation(fields: [ownerId], references: [id])
+  name          String
+  slug          String        @unique
+  description   String?
+  site          Site?
+  versions      SiteVersion[]
+  assets        Asset[]
+  workspacePath String? // Local path to project files
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([ownerId])
+  @@index([slug])
+}
+
+model SiteVersion {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version         Int      @default(1) // Incremental version number
+  spec            Json // SiteSpec JSON (validated)
+  prompt          String? // User prompt that generated this version
+  iterationPrompt String? // For iterations: what changed
+  codeFiles       Json? // Map of file paths to content (for codegen output)
+  status          String   @default("draft") // draft | generated | validated | deployed
+  previewUrl      String?
+  deployedUrl     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([projectId, version])
+  @@index([projectId])
+}
+
+model Asset {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type      String // image | icon | video | document
+  url       String // Storage URL or placeholder
+  alt       String?
+  width     Int?
+  height    Int?
+  context   String? // Where it's used
+  metadata  Json? // Additional metadata
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
 }
 
 model Agent {
@@ -41,22 +102,22 @@ model Agent {
   ownerId   String
   owner     User     @relation(fields: [ownerId], references: [id])
   name      String
-  n8nId     String?  // id of the n8n workflow/agent
+  n8nId     String? // id of the n8n workflow/agent
   status    String   @default("inactive") // inactive | active
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model Domain {
-  id        String   @id @default(cuid())
+  id        String         @id @default(cuid())
   ownerId   String
-  owner     User     @relation(fields: [ownerId], references: [id])
-  domain    String   @unique
-  status    String   @default("pending") // pending | active | failed
+  owner     User           @relation(fields: [ownerId], references: [id])
+  domain    String         @unique
+  status    String         @default("pending") // pending | active | failed
   siteId    String?
-  site      Site?    @relation(fields: [siteId], references: [id])
+  site      Site?          @relation(fields: [siteId], references: [id])
   emails    EmailAccount[]
-  createdAt DateTime @default(now())
+  createdAt DateTime       @default(now())
 }
 
 model EmailAccount {
@@ -65,27 +126,27 @@ model EmailAccount {
   owner     User     @relation(fields: [ownerId], references: [id])
   domainId  String
   domain    Domain   @relation(fields: [domainId], references: [id])
-  inbox     String   // e.g., "hello", "support"
+  inbox     String // e.g., "hello", "support"
   status    String   @default("active") // active | inactive
   createdAt DateTime @default(now())
-  
+
   @@unique([domainId, inbox])
 }
 
 model Subscription {
-  id                 String    @id @default(cuid())
-  userId             String
-  user               User      @relation(fields: [userId], references: [id])
-  stripeCustomerId   String?   @unique
-  stripeSubscriptionId String? @unique
-  stripePriceId      String?
-  status             String    @default("free") // free | trialing | active | canceled | past_due
-  plan               String    @default("free") // free | pro | business
-  currentPeriodEnd   DateTime?
-  cancelAtPeriodEnd  Boolean   @default(false)
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  
+  id                   String    @id @default(cuid())
+  userId               String
+  user                 User      @relation(fields: [userId], references: [id])
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  stripePriceId        String?
+  status               String    @default("free") // free | trialing | active | canceled | past_due
+  plan                 String    @default("free") // free | pro | business
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
   @@index([userId])
 }
 
@@ -97,7 +158,29 @@ model BetaSignup {
   emailSubscription Boolean  @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
-  
+
   @@index([email])
   @@index([createdAt])
+}
+
+// User external app integrations (Stripe, Twilio, etc.)
+model UserIntegration {
+  id           String   @id @default(cuid())
+  userId       String
+  provider     String   // stripe | twilio | sendgrid | mailchimp | zapier | etc.
+  status       String   @default("active") // active | inactive | error
+  // Encrypted credentials (stored securely)
+  credentials  Json     // { apiKey, secretKey, accountId, etc. } - encrypted
+  // Provider-specific metadata
+  metadata     Json?    // { accountName, accountEmail, webhookUrl, etc. }
+  // Connection info
+  connectedAt  DateTime @default(now())
+  lastUsedAt   DateTime?
+  lastError    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, provider])
+  @@index([userId])
+  @@index([provider])
 }

@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { X, Sparkles, Globe, Code, Zap } from "lucide-react";
 import { apiClient } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 interface WebsiteCreationModalProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ export function WebsiteCreationModal({ isOpen, onClose, onSuccess }: WebsiteCrea
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedExample, setSelectedExample] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const handleSubmit = async () => {
     if (!prompt.trim()) return;
@@ -32,8 +34,11 @@ export function WebsiteCreationModal({ isOpen, onClose, onSuccess }: WebsiteCrea
     try {
       setIsGenerating(true);
       
-      // Use the new local hosting endpoint
-      const response = await fetch(`${process.env.NODE_ENV === 'production' ? 'https://beta-avallon1.vercel.app' : 'http://localhost:3000'}/api/sites/generate`, {
+      const baseUrl = process.env.NODE_ENV === 'production' 
+        ? 'https://beta-avallon.onrender.com' 
+        : 'http://localhost:3000';
+      
+      const response = await fetch(`${baseUrl}/api/sites/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -51,15 +56,30 @@ export function WebsiteCreationModal({ isOpen, onClose, onSuccess }: WebsiteCrea
 
       const result = await response.json();
       
+      // Website generated with Kirin AI
       if (result.result) {
-        onSuccess(result.result);
+        // Include websiteContent in the result so preview can show immediately
+        const siteWithContent = {
+          ...result.result,
+          websiteContent: result.websiteContent || {}
+        };
+        onSuccess(siteWithContent);
+        toast({
+          title: "Success!",
+          description: result.message || "Website generated successfully with Kirin!",
+        });
         setPrompt("");
         onClose();
       } else {
         throw new Error(result.error || 'Failed to generate website');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Website generation failed:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to start website generation",
+        variant: "destructive",
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -162,10 +182,10 @@ export function WebsiteCreationModal({ isOpen, onClose, onSuccess }: WebsiteCrea
                 <span className="text-sm font-medium">Generating your website...</span>
               </div>
               <div className="space-y-2 text-sm text-muted-foreground">
-                <div>🤖 Analyzing your prompt</div>
+                <div>🤖 Analyzing your prompt with AI</div>
                 <div>⚡ Generating React components</div>
                 <div>🎨 Creating beautiful designs</div>
-                <div>🏠 Setting up local preview</div>
+                <div>🏠 Building your website in-house</div>
               </div>
             </div>
           )}

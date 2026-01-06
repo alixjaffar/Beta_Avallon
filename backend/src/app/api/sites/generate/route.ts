@@ -1,14 +1,35 @@
 // CHANGELOG: 2025-01-15 - Add Ultra-Advanced AI Website Generation System (Better than Lovable)
+// CHANGELOG: 2025-10-27 - Updated to use LovableProvider for AI website generation
+// CHANGELOG: 2025-12-23 - Switched to DeepSeek AI for better website generation (DeepSite-inspired)
+// CHANGELOG: 2026-01-06 - Added user integration support (Stripe, GA, etc.)
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
-import { ClaudeWebsiteGenerator } from "@/lib/providers/impl/claude-website-generator";
-import { AdvancedAIGenerator } from "@/lib/providers/impl/advanced-ai-generator";
-import { IntelligentAnalyzer } from "@/lib/providers/impl/intelligent-analyzer";
-import { AdvancedContentGenerator } from "@/lib/providers/impl/advanced-content-generator";
-import { UltraAdvancedGenerator } from "@/lib/providers/impl/ultra-advanced-generator";
+import { DeepSeekWebsiteGenerator } from "@/lib/providers/impl/deepseek-website-generator";
+import { DeepSiteEnhancedGenerator } from "@/lib/providers/impl/deepsite-enhanced-generator";
 import { createSite } from "@/data/sites";
 import { getUser } from "@/lib/auth/getUser";
 import { z } from "zod";
+import { hasEnoughCredits, deductCredits, CREDIT_COSTS, ensureUserHasCredits } from "@/lib/billing/credits";
+import { 
+  getUserStripeIntegration, 
+  getUserGoogleAnalyticsIntegration,
+  generateStripeIntegrationCode,
+  generateGoogleAnalyticsCode,
+  getUserActiveIntegrations 
+} from "@/lib/integrations";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-email',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: corsHeaders,
+  });
+}
 
 const GenerateSiteSchema = z.object({
   name: z.string().min(1, "Site name is required").max(100, "Site name too long"),
@@ -41,7 +62,10 @@ export async function POST(req: NextRequest) {
   try {
     const user = await getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { 
+        status: 401,
+        headers: corsHeaders,
+      });
     }
 
     const body = await req.json();
@@ -71,188 +95,331 @@ export async function POST(req: NextRequest) {
       ai
     } = GenerateSiteSchema.parse(body);
 
-    logInfo('Starting ultra-advanced website generation', { 
+    logInfo('Starting Lovable website generation', { 
       name, 
-      industry, 
-      complexity,
-      features: features?.length || 0,
-      animations,
-      ai
+      description: description.substring(0, 100),
+      mode,
+      industry,
+      style,
+      complexity
     });
 
-    // Check if Claude is configured
-    const claudeApiKey = process.env.CLAUDE_API_KEY;
-    
-    if (!claudeApiKey) {
-      // Return mock generation for testing
-      const projectId = `project_${Date.now()}`;
-      const mockSite = {
-        id: `site_${Date.now()}`,
-        ownerId: user.id,
-        name,
-        slug: name.toLowerCase().replace(/\s+/g, '-'),
-        status: 'deployed' as const,
-        previewUrl: `http://localhost:3001/${projectId}`,
-        repoUrl: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
+    // Ensure user exists in DB with initial credits (20 for free users)
+    await ensureUserHasCredits(user.id, user.email, 20);
 
-      // Save to database
-      const savedSite = await createSite({
-        ownerId: user.id,
-        name,
-        slug: name.toLowerCase().replace(/\s+/g, '-'),
-        status: 'deployed',
-        previewUrl: mockSite.previewUrl,
-        repoUrl: null,
-      });
-
+    // Check if user has enough credits (pass email for lookup)
+    const creditCheck = await hasEnoughCredits(user.id, CREDIT_COSTS.GENERATE_WEBSITE, user.email);
+    if (!creditCheck.hasEnough) {
       return NextResponse.json({
-        message: "Ultra-advanced website created successfully! (Mock mode - Claude API key not configured)",
-        result: savedSite,
-        mock: true,
+        error: "Insufficient credits",
+        message: `You need ${creditCheck.requiredCredits} credits to generate a website, but you only have ${creditCheck.currentCredits} credits. Please upgrade your plan to get more credits.`,
+        credits: {
+          current: creditCheck.currentCredits,
+          required: creditCheck.requiredCredits,
+        },
+      }, {
+        status: 402, // Payment Required
+        headers: corsHeaders,
       });
     }
 
-    // Use Claude directly for generation (skip advanced generators for now)
+    // Use Gemini 3.0 Pro for high-quality website generation
     try {
-      const generator = new ClaudeWebsiteGenerator();
-      const generatedSite = await generator.generateWebsite({
+      // Use Gemini 3.0 Pro (DeepSite-enhanced) for best results
+      const generator = new DeepSiteEnhancedGenerator();
+      
+      logInfo('Using AI generator', { 
+        provider: 'Gemini 3.0 Pro',
+        hasGeminiKey: !!process.env.GEMINI_API_KEY
+      });
+      
+      // Generate name from description if not provided
+      const generateNameFromDescription = (desc: string): string => {
+        const lowerDesc = desc.toLowerCase();
+        
+        if (lowerDesc.includes('car') && (lowerDesc.includes('detail') || lowerDesc.includes('wash') || lowerDesc.includes('auto'))) {
+          return 'Auto Detailing Website';
+        } else if (lowerDesc.includes('snow') || lowerDesc.includes('snowplow') || lowerDesc.includes('plow')) {
+          return 'Snow Removal Services';
+        } else if (lowerDesc.includes('restaurant') || lowerDesc.includes('food') || lowerDesc.includes('dining')) {
+          return 'Restaurant Website';
+        } else if (lowerDesc.includes('landscap') || lowerDesc.includes('lawn') || lowerDesc.includes('garden')) {
+          return 'Landscaping Services';
+        } else if (lowerDesc.includes('construction') || lowerDesc.includes('contractor') || lowerDesc.includes('building')) {
+          return 'Construction Company';
+        } else if (lowerDesc.includes('portfolio')) {
+          return 'Portfolio Website';
+        } else if (lowerDesc.includes('ecommerce') || lowerDesc.includes('store') || lowerDesc.includes('shop')) {
+          return 'E-commerce Store';
+        } else if (lowerDesc.includes('blog')) {
+          return 'Blog Website';
+        } else if (lowerDesc.includes('saas') || lowerDesc.includes('software')) {
+          return 'SaaS Product';
+        } else {
+          // Try to extract meaningful words
+          const words = desc.split(/\s+/).filter(w => w.length > 3 && !['make', 'create', 'build', 'website', 'site'].includes(w.toLowerCase()));
+          if (words.length > 0) {
+            const nameWords = words.slice(0, 3).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+            return nameWords.join(' ') + ' Website';
+          }
+          return name || `Website ${Date.now()}`;
+        }
+      };
+      
+      const finalName = name || generateNameFromDescription(description);
+      
+      // ALWAYS generate multi-page websites by default
+      const descLower = description.toLowerCase();
+      
+      // Only create single-page if EXPLICITLY requested
+      const isExplicitlySinglePage = layout === 'single-page' || 
+        layout === 'landing' ||
+        descLower.includes('single page only') ||
+        descLower.includes('one page only') ||
+        descLower.includes('landing page only') ||
+        descLower.includes('just a landing');
+      
+      // Multi-page is now the DEFAULT - always true unless explicitly single page
+      const shouldBeMultiPage = !isExplicitlySinglePage;
+      
+      // Determine pages to generate based on context - ALWAYS multi-page
+      let pagesToGenerate = ['index', 'about', 'services', 'contact'];
+      
+      // Context-specific pages based on website type
+      if (descLower.includes('restaurant') || descLower.includes('food') || descLower.includes('menu') || descLower.includes('cafe') || descLower.includes('dining')) {
+        pagesToGenerate = ['index', 'about', 'menu', 'reservations', 'contact'];
+      } else if (descLower.includes('portfolio') || descLower.includes('creative') || descLower.includes('designer') || descLower.includes('photographer') || descLower.includes('artist')) {
+        pagesToGenerate = ['index', 'about', 'portfolio', 'services', 'contact'];
+      } else if (descLower.includes('ecommerce') || descLower.includes('store') || descLower.includes('shop') || descLower.includes('product') || mode === 'ecommerce') {
+        pagesToGenerate = ['index', 'products', 'about', 'contact', 'cart'];
+      } else if (descLower.includes('blog') || mode === 'blog') {
+        pagesToGenerate = ['index', 'blog', 'about', 'contact'];
+      } else if (descLower.includes('saas') || descLower.includes('software') || descLower.includes('app') || descLower.includes('startup')) {
+        pagesToGenerate = ['index', 'about', 'features', 'pricing', 'contact'];
+      } else if (descLower.includes('agency') || descLower.includes('marketing') || descLower.includes('consulting')) {
+        pagesToGenerate = ['index', 'about', 'services', 'portfolio', 'contact'];
+      } else if (descLower.includes('real estate') || descLower.includes('property') || descLower.includes('realtor')) {
+        pagesToGenerate = ['index', 'about', 'listings', 'services', 'contact'];
+      } else if (descLower.includes('gym') || descLower.includes('fitness') || descLower.includes('health') || descLower.includes('wellness')) {
+        pagesToGenerate = ['index', 'about', 'classes', 'pricing', 'contact'];
+      } else if (descLower.includes('law') || descLower.includes('legal') || descLower.includes('attorney') || descLower.includes('lawyer')) {
+        pagesToGenerate = ['index', 'about', 'practice-areas', 'team', 'contact'];
+      } else if (descLower.includes('medical') || descLower.includes('clinic') || descLower.includes('doctor') || descLower.includes('healthcare')) {
+        pagesToGenerate = ['index', 'about', 'services', 'team', 'contact'];
+      } else {
+        // Default business website pages - 4 pages minimum
+        pagesToGenerate = ['index', 'about', 'services', 'contact'];
+      }
+      
+      // If explicitly single page, only generate index
+      if (isExplicitlySinglePage) {
+        pagesToGenerate = ['index'];
+      }
+      
+      const generationRequest = {
+        name: finalName,
+        description: description + 
+          (industry ? ` Industry: ${industry}.` : '') +
+          (targetAudience ? ` Target audience: ${targetAudience}.` : '') +
+          (style ? ` Design style: ${style}.` : '') +
+          (colorScheme ? ` Color scheme: ${colorScheme}.` : '') +
+          (layout ? ` Layout: ${layout}.` : '') +
+          (complexity ? ` Complexity: ${complexity}.` : '') +
+          (features && features.length > 0 ? ` Features: ${features.join(', ')}.` : '') +
+          (shouldBeMultiPage ? ' Generate a complete multi-page website with navigation between pages.' : ''),
+        mode: mode || 'full',
+        multiPage: shouldBeMultiPage,
+        pages: shouldBeMultiPage ? pagesToGenerate : undefined,
+      };
+
+      logInfo('Starting Gemini website generation', {
         name,
-        description,
-        mode: 'full'
+        description: generationRequest.description.substring(0, 100),
       });
 
-      // Save to database
+      // Generate website using Gemini AI
+      const websiteResult = await generator.generateWebsite(generationRequest);
+      
+      // Validate that we got website content
+      if (!websiteResult.files || Object.keys(websiteResult.files).length === 0) {
+        logError('Gemini returned empty files', undefined, {
+          websiteResult,
+          hasFiles: !!websiteResult.files,
+          filesKeys: websiteResult.files ? Object.keys(websiteResult.files) : []
+        });
+        throw new Error('Website generation returned no content. Please try again.');
+      }
+      
+      logInfo('Website generation completed', {
+        filesCount: Object.keys(websiteResult.files).length,
+        fileKeys: Object.keys(websiteResult.files),
+        hasIndexHtml: !!websiteResult.files['index.html'],
+        indexHtmlLength: websiteResult.files['index.html'] ? websiteResult.files['index.html'].length : 0
+      });
+
+      // ==========================================
+      // INJECT USER INTEGRATIONS INTO GENERATED HTML
+      // ==========================================
+      try {
+        const userIntegrations = await getUserActiveIntegrations(user.id);
+        logInfo('User integrations found', { userId: user.id, integrations: userIntegrations });
+        
+        if (userIntegrations.length > 0) {
+          let integrationCode = '';
+          
+          // Add Stripe integration if user has it connected
+          if (userIntegrations.includes('stripe')) {
+            const stripeIntegration = await getUserStripeIntegration(user.id);
+            if (stripeIntegration) {
+              integrationCode += generateStripeIntegrationCode(stripeIntegration);
+              logInfo('Stripe integration code added', { userId: user.id });
+            }
+          }
+          
+          // Add Google Analytics if user has it connected
+          if (userIntegrations.includes('google_analytics')) {
+            const gaIntegration = await getUserGoogleAnalyticsIntegration(user.id);
+            if (gaIntegration) {
+              integrationCode += generateGoogleAnalyticsCode(gaIntegration);
+              logInfo('Google Analytics code added', { userId: user.id });
+            }
+          }
+          
+          // Inject integration code into all HTML files
+          if (integrationCode) {
+            for (const [filename, content] of Object.entries(websiteResult.files)) {
+              if (filename.endsWith('.html') && typeof content === 'string') {
+                // Inject before </head> if exists
+                if (content.includes('</head>')) {
+                  websiteResult.files[filename] = content.replace('</head>', `${integrationCode}\n</head>`);
+                } else if (content.includes('</body>')) {
+                  // Otherwise inject before </body>
+                  websiteResult.files[filename] = content.replace('</body>', `${integrationCode}\n</body>`);
+                }
+              }
+            }
+            logInfo('Integration code injected into HTML files', { 
+              fileCount: Object.keys(websiteResult.files).length 
+            });
+          }
+        }
+      } catch (integrationError: any) {
+        // Don't fail the whole generation if integrations fail
+        logError('Failed to inject integrations (continuing without)', integrationError);
+      }
+
+      // Deduct credits after successful generation (pass email for lookup)
+      const creditDeduction = await deductCredits(
+        user.id,
+        CREDIT_COSTS.GENERATE_WEBSITE,
+        'Website generation',
+        user.email
+      );
+
+      if (!creditDeduction.success) {
+        logError('Failed to deduct credits after generation', new Error(creditDeduction.error || 'Unknown error'), {
+          userId: user.id,
+          cost: CREDIT_COSTS.GENERATE_WEBSITE,
+        });
+        // Continue anyway - the website was already generated
+      }
+
+      // Save to database with initial chat history
+      const initialChatHistory = [
+        {
+          id: '1',
+          role: 'user',
+          content: description,
+          timestamp: new Date().toISOString()
+        },
+        {
+          id: '2',
+          role: 'assistant',
+          content: "Website generated successfully with Kirin!",
+          timestamp: new Date().toISOString()
+        }
+      ];
+      
       const savedSite = await createSite({
         ownerId: user.id,
-        name: generatedSite.name,
-        slug: generatedSite.slug,
-        status: 'deployed',
-        previewUrl: generatedSite.previewUrl,
-        repoUrl: generatedSite.repoUrl,
+        name: finalName,
+        slug: websiteResult.slug,
+        status: websiteResult.status,
+        previewUrl: websiteResult.previewUrl,
+        repoUrl: websiteResult.repoUrl,
+        chatHistory: initialChatHistory,
+        websiteContent: websiteResult.files || {},
       });
 
-      logInfo('Claude website generation completed', {
-        name: generatedSite.name,
-        filesGenerated: Object.keys(generatedSite.files).length,
-        previewUrl: generatedSite.previewUrl
+      logInfo('Gemini website generation completed', {
+        name,
+        previewUrl: websiteResult.previewUrl,
+        filesCount: websiteResult.files ? Object.keys(websiteResult.files).length : 0,
+      });
+
+      // Ensure websiteContent is always included
+      const responseWebsiteContent = websiteResult.files || {};
+      
+      logInfo('Returning generate response', {
+        hasWebsiteContent: !!responseWebsiteContent,
+        websiteContentKeys: Object.keys(responseWebsiteContent),
+        hasIndexHtml: !!responseWebsiteContent['index.html'],
+        indexHtmlLength: responseWebsiteContent['index.html'] ? responseWebsiteContent['index.html'].length : 0
+      });
+      
+      return NextResponse.json({
+        success: true,
+        message: "Website generated successfully with Kirin!",
+        result: savedSite,
+        websiteContent: responseWebsiteContent, // CRITICAL: Always include websiteContent
+        previewUrl: websiteResult.previewUrl,
+        repoUrl: websiteResult.repoUrl,
+        credits: {
+          remaining: creditDeduction.remainingCredits,
+          deducted: CREDIT_COSTS.GENERATE_WEBSITE,
+        },
+      }, {
+        headers: corsHeaders,
+      });
+    } catch (error: any) {
+      logError('Gemini website generation failed', error);
+      
+      // Return detailed error message for debugging
+      const errorMessage = error?.message || "An error occurred during website generation";
+      const errorDetails = error?.response?.data || error?.stack || "No additional details";
+      
+      logError('Generation error details', error, {
+        message: errorMessage,
+        details: errorDetails,
+        status: error?.response?.status
       });
 
       return NextResponse.json({
-        message: "Professional website generated successfully with Claude AI!",
-        result: savedSite,
-        websiteContent: generatedSite.files,
-        previewUrl: generatedSite.previewUrl
+        error: "Failed to generate website",
+        help: error.message?.includes('expired') || error.message?.includes('invalid') 
+          ? "Get a new Gemini API key from https://aistudio.google.com/apikey and update GEMINI_API_KEY in backend/.env"
+          : undefined,
+        message: errorMessage,
+        details: typeof errorDetails === 'object' ? JSON.stringify(errorDetails) : errorDetails,
+      }, { 
+        status: 500,
+        headers: corsHeaders,
       });
-    } catch (claudeError) {
-      logError('Claude generation failed, falling back to basic generation', claudeError);
-      
-      // Fallback to Advanced AI System
-      try {
-        // Step 1: Intelligent Request Analysis
-        const analyzer = new IntelligentAnalyzer();
-        const analysis = await analyzer.analyzeRequest(description);
-        
-        // Enhanced analysis for better business detection
-        if (description.toLowerCase().includes('snowplow') || description.toLowerCase().includes('snow plow')) {
-          analysis.industry = 'snow-removal';
-          analysis.features = ['snow-plowing', 'ice-management', 'equipment-rental', 'emergency-service'];
-          analysis.complexity = 'intermediate';
-        } else if (description.toLowerCase().includes('landscaping') || description.toLowerCase().includes('landscape')) {
-          analysis.industry = 'landscaping';
-          analysis.features = ['lawn-care', 'tree-services', 'garden-design', 'maintenance'];
-          analysis.complexity = 'intermediate';
-        } else if (description.toLowerCase().includes('construction') || description.toLowerCase().includes('contractor')) {
-          analysis.industry = 'construction';
-          analysis.features = ['general-contracting', 'renovations', 'custom-builds', 'project-management'];
-          analysis.complexity = 'advanced';
-        }
-        
-        // Step 2: Advanced Content Generation
-        const contentGenerator = new AdvancedContentGenerator();
-        const content = await contentGenerator.generateAdvancedContent(analysis);
-        
-        // Step 3: Advanced Website Generation
-        const advancedGenerator = new AdvancedAIGenerator();
-        const generatedSite = await advancedGenerator.generateAdvancedWebsite({
-          name,
-          description,
-          industry: industry || analysis.industry,
-          targetAudience: targetAudience || analysis.targetAudience,
-          features: features || analysis.features,
-          style: style || analysis.style,
-          colorScheme: colorScheme || analysis.colorScheme,
-          layout: layout || analysis.layout,
-          complexity: complexity || analysis.complexity,
-          integrations: integrations || analysis.integrations,
-          seo: seo !== undefined ? seo : analysis.seo,
-          responsive: responsive !== undefined ? responsive : analysis.responsive,
-          accessibility: accessibility !== undefined ? accessibility : analysis.accessibility,
-          performance: performance !== undefined ? performance : analysis.performance,
-        });
-
-        // Save to database
-        const savedSite = await createSite({
-          ownerId: user.id,
-          name: generatedSite.name,
-          slug: generatedSite.slug,
-          status: 'deployed',
-          previewUrl: generatedSite.previewUrl,
-          repoUrl: generatedSite.repoUrl,
-        });
-
-        return NextResponse.json({
-          message: "Advanced AI website generated successfully!",
-          result: savedSite,
-          analysis: {
-            industry: analysis.industry,
-            complexity: analysis.complexity,
-            features: analysis.features,
-            seoScore: generatedSite.metadata.seoScore,
-            performanceScore: generatedSite.metadata.performanceScore,
-            accessibilityScore: generatedSite.metadata.accessibilityScore,
-            responsiveScore: generatedSite.metadata.responsiveScore
-          },
-          mock: false,
-          fallback: true,
-        });
-
-      } catch (advancedError) {
-        logError('Advanced AI generation failed, falling back to basic generation', advancedError);
-        
-        // Fallback to basic Claude generation
-        const generator = new ClaudeWebsiteGenerator();
-        const generatedSite = await generator.generateWebsite({
-          name,
-          description,
-          mode
-        });
-
-        // Save to database
-        const savedSite = await createSite({
-          ownerId: user.id,
-          name: generatedSite.name,
-          slug: generatedSite.slug,
-          status: 'deployed',
-          previewUrl: generatedSite.previewUrl,
-          repoUrl: generatedSite.repoUrl,
-        });
-
-        return NextResponse.json({
-          message: "Website generated successfully with basic Claude AI!",
-          result: savedSite,
-          mock: false,
-          fallback: true,
-        });
-      }
     }
   } catch (error: any) {
     logError('Website generation failed', error);
     if (error.name === 'ZodError') {
-      return NextResponse.json({ error: "Invalid input", details: error.errors }, { status: 400 });
+      return NextResponse.json({ error: "Invalid input", details: error.errors }, { 
+        status: 400,
+        headers: corsHeaders,
+      });
     }
-    return NextResponse.json({ error: "Internal server error", status: 500 });
+    return NextResponse.json({ 
+      error: "Internal server error",
+      message: error?.message || 'Unknown error'
+    }, { 
+      status: 500,
+      headers: corsHeaders,
+    });
   }
 }

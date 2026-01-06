@@ -1,0 +1,857 @@
+[
+  {
+    "id": "agent_1763568879575",
+    "ownerId": "mock_user_id",
+    "name": "hi",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-11-19T16:14:39.575Z",
+    "updatedAt": "2025-11-19T16:14:39.682Z"
+  },
+  {
+    "id": "agent_1763568973894",
+    "ownerId": "mock_user_id",
+    "name": "hi",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-11-19T16:16:13.894Z",
+    "updatedAt": "2025-11-19T16:16:13.932Z"
+  },
+  {
+    "id": "agent_1763572665387",
+    "ownerId": "mock_user_id",
+    "name": "hi",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-11-19T17:17:45.387Z",
+    "updatedAt": "2025-11-19T17:19:00.406Z"
+  },
+  {
+    "id": "agent_1763572949794",
+    "ownerId": "mock_user_id",
+    "name": "hi",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-11-19T17:22:29.794Z",
+    "updatedAt": "2025-11-19T17:23:44.819Z"
+  },
+  {
+    "id": "agent_1764184849224",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-11-26",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-11-26T19:20:49.224Z",
+    "updatedAt": "2025-11-26T19:20:49.701Z"
+  },
+  {
+    "id": "agent_1764185139830",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-11-26",
+    "n8nId": "Hamc4smUatyvI9bs",
+    "status": "inactive",
+    "createdAt": "2025-11-26T19:25:39.830Z",
+    "updatedAt": "2025-11-26T19:25:40.125Z"
+  },
+  {
+    "id": "agent_1764185445297",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-11-26",
+    "n8nId": "xwtWjKVtes1hWBI5",
+    "status": "inactive",
+    "createdAt": "2025-11-26T19:30:45.297Z",
+    "updatedAt": "2025-11-26T19:31:43.870Z"
+  },
+  {
+    "id": "agent_1764189988343",
+    "ownerId": "user_cG9vcHkxMjNAZ21h",
+    "name": "poopy123's AI Agent",
+    "n8nId": "UKc6wDX5dXeh9TQE",
+    "status": "inactive",
+    "createdAt": "2025-11-26T20:46:28.343Z",
+    "updatedAt": "2025-11-26T20:46:28.715Z"
+  },
+  {
+    "id": "agent_1764190106124",
+    "ownerId": "user_YWF5dXNobmF1QGdt",
+    "name": "aayushnau's AI Agent",
+    "n8nId": "l4BRpHB8IaQMemjo",
+    "status": "inactive",
+    "createdAt": "2025-11-26T20:48:26.124Z",
+    "updatedAt": "2025-11-26T20:48:26.267Z"
+  },
+  {
+    "id": "agent_1764190108373",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-11-26",
+    "n8nId": "2Imi4zIU7DtxHUac",
+    "status": "inactive",
+    "createdAt": "2025-11-26T20:48:28.373Z",
+    "updatedAt": "2025-11-26T20:48:28.485Z"
+  },
+  {
+    "id": "agent_1764274371988",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-11-27",
+    "n8nId": "pWOHtA6R2Iud1Z6X",
+    "status": "inactive",
+    "createdAt": "2025-11-27T20:12:51.988Z",
+    "updatedAt": "2025-11-27T20:12:52.407Z"
+  },
+  {
+    "id": "agent_1764277701944",
+    "ownerId": "user_YWxpajEyMzQwMkBn",
+    "name": "alij123402's AI Agent",
+    "n8nId": "OW8VygFfIRlqvIhz",
+    "status": "inactive",
+    "createdAt": "2025-11-27T21:08:21.944Z",
+    "updatedAt": "2025-11-27T21:08:22.121Z"
+  },
+  {
+    "id": "agent_1764277924354",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-11-27",
+    "n8nId": "7V1Vfx1ptrcrDjbq",
+    "status": "inactive",
+    "createdAt": "2025-11-27T21:12:04.354Z",
+    "updatedAt": "2025-11-27T21:12:13.105Z"
+  },
+  {
+    "id": "agent_1764625033936",
+    "ownerId": "user_YWphZmZhcjVAdXdv",
+    "name": "ajaffar5's AI Agent",
+    "n8nId": "RiJDxqPO1zORkLjj",
+    "status": "inactive",
+    "createdAt": "2025-12-01T21:37:13.936Z",
+    "updatedAt": "2025-12-01T21:37:14.181Z"
+  },
+  {
+    "id": "agent_1764625038656",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "dJpWTpU8ZokTTtTF",
+    "status": "inactive",
+    "createdAt": "2025-12-01T21:37:18.656Z",
+    "updatedAt": "2025-12-01T21:37:18.731Z"
+  },
+  {
+    "id": "agent_1764625297161",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "C1NsYAKhsBEEG4gv",
+    "status": "inactive",
+    "createdAt": "2025-12-01T21:41:37.161Z",
+    "updatedAt": "2025-12-01T21:41:37.257Z"
+  },
+  {
+    "id": "agent_1764625323285",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "SZ65QtVPOQNtWdTI",
+    "status": "inactive",
+    "createdAt": "2025-12-01T21:42:03.285Z",
+    "updatedAt": "2025-12-01T21:42:03.395Z"
+  },
+  {
+    "id": "agent_1764625383920",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "OLEsVIo8F2L95PnO",
+    "status": "inactive",
+    "createdAt": "2025-12-01T21:43:03.920Z",
+    "updatedAt": "2025-12-01T21:43:04.032Z"
+  },
+  {
+    "id": "agent_1764625449928",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "fChmIB4cY8LbmDrO",
+    "status": "inactive",
+    "createdAt": "2025-12-01T21:44:09.928Z",
+    "updatedAt": "2025-12-01T21:44:10.064Z"
+  },
+  {
+    "id": "agent_1764625748076",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "mHdBFnzvRWIkYCoe",
+    "status": "inactive",
+    "createdAt": "2025-12-01T21:49:08.076Z",
+    "updatedAt": "2025-12-01T21:49:08.176Z"
+  },
+  {
+    "id": "agent_1764626206236",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "oSEXvEV9kNL1Uwym",
+    "status": "inactive",
+    "createdAt": "2025-12-01T21:56:46.236Z",
+    "updatedAt": "2025-12-01T21:56:46.333Z"
+  },
+  {
+    "id": "agent_1764626548778",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "qWhmwyRsBmxrg8RQ",
+    "status": "inactive",
+    "createdAt": "2025-12-01T22:02:28.778Z",
+    "updatedAt": "2025-12-01T22:02:28.896Z"
+  },
+  {
+    "id": "agent_1764626881687",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "Hfke6WQEhlUx9PQA",
+    "status": "inactive",
+    "createdAt": "2025-12-01T22:08:01.687Z",
+    "updatedAt": "2025-12-01T22:08:01.853Z"
+  },
+  {
+    "id": "agent_1764626955009",
+    "ownerId": "user_aGVsbG9AYXZhbGxv",
+    "name": "hello's AI Agent",
+    "n8nId": "4rcfWxzkokG4qX7Y",
+    "status": "inactive",
+    "createdAt": "2025-12-01T22:09:15.009Z",
+    "updatedAt": "2025-12-01T22:09:15.123Z"
+  },
+  {
+    "id": "agent_1764626960875",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "paNqAKkxEvIVG0Ni",
+    "status": "inactive",
+    "createdAt": "2025-12-01T22:09:20.875Z",
+    "updatedAt": "2025-12-01T22:09:20.991Z"
+  },
+  {
+    "id": "agent_1764627465980",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "vkAavaHJNrMyPFZj",
+    "status": "inactive",
+    "createdAt": "2025-12-01T22:17:45.980Z",
+    "updatedAt": "2025-12-01T22:17:46.102Z"
+  },
+  {
+    "id": "agent_1764627728748",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "hr4O518PakODVTyE",
+    "status": "inactive",
+    "createdAt": "2025-12-01T22:22:08.748Z",
+    "updatedAt": "2025-12-01T22:22:08.843Z"
+  },
+  {
+    "id": "agent_1764628013353",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "XnqQ2gzMH2jxdeZH",
+    "status": "inactive",
+    "createdAt": "2025-12-01T22:26:53.353Z",
+    "updatedAt": "2025-12-01T22:26:53.437Z"
+  },
+  {
+    "id": "agent_1764628092331",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "tYqczfCMa8wiyjPH",
+    "status": "inactive",
+    "createdAt": "2025-12-01T22:28:12.331Z",
+    "updatedAt": "2025-12-01T22:28:12.439Z"
+  },
+  {
+    "id": "agent_1764635155201",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "BcFXAfm6CPxhfTpN",
+    "status": "inactive",
+    "createdAt": "2025-12-02T00:25:55.202Z",
+    "updatedAt": "2025-12-02T00:25:55.593Z"
+  },
+  {
+    "id": "agent_1764635751505",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "PG0jhG8j5N9rZenG",
+    "status": "inactive",
+    "createdAt": "2025-12-02T00:35:51.505Z",
+    "updatedAt": "2025-12-02T00:35:51.679Z"
+  },
+  {
+    "id": "agent_1764638730608",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "psfSavFkmoYjh9fI",
+    "status": "inactive",
+    "createdAt": "2025-12-02T01:25:30.608Z",
+    "updatedAt": "2025-12-02T01:25:30.825Z"
+  },
+  {
+    "id": "agent_1764638761350",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "FyMzF0G21C8YsvD7",
+    "status": "inactive",
+    "createdAt": "2025-12-02T01:26:01.350Z",
+    "updatedAt": "2025-12-02T01:26:01.534Z"
+  },
+  {
+    "id": "agent_1764639274490",
+    "ownerId": "user_bWVoLmFrYmF5aXJA",
+    "name": "meh.akbayir's AI Agent",
+    "n8nId": "lwgUH3eFQWabQ59u",
+    "status": "inactive",
+    "createdAt": "2025-12-02T01:34:34.490Z",
+    "updatedAt": "2025-12-02T01:34:34.614Z"
+  },
+  {
+    "id": "agent_1764639294216",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-01",
+    "n8nId": "qjUJioxTGgiXMRJV",
+    "status": "inactive",
+    "createdAt": "2025-12-02T01:34:54.216Z",
+    "updatedAt": "2025-12-02T01:34:54.374Z"
+  },
+  {
+    "id": "agent_1764786621959",
+    "ownerId": "user_Zm9ydG5pdGUuY3Js",
+    "name": "fortnite.crlife's AI Agent",
+    "n8nId": "uXNJG4VkJqLFq2tG",
+    "status": "inactive",
+    "createdAt": "2025-12-03T18:30:21.959Z",
+    "updatedAt": "2025-12-03T18:30:22.046Z"
+  },
+  {
+    "id": "agent_1764786630139",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-03",
+    "n8nId": "UUDGkP66InQ6Rw9o",
+    "status": "active",
+    "createdAt": "2025-12-03T18:30:30.139Z",
+    "updatedAt": "2025-12-03T18:30:30.260Z"
+  },
+  {
+    "id": "agent_1764789808348",
+    "ownerId": "user_aWxvdmVyZXNvbHZp",
+    "name": "iloveresolvio's AI Agent",
+    "n8nId": "7sOZtrE7ZssPUYL5",
+    "status": "inactive",
+    "createdAt": "2025-12-03T19:23:28.349Z",
+    "updatedAt": "2025-12-03T19:23:28.437Z"
+  },
+  {
+    "id": "agent_1764789879902",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-03",
+    "n8nId": "Dql14TanrR1iM1KG",
+    "status": "active",
+    "createdAt": "2025-12-03T19:24:39.902Z",
+    "updatedAt": "2025-12-03T19:24:40.021Z"
+  },
+  {
+    "id": "agent_1764796522947",
+    "ownerId": "user_YWxlZW1hY2hlZW1h",
+    "name": "aleemacheema's AI Agent",
+    "n8nId": "gj8CM5cl66jFq8ZJ",
+    "status": "inactive",
+    "createdAt": "2025-12-03T21:15:22.947Z",
+    "updatedAt": "2025-12-03T21:15:23.186Z"
+  },
+  {
+    "id": "agent_1764796540965",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-03",
+    "n8nId": "7rnDFPENTMSH6q4X",
+    "status": "active",
+    "createdAt": "2025-12-03T21:15:40.965Z",
+    "updatedAt": "2025-12-03T21:17:44.385Z"
+  },
+  {
+    "id": "agent_1764799762243",
+    "ownerId": "user_c3VwZXJtYW4xMjNA",
+    "name": "superman123's AI Agent",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-12-03T22:09:22.243Z",
+    "updatedAt": "2025-12-03T22:09:22.305Z"
+  },
+  {
+    "id": "agent_1764799769170",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-03",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-12-03T22:09:29.170Z",
+    "updatedAt": "2025-12-03T22:09:29.254Z"
+  },
+  {
+    "id": "agent_1764799810512",
+    "ownerId": "user_dGVzdEBleGFtcGxl",
+    "name": "test's AI Agent",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-12-03T22:10:10.512Z",
+    "updatedAt": "2025-12-03T22:10:10.571Z"
+  },
+  {
+    "id": "agent_1764894626981",
+    "ownerId": "user_amFkYWQ3NTM2N0Bk",
+    "name": "jadad75367's AI Agent",
+    "n8nId": "4QyfGUOYghDXSiag",
+    "status": "inactive",
+    "createdAt": "2025-12-05T00:30:26.981Z",
+    "updatedAt": "2025-12-05T00:30:27.504Z"
+  },
+  {
+    "id": "agent_1764894771409",
+    "ownerId": "mock_user_id",
+    "name": "Agent 12/4/2025",
+    "n8nId": "0CgaN5uBINp2Cl5u",
+    "status": "active",
+    "createdAt": "2025-12-05T00:32:51.409Z",
+    "updatedAt": "2025-12-05T00:32:51.701Z"
+  },
+  {
+    "id": "agent_1764978160842",
+    "ownerId": "user_eWFrb21vZjM2NkBi",
+    "name": "yakomof366's AI Agent",
+    "n8nId": "KXlR6rIlbMhHRldV",
+    "status": "inactive",
+    "createdAt": "2025-12-05T23:42:40.842Z",
+    "updatedAt": "2025-12-05T23:42:41.192Z"
+  },
+  {
+    "id": "agent_1765228141491",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-08",
+    "n8nId": "YnFYkGAwKf4zeeQF",
+    "status": "active",
+    "createdAt": "2025-12-08T21:09:01.491Z",
+    "updatedAt": "2025-12-08T21:09:01.661Z"
+  },
+  {
+    "id": "agent_1765408369290",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2025-12-10",
+    "n8nId": "v056Y745cHCrPHrk",
+    "status": "active",
+    "createdAt": "2025-12-10T23:12:49.290Z",
+    "updatedAt": "2025-12-10T23:12:49.664Z"
+  },
+  {
+    "id": "agent_1765757184996",
+    "ownerId": "user_bWlrZWhhd2szMzQ1",
+    "name": "mikehawk33455's AI Agent",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-12-15T00:06:24.996Z",
+    "updatedAt": "2025-12-15T00:06:25.079Z"
+  },
+  {
+    "id": "agent_1765757425592",
+    "ownerId": "user_YW50b255bGlAZ21h",
+    "name": "antonyli's AI Agent",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-12-15T00:10:25.592Z",
+    "updatedAt": "2025-12-15T00:10:25.617Z"
+  },
+  {
+    "id": "agent_1766461044570",
+    "ownerId": "mock_user_id",
+    "name": "Agent 12/22/2025",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-12-23T03:37:24.570Z",
+    "updatedAt": "2025-12-23T03:37:24.792Z"
+  },
+  {
+    "id": "agent_1766461049529",
+    "ownerId": "mock_user_id",
+    "name": "Agent 12/22/2025",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-12-23T03:37:29.529Z",
+    "updatedAt": "2025-12-23T03:37:29.559Z"
+  },
+  {
+    "id": "agent_1766534772799",
+    "ownerId": "mock_user_id",
+    "name": "Agent 12/23/2025",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-12-24T00:06:12.799Z",
+    "updatedAt": "2025-12-24T00:06:13.458Z"
+  },
+  {
+    "id": "agent_1766545911835",
+    "ownerId": "mock_user_id",
+    "name": "Agent 12/23/2025",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-12-24T03:11:51.835Z",
+    "updatedAt": "2025-12-24T03:11:51.933Z"
+  },
+  {
+    "id": "agent_1766546005603",
+    "ownerId": "mock_user_id",
+    "name": "Agent 12/23/2025",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-12-24T03:13:25.603Z",
+    "updatedAt": "2025-12-24T03:13:25.639Z"
+  },
+  {
+    "id": "agent_1766549600338",
+    "ownerId": "mock_user_id",
+    "name": "Agent 12/23/2025",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-12-24T04:13:20.338Z",
+    "updatedAt": "2025-12-24T04:13:20.701Z"
+  },
+  {
+    "id": "agent_1766555701650",
+    "ownerId": "mock_user_id",
+    "name": "Agent 12/24/2025",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-12-24T05:55:01.650Z",
+    "updatedAt": "2025-12-24T05:55:01.746Z"
+  },
+  {
+    "id": "agent_1766555731262",
+    "ownerId": "mock_user_id",
+    "name": "Agent 12/24/2025",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-12-24T05:55:31.262Z",
+    "updatedAt": "2025-12-24T05:55:31.351Z"
+  },
+  {
+    "id": "agent_1766887416309",
+    "ownerId": "mock_user_id",
+    "name": "Agent 12/27/2025",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-12-28T02:03:36.309Z",
+    "updatedAt": "2025-12-28T02:03:36.402Z"
+  },
+  {
+    "id": "agent_1766888094303",
+    "ownerId": "mock_user_id",
+    "name": "Agent 12/27/2025",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-12-28T02:14:54.303Z",
+    "updatedAt": "2025-12-28T02:14:54.402Z"
+  },
+  {
+    "id": "agent_1766895813936",
+    "ownerId": "mock_user_id",
+    "name": "Agent 12/27/2025",
+    "n8nId": null,
+    "status": "inactive",
+    "createdAt": "2025-12-28T04:23:33.936Z",
+    "updatedAt": "2025-12-28T04:23:34.029Z"
+  },
+  {
+    "id": "agent_1766979051503",
+    "ownerId": "user_dGVzdHVzZXJAZXhh",
+    "name": "testuser's AI Agent",
+    "n8nId": "rvbA82V8L0HoPtOX",
+    "status": "inactive",
+    "createdAt": "2025-12-29T03:30:51.503Z",
+    "updatedAt": "2025-12-29T03:30:51.740Z"
+  },
+  {
+    "id": "agent_1766980252339",
+    "ownerId": "user_QWxlZW1hY2hlZW1h",
+    "name": "Aleemacheema's AI Agent",
+    "n8nId": "gUdjFnWHtx5o12kM",
+    "status": "inactive",
+    "createdAt": "2025-12-29T03:50:52.339Z",
+    "updatedAt": "2025-12-29T03:50:52.465Z"
+  },
+  {
+    "id": "agent_1766980253794",
+    "ownerId": "user_QWxlZW1hY2hlZW1h",
+    "name": "Aleemacheema's AI Agent",
+    "n8nId": "c22PDz3CjsB9uPPF",
+    "status": "inactive",
+    "createdAt": "2025-12-29T03:50:53.794Z",
+    "updatedAt": "2025-12-29T03:50:53.880Z"
+  },
+  {
+    "id": "agent_1766980813135",
+    "ownerId": "mock_user_id",
+    "name": "Agent 12/28/2025",
+    "n8nId": "8O2uu5T2C7n1HHey",
+    "status": "active",
+    "createdAt": "2025-12-29T04:00:13.135Z",
+    "updatedAt": "2025-12-29T04:00:13.324Z"
+  },
+  {
+    "id": "agent_1766984951960",
+    "ownerId": "mock_user_id",
+    "name": "Agent 12/29/2025",
+    "n8nId": "Xkr4JPPMazhs7pvZ",
+    "status": "active",
+    "createdAt": "2025-12-29T05:09:11.960Z",
+    "updatedAt": "2025-12-29T05:09:12.135Z"
+  },
+  {
+    "id": "agent_1767229652827",
+    "ownerId": "mock_user_id",
+    "name": "Agent 12/31/2025",
+    "n8nId": "Qmta0023LWMOawhh",
+    "status": "active",
+    "createdAt": "2026-01-01T01:07:32.827Z",
+    "updatedAt": "2026-01-01T01:07:33.042Z"
+  },
+  {
+    "id": "agent_1767627285015",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2026-01-05",
+    "n8nId": "F5Z1BI9ZB538HnlD",
+    "status": "active",
+    "createdAt": "2026-01-05T15:34:45.015Z",
+    "updatedAt": "2026-01-05T15:34:45.133Z"
+  },
+  {
+    "id": "agent_1767627444814",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2026-01-05",
+    "n8nId": "UuTjxpI7XuT5Yb4j",
+    "status": "active",
+    "createdAt": "2026-01-05T15:37:24.814Z",
+    "updatedAt": "2026-01-05T15:37:24.939Z"
+  },
+  {
+    "id": "agent_1767627965914",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2026-01-05",
+    "n8nId": "U6YDHjYkShuB5lSw",
+    "status": "active",
+    "createdAt": "2026-01-05T15:46:05.914Z",
+    "updatedAt": "2026-01-05T15:46:06.023Z"
+  },
+  {
+    "id": "agent_1767627967560",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2026-01-05",
+    "n8nId": "TyI1tCGAfdz191uG",
+    "status": "active",
+    "createdAt": "2026-01-05T15:46:07.560Z",
+    "updatedAt": "2026-01-05T15:46:07.742Z"
+  },
+  {
+    "id": "agent_1767628427575",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2026-01-05",
+    "n8nId": "hy8nh1h5sVil2mZW",
+    "status": "active",
+    "createdAt": "2026-01-05T15:53:47.575Z",
+    "updatedAt": "2026-01-05T15:53:47.779Z"
+  },
+  {
+    "id": "agent_1767642220739",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2026-01-05",
+    "n8nId": "7Pl3QX23Y92Rfm4s",
+    "status": "active",
+    "createdAt": "2026-01-05T19:43:40.739Z",
+    "updatedAt": "2026-01-05T19:43:40.884Z"
+  },
+  {
+    "id": "agent_1767642253014",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2026-01-05",
+    "n8nId": "RqaLAUov1F8H993f",
+    "status": "active",
+    "createdAt": "2026-01-05T19:44:13.014Z",
+    "updatedAt": "2026-01-05T19:44:13.132Z"
+  },
+  {
+    "id": "agent_1767642286442",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2026-01-05",
+    "n8nId": "PyTCkXDc6ObnxmHo",
+    "status": "active",
+    "createdAt": "2026-01-05T19:44:46.442Z",
+    "updatedAt": "2026-01-05T19:44:46.614Z"
+  },
+  {
+    "id": "agent_1767642323112",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2026-01-05",
+    "n8nId": "oBNw6C0LLgSnAgZW",
+    "status": "active",
+    "createdAt": "2026-01-05T19:45:23.112Z",
+    "updatedAt": "2026-01-05T19:45:23.292Z"
+  },
+  {
+    "id": "agent_1767642343575",
+    "ownerId": "mock_user_id",
+    "name": "Agent 2026-01-05",
+    "n8nId": "kmsHLr64FgvWKD1f",
+    "status": "active",
+    "createdAt": "2026-01-05T19:45:43.575Z",
+    "updatedAt": "2026-01-05T19:45:43.747Z"
+  },
+  {
+    "id": "agent_1767715319306",
+    "ownerId": "user_YWxsaWoxMjM0MDJA",
+    "name": "allij123402's AI Agent",
+    "n8nId": "8lGhXjiBymnfkgSB",
+    "status": "inactive",
+    "createdAt": "2026-01-06T16:01:59.306Z",
+    "updatedAt": "2026-01-06T16:01:59.400Z"
+  },
+  {
+    "id": "agent_1767715319328",
+    "ownerId": "user_YWxsaWoxMjM0MDJA",
+    "name": "allij123402's AI Agent",
+    "n8nId": "FuQANXIcDF4HiOtT",
+    "status": "inactive",
+    "createdAt": "2026-01-06T16:01:59.328Z",
+    "updatedAt": "2026-01-06T16:01:59.426Z"
+  },
+  {
+    "id": "agent_1767715321860",
+    "ownerId": "mock_user_id",
+    "name": "Agent 1/6/2026",
+    "n8nId": "DbLlkjLY6QZEhL9j",
+    "status": "active",
+    "createdAt": "2026-01-06T16:02:01.860Z",
+    "updatedAt": "2026-01-06T16:02:02.008Z"
+  },
+  {
+    "id": "agent_1767718635164",
+    "ownerId": "mock_user_id",
+    "name": "Agent 1/6/2026",
+    "n8nId": "7yN5uef0oEZFg745",
+    "status": "active",
+    "createdAt": "2026-01-06T16:57:15.164Z",
+    "updatedAt": "2026-01-06T16:57:15.327Z"
+  },
+  {
+    "id": "agent_1767718659475",
+    "ownerId": "mock_user_id",
+    "name": "Agent 1/6/2026",
+    "n8nId": "jFcjSGXcIaDxOejK",
+    "status": "active",
+    "createdAt": "2026-01-06T16:57:39.475Z",
+    "updatedAt": "2026-01-06T16:57:39.625Z"
+  },
+  {
+    "id": "agent_1767718974344",
+    "ownerId": "user_YWxpajEyMzQwMkBH",
+    "name": "alij123402's AI Agent",
+    "n8nId": "EuvbQ1LVzwyd6tHE",
+    "status": "inactive",
+    "createdAt": "2026-01-06T17:02:54.344Z",
+    "updatedAt": "2026-01-06T17:02:54.583Z"
+  },
+  {
+    "id": "agent_1767718974371",
+    "ownerId": "user_YWxpajEyMzQwMkBH",
+    "name": "alij123402's AI Agent",
+    "n8nId": "NJ1E3G2DRfYayrPR",
+    "status": "inactive",
+    "createdAt": "2026-01-06T17:02:54.371Z",
+    "updatedAt": "2026-01-06T17:02:54.599Z"
+  },
+  {
+    "id": "agent_1767719056596",
+    "ownerId": "mock_user_id",
+    "name": "Agent 1/6/2026",
+    "n8nId": "ZNuB2dQfzjLVpHUO",
+    "status": "active",
+    "createdAt": "2026-01-06T17:04:16.596Z",
+    "updatedAt": "2026-01-06T17:04:16.721Z"
+  },
+  {
+    "id": "agent_1767719159776",
+    "ownerId": "mock_user_id",
+    "name": "Agent 1/6/2026",
+    "n8nId": "X1EB4bC5IosPuGdg",
+    "status": "active",
+    "createdAt": "2026-01-06T17:05:59.776Z",
+    "updatedAt": "2026-01-06T17:06:00.908Z"
+  },
+  {
+    "id": "agent_1767719353249",
+    "ownerId": "mock_user_id",
+    "name": "Agent 1/6/2026",
+    "n8nId": "ITEKapyulV9veOSv",
+    "status": "active",
+    "createdAt": "2026-01-06T17:09:13.249Z",
+    "updatedAt": "2026-01-06T17:09:13.458Z"
+  },
+  {
+    "id": "agent_1767723455666",
+    "ownerId": "mock_user_id",
+    "name": "Agent 1/6/2026",
+    "n8nId": "vGUzuP2r6ZByZ7Oh",
+    "status": "active",
+    "createdAt": "2026-01-06T18:17:35.666Z",
+    "updatedAt": "2026-01-06T18:17:35.797Z"
+  },
+  {
+    "id": "agent_1767723471696",
+    "ownerId": "mock_user_id",
+    "name": "Agent 1/6/2026",
+    "n8nId": "NryVljsDOsWwsB7T",
+    "status": "active",
+    "createdAt": "2026-01-06T18:17:51.696Z",
+    "updatedAt": "2026-01-06T18:17:51.919Z"
+  },
+  {
+    "id": "agent_1767726656510",
+    "ownerId": "mock_user_id",
+    "name": "Agent 1/6/2026",
+    "n8nId": "xbhztNHHqZqt0G8d",
+    "status": "active",
+    "createdAt": "2026-01-06T19:10:56.510Z",
+    "updatedAt": "2026-01-06T19:10:56.707Z"
+  },
+  {
+    "id": "agent_1767728057065",
+    "ownerId": "mock_user_id",
+    "name": "Agent 1/6/2026",
+    "n8nId": "ac5lQ37tJtmEEUsl",
+    "status": "active",
+    "createdAt": "2026-01-06T19:34:17.065Z",
+    "updatedAt": "2026-01-06T19:34:17.195Z"
+  },
+  {
+    "id": "agent_1767728072938",
+    "ownerId": "mock_user_id",
+    "name": "Agent 1/6/2026",
+    "n8nId": "yAbAOjZ9azbwHrun",
+    "status": "active",
+    "createdAt": "2026-01-06T19:34:32.938Z",
+    "updatedAt": "2026-01-06T19:34:33.037Z"
+  },
+  {
+    "id": "agent_1767731714358",
+    "ownerId": "mock_user_id",
+    "name": "Agent 1/6/2026",
+    "n8nId": "BNNrEFNeIvrVYtVX",
+    "status": "active",
+    "createdAt": "2026-01-06T20:35:14.358Z",
+    "updatedAt": "2026-01-06T20:35:14.471Z"
+  },
+  {
+    "id": "agent_1767732328463",
+    "ownerId": "mock_user_id",
+    "name": "Agent 1/6/2026",
+    "n8nId": "A0cR1FDaNt3ZJIu7",
+    "status": "active",
+    "createdAt": "2026-01-06T20:45:28.463Z",
+    "updatedAt": "2026-01-06T20:45:28.577Z"
+  }
+]
