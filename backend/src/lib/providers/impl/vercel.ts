@@ -35,26 +35,84 @@ export class VercelProvider implements HostingProvider {
     }
 
     try {
+      // First check if project already exists
+      let existingProjectId: string | null = null;
+      try {
+        const existingProject = await axios.get(
+          `${VERCEL_API_BASE}/v9/projects/${input.name}${this.getTeamParam()}`,
+          { headers: this.getHeaders() }
+        );
+        existingProjectId = existingProject.data.id;
+        logInfo('Vercel project already exists', { projectId: existingProjectId, name: existingProject.data.name });
+        
+        // Disable deployment protection on existing project
+        await this.disableDeploymentProtection(existingProjectId);
+        
+        return {
+          projectId: existingProject.data.id,
+          projectName: existingProject.data.name,
+        };
+      } catch (e: any) {
+        // Project doesn't exist, create it
+        logInfo('Project does not exist, creating new one', { name: input.name });
+      }
+
+      const payload: any = {
+        name: input.name,
+      };
+      
+      // Only set framework if specified and not 'static'
+      if (input.framework && input.framework !== 'static') {
+        payload.framework = input.framework;
+      }
+      
+      if (input.rootDirectory) {
+        payload.rootDirectory = input.rootDirectory;
+      }
+
+      logInfo('Creating Vercel project with payload', payload);
+
       const response = await axios.post(
         `${VERCEL_API_BASE}/v9/projects${this.getTeamParam()}`,
-        {
-          name: input.name,
-          framework: input.framework || 'nextjs',
-          rootDirectory: input.rootDirectory || '',
-        },
+        payload,
         { headers: this.getHeaders() }
       );
 
       const project = response.data;
       logInfo('Vercel project created', { projectId: project.id, name: project.name });
       
+      // Disable deployment protection after creation
+      await this.disableDeploymentProtection(project.id);
+      
       return {
         projectId: project.id,
         projectName: project.name,
       };
     } catch (error: any) {
-      logError('Vercel createProject error', error, input);
-      throw new Error(`Failed to create Vercel project: ${error.message}`);
+      const errorDetails = error.response?.data || error.message;
+      logError('Vercel createProject error', error, { ...input, errorDetails });
+      throw new Error(`Failed to create Vercel project: ${JSON.stringify(errorDetails)}`);
+    }
+  }
+
+  private async disableDeploymentProtection(projectId: string): Promise<void> {
+    try {
+      // Update project to disable password protection (main blocker for public access)
+      await axios.patch(
+        `${VERCEL_API_BASE}/v9/projects/${projectId}${this.getTeamParam()}`,
+        {
+          passwordProtection: null,
+          ssoProtection: null,
+        },
+        { headers: this.getHeaders() }
+      );
+      logInfo('Deployment protection disabled for project', { projectId });
+    } catch (error: any) {
+      // Log but don't fail - protection settings might not be available on all plans
+      logInfo('Could not disable deployment protection (may require Pro plan)', { 
+        projectId, 
+        error: error.response?.data || error.message 
+      });
     }
   }
 
@@ -69,34 +127,75 @@ export class VercelProvider implements HostingProvider {
     }
 
     try {
-      const deploymentData: any = {
+      // Build file list for direct static deployment
+      const files: Array<{ file: string; data: string }> = [];
+      
+      // Add vercel.json for static deployment with permissive headers for Stripe
+      // Note: Vercel auto-detects static files, so we just need headers config
+      const vercelConfig = {
+        version: 2,
+        public: true,
+        headers: [
+          {
+            source: "/(.*)",
+            headers: [
+              {
+                key: "X-Frame-Options",
+                value: "SAMEORIGIN"
+              },
+              {
+                key: "X-Content-Type-Options",
+                value: "nosniff"
+              }
+            ]
+          }
+        ]
+      };
+      files.push({
+        file: 'vercel.json',
+        data: Buffer.from(JSON.stringify(vercelConfig, null, 2)).toString('base64'),
+      });
+      
+      if (input.files && Object.keys(input.files).length > 0) {
+        for (const [filePath, content] of Object.entries(input.files)) {
+          files.push({
+            file: filePath,
+            data: Buffer.from(content).toString('base64'),
+          });
+        }
+        logInfo('Deploying files to Vercel', { 
+          fileCount: files.length,
+          files: files.map(f => f.file)
+        });
+      } else {
+        // Create minimal static site as fallback
+        files.push({
+          file: 'index.html',
+          data: Buffer.from('<html><body><h1>Welcome</h1></body></html>').toString('base64'),
+        });
+      }
+
+      // Use v13 API - Vercel will detect vercel.json and use static builder
+      const deploymentData = {
         name: input.projectId,
+        files: files.map(f => ({
+          file: f.file,
+          data: f.data,
+          encoding: 'base64' as const,
+        })),
+        target: 'production',
+        project: input.projectId,
         projectSettings: {
-          framework: 'nextjs',
+          framework: null,
+          buildCommand: '',
+          outputDirectory: '',
         },
       };
 
-      // Deploy from Git or files
-      if (input.gitUrl) {
-        deploymentData.gitSource = {
-          type: 'github',
-          repoId: this.extractRepoId(input.gitUrl),
-          ref: 'main',
-        };
-      } else if (input.files) {
-        deploymentData.files = Object.entries(input.files).map(([path, content]) => ({
-          file: path,
-          data: Buffer.from(content).toString('base64'),
-          encoding: 'base64',
-        }));
-      } else {
-        // Create minimal Next.js app
-        deploymentData.files = this.getMinimalNextjsFiles();
-      }
-
-      if (input.env) {
-        deploymentData.env = input.env;
-      }
+      logInfo('Creating Vercel static deployment', { 
+        projectId: input.projectId, 
+        fileCount: files.length,
+      });
 
       const response = await axios.post(
         `${VERCEL_API_BASE}/v13/deployments${this.getTeamParam()}`,
@@ -105,16 +204,64 @@ export class VercelProvider implements HostingProvider {
       );
 
       const deployment = response.data;
-      logInfo('Vercel deployment created', { deploymentId: deployment.id, url: deployment.url });
+      logInfo('Vercel deployment created', { 
+        deploymentId: deployment.id, 
+        url: deployment.url,
+        readyState: deployment.readyState,
+        inspectorUrl: deployment.inspectorUrl
+      });
 
+      // Wait for deployment to be ready (up to 60 seconds for static)
+      let finalUrl = deployment.url;
+      let finalState = deployment.readyState;
+      let attempts = 0;
+      const maxAttempts = 30; // 60 seconds total
+      
+      while (attempts < maxAttempts && finalState !== 'READY') {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        try {
+          const statusResponse = await axios.get(
+            `${VERCEL_API_BASE}/v13/deployments/${deployment.id}${this.getTeamParam()}`,
+            { headers: this.getHeaders() }
+          );
+          const status = statusResponse.data;
+          finalState = status.readyState;
+          finalUrl = status.url || finalUrl;
+          
+          logInfo('Deployment status check', { 
+            deploymentId: deployment.id, 
+            readyState: finalState,
+            attempt: attempts + 1
+          });
+          
+          if (finalState === 'READY') {
+            break;
+          } else if (finalState === 'ERROR' || finalState === 'CANCELED') {
+            throw new Error(`Deployment failed with state: ${finalState}`);
+          }
+        } catch (statusError: any) {
+          if (statusError.message?.includes('Deployment failed')) {
+            throw statusError;
+          }
+          logInfo('Status check failed, continuing', { error: statusError.message });
+        }
+        attempts++;
+      }
+
+      // Return the URL even if still building - it will be ready soon
       return {
         deploymentId: deployment.id,
-        url: `https://${deployment.url}`,
-        readyState: deployment.readyState || 'QUEUED',
+        url: `https://${finalUrl}`,
+        readyState: finalState || 'BUILDING',
       };
     } catch (error: any) {
-      logError('Vercel createDeployment error', error, input);
-      throw new Error(`Failed to create Vercel deployment: ${error.message}`);
+      const errorDetails = error.response?.data || error.message;
+      logError('Vercel createDeployment error', error, { 
+        projectId: input.projectId,
+        errorDetails,
+        statusCode: error.response?.status 
+      });
+      throw new Error(`Failed to create Vercel deployment: ${JSON.stringify(errorDetails)}`);
     }
   }
 
@@ -190,42 +337,29 @@ export class VercelProvider implements HostingProvider {
     return gitUrl;
   }
 
-  private getMinimalNextjsFiles(): Array<{ file: string; data: string; encoding: string }> {
-    const packageJson = {
-      name: 'avallon-site',
-      version: '0.1.0',
-      scripts: {
-        dev: 'next dev',
-        build: 'next build',
-        start: 'next start',
-      },
-      dependencies: {
-        next: '^14.0.0',
-        react: '^18.2.0',
-        'react-dom': '^18.2.0',
-      },
-    };
-
-    const indexPage = `
-      export default function Home() {
-        return (
-          <div style={{ padding: '2rem', fontFamily: 'system-ui' }}>
-            <h1>Welcome to your Avallon site!</h1>
-            <p>This site is deployed on Vercel.</p>
-          </div>
-        );
-      }
-    `;
+  private getMinimalStaticFiles(): Array<{ file: string; data: string; encoding: string }> {
+    const indexHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to Avallon</title>
+  <style>
+    body { font-family: system-ui; padding: 2rem; text-align: center; }
+    h1 { color: #333; }
+    p { color: #666; }
+  </style>
+</head>
+<body>
+  <h1>Welcome to your Avallon site!</h1>
+  <p>This site is deployed on Vercel.</p>
+</body>
+</html>`;
 
     return [
       {
-        file: 'package.json',
-        data: Buffer.from(JSON.stringify(packageJson, null, 2)).toString('base64'),
-        encoding: 'base64',
-      },
-      {
-        file: 'pages/index.js',
-        data: Buffer.from(indexPage).toString('base64'),
+        file: 'index.html',
+        data: Buffer.from(indexHtml).toString('base64'),
         encoding: 'base64',
       },
     ];
