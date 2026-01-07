@@ -12,7 +12,7 @@ fi
 # Add Claude configuration
 echo "" >> .env.local
 echo "# Claude API Configuration" >> .env.local
-echo "CLAUDE_API_KEY=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" >> .env.local
+echo "CLAUDE_API_KEY=your_claude_api_key_here" >> .env.local
 echo "CLAUDE_BASE_URL=https://api.anthropic.com/v1" >> .env.local
 
 # Add GitHub configuration (you'll need to set these)

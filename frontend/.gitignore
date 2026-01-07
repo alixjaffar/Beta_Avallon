@@ -1,4 +1,6 @@
-# Logs
+# ==================================
+# LOGS
+# ==================================
 logs
 *.log
 npm-debug.log*
@@ -7,12 +9,32 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# ==================================
+# DEPENDENCIES
+# ==================================
 node_modules
+
+# ==================================
+# BUILD OUTPUT
+# ==================================
 dist
 dist-ssr
-*.local
 
-# Editor directories and files
+# ==================================
+# ENVIRONMENT VARIABLES - CRITICAL
+# ==================================
+.env
+.env.*
+.env.local
+.env.development
+.env.production
+.env.test
+*.local
+!*.example
+
+# ==================================
+# EDITOR & IDE
+# ==================================
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -22,3 +44,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# ==================================
+# MISC
+# ==================================
+.vercel

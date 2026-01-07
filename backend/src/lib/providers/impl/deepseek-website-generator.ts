@@ -208,8 +208,8 @@ SECTIONS TO INCLUDE:
 
 STRIPE PAYMENT INTEGRATION REQUIRED:
 1. Add Stripe.js in <head>: <script src="https://js.stripe.com/v3/"></script>
-2. Initialize Stripe (use test publishable key):
-   <script>const stripe = Stripe('pk_test_51ScwfS0Afn09g23Qy2nzvHVaAYxy4jWxr0NaTTB7PKo5n852Ay4mYmG3dBGlxjV9aVwn3u1kciZamxGxZieaP84T00MwNl1iR4');</script>
+2. Initialize Stripe (the key will be injected by the system):
+   <script>const stripe = Stripe('{{STRIPE_PUBLISHABLE_KEY}}');</script>
 3. Add styled payment buttons (pricing cards, product cards, or CTA) with class "stripe-checkout-btn"
 4. Use price ID: price_1SmG2l0Afn09g23QoCbGETau for all payment buttons
 5. Add JS function before </body>:

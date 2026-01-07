@@ -1,42 +1,59 @@
-# Dependencies
+# ==================================
+# DEPENDENCIES
+# ==================================
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Environment variables
+# ==================================
+# ENVIRONMENT VARIABLES - CRITICAL
+# ==================================
 .env
+.env.*
 .env.local
+.env.development
 .env.development.local
+.env.test
 .env.test.local
+.env.production
 .env.production.local
+!env.example
 
-# Next.js
+# ==================================
+# SENSITIVE DATA FILES - DO NOT COMMIT
+# ==================================
+# User and agent data
+signups.json
+agents.json
+integrations.json
+email-log.json
+
+# Generated website data (may contain hardcoded user API keys)
+sites.json
+generated-websites/
+
+# ==================================
+# NEXT.JS
+# ==================================
 .next/
 out/
 
-# Production
+# ==================================
+# PRODUCTION BUILD
+# ==================================
 build/
 dist/
 
-# Misc
+# ==================================
+# MISC
+# ==================================
 .DS_Store
 *.tsbuildinfo
-
-# Debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Local env files
-.env*.local
-
-# Vercel
 .vercel
 
-# TypeScript
+# ==================================
+# TYPESCRIPT
+# ==================================
 *.tsbuildinfo
 next-env.d.ts
-
-# Generated websites (exclude from build)
-generated-websites/

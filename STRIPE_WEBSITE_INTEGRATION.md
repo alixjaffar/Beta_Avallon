@@ -39,7 +39,8 @@ Users can say any of these to add Stripe:
 
 ### 2. Stripe Initialization
 ```javascript
-const stripe = Stripe('pk_test_51ScwfS0Afn09g23Qy2nzvHVaAYxy4jWxr0NaTTB7PKo5n852Ay4mYmG3dBGlxjV9aVwn3u1kciZamxGxZieaP84T00MwNl1iR4');
+// Use your Stripe publishable key from the environment
+const stripe = Stripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 ```
 
 ### 3. Payment Buttons
@@ -100,10 +101,11 @@ The generated website includes frontend-ready Stripe integration. To complete th
 
 ---
 
-## 🔑 Current Configuration
+## 🔑 Configuration
 
-- **Publishable Key**: `pk_test_51ScwfS0Afn09g23Qy2nzvHVaAYxy4jWxr0NaTTB7PKo5n852Ay4mYmG3dBGlxjV9aVwn3u1kciZamxGxZieaP84T00MwNl1iR4`
-- **Mode**: Test mode (ready for production key swap)
+- **Publishable Key**: Set `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` in your `.env` file
+- **Secret Key**: Set `STRIPE_SECRET_KEY` in your `.env` file
+- **Mode**: Configure test or production keys as needed
 
 ---
 

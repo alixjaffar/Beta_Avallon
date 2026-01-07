@@ -1,3 +1,14 @@
+# ==================================
+# ENVIRONMENT VARIABLES - CRITICAL
+# ==================================
+.env
+.env.*
+.env.local
+.env.development
+.env.production
+.env.test
+*.env
+!*.env.example
 
 # Sensitive backup files
 .env.infra
@@ -6,3 +17,50 @@ backend/.env.backup.*
 backend/.env.bak
 *.env.backup*
 *.env.bak
+
+# ==================================
+# SENSITIVE DATA FILES - DO NOT COMMIT
+# ==================================
+# User data
+backend/signups.json
+backend/agents.json
+backend/integrations.json
+backend/email-log.json
+
+# Generated website data (may contain user API keys)
+backend/sites.json
+backend/generated-websites/
+
+# ==================================
+# NODE MODULES & BUILD
+# ==================================
+node_modules/
+dist/
+build/
+.next/
+out/
+
+# ==================================
+# IDE & OS FILES
+# ==================================
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+*.code-workspace
+
+# ==================================
+# LOGS
+# ==================================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==================================
+# MISC
+# ==================================
+*.tsbuildinfo
+.vercel
+.turbo

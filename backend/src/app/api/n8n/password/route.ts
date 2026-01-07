@@ -174,7 +174,7 @@ export async function GET(req: NextRequest) {
     let isPending = false;
     if (dbUser.n8nUserId) {
       try {
-        const n8nUserCheck = await fetch(`${process.env.N8N_BASE_URL || 'http://159.89.113.242'}/api/v1/users`, {
+        const n8nUserCheck = await fetch(`${process.env.N8N_BASE_URL}/api/v1/users`, {
           headers: {
             'X-N8N-API-KEY': process.env.N8N_API_KEY || '',
           },
@@ -198,7 +198,7 @@ export async function GET(req: NextRequest) {
       n8nUrl: process.env.N8N_BASE_URL || 'https://agents.avallon.ca',
       isPending: isPending,
       activationRequired: isPending,
-      activationInstructions: isPending ? `Your n8n account is pending activation. Please:\n1. Log into n8n admin UI: ${process.env.N8N_BASE_URL || 'http://159.89.113.242'}\n2. Go to Settings → Users\n3. Find ${dbUser.email} and click "Activate"\n\nOR use "Forgot Password" on the login page to activate automatically.` : undefined,
+      activationInstructions: isPending ? `Your n8n account is pending activation. Please:\n1. Log into n8n admin UI: ${process.env.N8N_BASE_URL}\n2. Go to Settings → Users\n3. Find ${dbUser.email} and click "Activate"\n\nOR use "Forgot Password" on the login page to activate automatically.` : undefined,
     }, { headers: corsHeaders });
   } catch (error: unknown) {
     logError('Failed to get n8n password', error);

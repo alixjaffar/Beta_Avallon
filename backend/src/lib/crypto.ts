@@ -7,8 +7,9 @@ const SALT_LENGTH = 64;
 const TAG_LENGTH = 16;
 
 /**
- * Get encryption key from environment variable or generate a default
- * In production, set N8N_ENCRYPTION_KEY to a secure 32-byte key (base64 encoded)
+ * Get encryption key from environment variable
+ * In production, MUST set N8N_ENCRYPTION_KEY to a secure 32-byte key (base64 encoded)
+ * Generate one with: openssl rand -base64 32
  */
 function getEncryptionKey(): Buffer {
   const key = process.env.N8N_ENCRYPTION_KEY;
@@ -16,10 +17,16 @@ function getEncryptionKey(): Buffer {
     return Buffer.from(key, 'base64');
   }
   
-  // Fallback: use a default key (not secure for production!)
-  // This should only be used in development
-  const defaultKey = 'default-key-not-secure-change-in-production-32bytes!!';
-  return Buffer.from(defaultKey.padEnd(32, '!').substring(0, 32));
+  // In production, require the encryption key to be set
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('N8N_ENCRYPTION_KEY environment variable is required in production. Generate one with: openssl rand -base64 32');
+  }
+  
+  // Development only: generate a deterministic key based on machine identifier
+  // This is NOT secure for production but prevents accidental key exposure in code
+  console.warn('⚠️  WARNING: Using development encryption key. Set N8N_ENCRYPTION_KEY for production.');
+  const devSeed = `dev-${process.env.USER || 'default'}-${process.cwd()}`;
+  return crypto.createHash('sha256').update(devSeed).digest();
 }
 
 /**

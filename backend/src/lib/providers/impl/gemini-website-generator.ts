@@ -1791,9 +1791,9 @@ The user wants to add Stripe payment functionality to their website. You MUST:
 1. **Add Stripe.js Script** in the <head>:
    <script src="https://js.stripe.com/v3/"></script>
 
-2. **Initialize Stripe** in a <script> tag (use test publishable key):
+2. **Initialize Stripe** in a <script> tag (the key will be injected by the system):
    <script>
-     const stripe = Stripe('pk_test_51ScwfS0Afn09g23Qy2nzvHVaAYxy4jWxr0NaTTB7PKo5n852Ay4mYmG3dBGlxjV9aVwn3u1kciZamxGxZieaP84T00MwNl1iR4');
+     const stripe = Stripe('{{STRIPE_PUBLISHABLE_KEY}}');
    </script>
 
 3. **Add Payment Buttons** - Create styled "Buy Now" or "Subscribe" buttons that:
