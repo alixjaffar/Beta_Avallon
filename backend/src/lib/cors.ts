@@ -52,14 +52,24 @@ export function getCorsHeaders(req?: NextRequest | null): Record<string, string>
   
   // Check if origin is in allowed list or matches Vercel app pattern (for generated websites)
   const isAllowedOrigin = origin && (
-    allowedOrigins.some(allowed => origin === allowed || origin?.startsWith(allowed)) ||
+    allowedOrigins.some(allowed => {
+      // Exact match
+      if (origin === allowed) return true;
+      // For https, also check without www
+      if (allowed.startsWith('https://') && origin.startsWith('https://')) {
+        const allowedNoWww = allowed.replace('https://www.', 'https://');
+        const originNoWww = origin.replace('https://www.', 'https://');
+        if (allowedNoWww === originNoWww) return true;
+      }
+      return false;
+    }) ||
     VERCEL_APP_PATTERN.test(origin)
   );
   
   // Use the origin if allowed, otherwise use development default
   const allowedOrigin = isAllowedOrigin 
     ? origin 
-    : (process.env.NODE_ENV === 'development' ? 'http://localhost:5173' : allowedOrigins[0]);
+    : (process.env.NODE_ENV === 'development' ? 'http://localhost:5173' : (origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0]));
   
   return {
     'Access-Control-Allow-Origin': allowedOrigin || 'http://localhost:5173',

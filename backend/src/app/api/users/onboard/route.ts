@@ -39,6 +39,15 @@ export async function POST(req: NextRequest) {
     // Get user (will use email from session/headers if available)
     let user = await getUser();
     
+    // If no user from auth but email provided in body, create a user object
+    if (!user && userEmail) {
+      const userId = `user_${Buffer.from(userEmail).toString('base64').replace(/[^a-zA-Z0-9]/g, '').substring(0, 16)}`;
+      user = {
+        id: userId,
+        email: userEmail,
+      };
+    }
+    
     // If email provided in body, use it to create user-specific ID for proper isolation
     if (userEmail && userEmail !== 'test@example.com' && userEmail !== 'user@example.com') {
       const userId = `user_${Buffer.from(userEmail).toString('base64').replace(/[^a-zA-Z0-9]/g, '').substring(0, 16)}`;
@@ -47,6 +56,15 @@ export async function POST(req: NextRequest) {
         id: userId,
         email: userEmail,
       };
+    }
+    
+    // Ensure we have a user with email
+    if (!user || !user.email) {
+      logError('No user or email found', new Error('Missing user or email'), { userEmail, hasUser: !!user });
+      return NextResponse.json({ 
+        error: "User email is required",
+        message: "Please provide an email address or sign in first"
+      }, { status: 400, headers: corsHeaders });
     }
     
     // Check if user already has an agent
