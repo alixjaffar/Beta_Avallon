@@ -301,6 +301,8 @@ function getErrorMessage(errorCode: string): string {
       return 'Sign-in was cancelled. Please try again.';
     case 'auth/requires-recent-login':
       return 'Please sign in again to complete this action.';
+    case 'auth/unauthorized-domain':
+      return 'This domain is not authorized for OAuth. Please contact support or use email/password sign-in.';
     default:
       console.error('Firebase Auth Error:', errorCode);
       return 'An error occurred. Please try again.';
