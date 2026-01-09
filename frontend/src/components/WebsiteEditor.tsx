@@ -983,11 +983,18 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
 
       const result = await response.json();
       
+      // Check if there's an error in the result
+      if (result.error) {
+        throw new Error(result.message || result.error || 'Failed to generate website');
+      }
+      
       // Update content
       const websiteContent = result.websiteContent || result.files || result.result?.websiteContent || {};
-      if (Object.keys(websiteContent).length > 0) {
-        setCurrentWebsiteContent(websiteContent);
+      if (Object.keys(websiteContent).length === 0) {
+        throw new Error(result.message || 'No website content was generated. Please try again.');
       }
+      
+      setCurrentWebsiteContent(websiteContent);
 
       // Add AI response
       const changes = Object.keys(websiteContent).length > 0 
@@ -1006,15 +1013,14 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       
       setMessages(prev => [...prev, assistantMessage]);
       
-      // Update site
-      if (result.result) {
-        onUpdate({
-          ...site,
-          ...result.result,
-          websiteContent,
-          status: 'deployed',
-        });
-      }
+      // Update site - use result.result if available, otherwise use result
+      const siteData = result.result || result;
+      onUpdate({
+        ...site,
+        ...siteData,
+        websiteContent,
+        status: 'deployed',
+      });
 
       // Save
       await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`, {

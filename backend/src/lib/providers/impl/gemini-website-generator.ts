@@ -1136,11 +1136,15 @@ ${this.buildPageInstructions(requestedPages)}
 🔥 CRITICAL REQUIREMENTS:
 \`\`\`html
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>[Business Name] - [Tagline]</title>
+  <link rel="icon" type="image/svg+xml" href="https://avallon.ca/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="https://avallon.ca/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://avallon.ca/favicon-16x16.png">
+  <link rel="icon" type="image/x-icon" href="https://avallon.ca/favicon.ico">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdn.tailwindcss.com"></script>
@@ -1167,7 +1171,8 @@ ${this.buildPageInstructions(requestedPages)}
   <nav class="fixed w-full z-50 glass border-b border-gray-100">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex justify-between items-center h-20">
-        <a href="index.html" class="text-2xl font-bold font-['Plus_Jakarta_Sans']">
+        <a href="index.html" class="flex items-center gap-2 text-2xl font-bold font-['Plus_Jakarta_Sans']">
+          <img src="https://avallon.ca/favicon.svg" alt="Logo" class="w-8 h-8" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
           <span class="gradient-text">Brand</span>
         </a>
         <div class="hidden md:flex items-center space-x-8">
@@ -1276,7 +1281,10 @@ ${this.buildPageInstructions(requestedPages)}
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="grid md:grid-cols-4 gap-12">
         <div>
-          <div class="text-2xl font-bold mb-4 gradient-text">Brand</div>
+          <div class="flex items-center gap-2 text-2xl font-bold mb-4">
+            <img src="https://avallon.ca/favicon.svg" alt="Logo" class="w-8 h-8" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+            <span class="gradient-text">Brand</span>
+          </div>
           <p class="text-gray-400">Building the future of digital experiences, one pixel at a time.</p>
         </div>
         <div>

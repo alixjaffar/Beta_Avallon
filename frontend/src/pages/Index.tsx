@@ -32,9 +32,13 @@ const Index = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-              <div className="text-primary">
-                <span className="material-symbols-outlined text-[32px]">hexagon</span>
-              </div>
+              <img src="/favicon.svg" alt="Avallon Logo" className="w-8 h-8" onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+                const fallback = target.nextElementSibling as HTMLElement;
+                if (fallback) fallback.style.display = 'inline';
+              }} />
+              <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white" style={{display: 'none'}}>A</span>
               <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Avallon</span>
             </div>
           <nav className="hidden md:flex items-center gap-8">
@@ -322,7 +326,10 @@ const Index = () => {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-12">
             <div className="col-span-2">
               <div className="flex items-center gap-2 mb-4">
-                <span className="material-symbols-outlined text-primary text-[28px]">hexagon</span>
+                <img src="/favicon.svg" alt="Avallon Logo" className="w-7 h-7" onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                }} />
                 <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Avallon</span>
               </div>
               <p className="text-slate-500 dark:text-slate-400 text-sm max-w-xs">
