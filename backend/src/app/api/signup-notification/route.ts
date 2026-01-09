@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     const signup = await signupStorage.createSignup({
       name: validatedData.name,
       email: validatedData.email,
-      birthday: validatedData.birthday,
+      birthday: validatedData.birthday || undefined,
       emailSubscription: validatedData.emailSubscription,
     });
 

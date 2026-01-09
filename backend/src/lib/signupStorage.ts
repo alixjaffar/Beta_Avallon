@@ -5,7 +5,7 @@ interface SignupData {
   id: string;
   name: string;
   email: string;
-  birthday: string;
+  birthday?: string;
   emailSubscription: boolean;
   createdAt: string;
 }

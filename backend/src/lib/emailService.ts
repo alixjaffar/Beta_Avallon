@@ -5,7 +5,7 @@ import path from 'path';
 interface SignupNotificationData {
   name: string;
   email: string;
-  birthday: string;
+  birthday?: string;
   emailSubscription: boolean;
   signupDate: string;
 }
