@@ -44,7 +44,10 @@ export async function POST(req: NextRequest) {
       const userId = `user_${Buffer.from(userEmail).toString('base64').replace(/[^a-zA-Z0-9]/g, '').substring(0, 16)}`;
       user = {
         id: userId,
+        clerkId: null,
         email: userEmail,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       };
     }
     
@@ -55,12 +58,15 @@ export async function POST(req: NextRequest) {
         ...user,
         id: userId,
         email: userEmail,
+        clerkId: user?.clerkId || null,
+        createdAt: user?.createdAt || new Date(),
+        updatedAt: user?.updatedAt || new Date(),
       };
     }
     
     // Ensure we have a user with email
-    if (!user || !user.email) {
-      logError('No user or email found', new Error('Missing user or email'), { userEmail, hasUser: !!user });
+    if (!user || !user.email || user.email === 'test@example.com' || user.email === 'user@example.com') {
+      logError('No user or email found', new Error('Missing user or email'), { userEmail, hasUser: !!user, userEmail: user?.email });
       return NextResponse.json({ 
         error: "User email is required",
         message: "Please provide an email address or sign in first"
