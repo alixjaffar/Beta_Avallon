@@ -269,6 +269,11 @@ async function handleCreditPurchase(session: Stripe.Checkout.Session) {
       }
 
       const email = userEmail || userId;
+      if (!email) {
+        logError('Cannot add credits: missing email and userId', new Error('Missing identifier'), { userEmail, userId });
+        return;
+      }
+      
       const currentCredits = creditsData[email]?.credits || 0;
       creditsData[email] = {
         credits: currentCredits + quantity,
