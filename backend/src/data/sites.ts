@@ -129,6 +129,9 @@ export async function updateSite(id: string, userId: string, data: {
   websiteContent?: any | null;
 }) {
   try {
+    // Reload sites from file to ensure we have latest data
+    loadSites();
+    
     // First try to find by exact match
     let siteIndex = sites.findIndex(site => site.id === id && site.ownerId === userId);
     
@@ -136,12 +139,12 @@ export async function updateSite(id: string, userId: string, data: {
     if (siteIndex === -1 && process.env.NODE_ENV === 'development') {
       siteIndex = sites.findIndex(site => site.id === id);
       if (siteIndex !== -1) {
-        logInfo('Site found by ID only for update (dev mode)', { siteId: id });
+        logInfo('Site found by ID only for update (dev mode)', { siteId: id, actualOwner: sites[siteIndex].ownerId, requestedUser: userId });
       }
     }
     
     if (siteIndex === -1) {
-      logError('Site not found for update', { siteId: id, userId });
+      logError('Site not found for update', { siteId: id, userId, totalSites: sites.length, siteIds: sites.map(s => s.id).slice(0, 5) });
       return null;
     }
     

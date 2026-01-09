@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUser } from '@/lib/auth/getUser';
 import { getSiteById, updateSite, deleteSite } from '@/data/sites';
 import { z } from 'zod';
+import { getCorsHeaders } from '@/lib/cors';
 
 // Utility function to fix broken image URLs in HTML content
 function fixImageUrls(html: string): string {
@@ -220,12 +221,6 @@ const UpdateSiteSchema = z.object({
   websiteContent: z.any().nullable().optional(),
 });
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-email',
-};
-
 export async function OPTIONS(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -233,7 +228,7 @@ export async function OPTIONS(
   // Handle preflight request for dynamic routes
   return new NextResponse(null, {
     status: 200,
-    headers: corsHeaders,
+    headers: getCorsHeaders(request),
   });
 }
 
@@ -241,6 +236,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const corsHeaders = getCorsHeaders(request);
+  
   try {
     const user = await getUser();
     if (!user) {
@@ -283,6 +280,8 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const corsHeaders = getCorsHeaders(request);
+  
   try {
     const user = await getUser();
     if (!user) {
@@ -319,10 +318,98 @@ export async function PATCH(
   }
 }
 
+// PUT handler - same as PATCH for compatibility
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const corsHeaders = getCorsHeaders(request);
+  
+  try {
+    const user = await getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { 
+        status: 401,
+        headers: corsHeaders,
+      });
+    }
+
+    const { id } = await params;
+    const body = await request.json();
+    
+    // More lenient schema for PUT - allow messages array
+    const UpdateSiteSchemaExtended = z.object({
+      name: z.string().optional(),
+      status: z.string().optional(),
+      customDomain: z.string().optional(),
+      repoUrl: z.string().nullable().optional(),
+      previewUrl: z.string().nullable().optional(),
+      vercelProjectId: z.string().nullable().optional(),
+      vercelDeploymentId: z.string().nullable().optional(),
+      chatHistory: z.array(z.any()).nullable().optional(),
+      messages: z.array(z.any()).nullable().optional(), // Allow messages field
+      websiteContent: z.any().nullable().optional(),
+    });
+    
+    const validatedData = UpdateSiteSchemaExtended.parse(body);
+    
+    // Map messages to chatHistory if provided
+    if (validatedData.messages && !validatedData.chatHistory) {
+      validatedData.chatHistory = validatedData.messages;
+    }
+
+    // Check if site exists first - reload to ensure latest data
+    let existingSite = await getSiteById(id, user.id);
+    
+    if (!existingSite) {
+      console.error('Site not found for update', { 
+        siteId: id, 
+        userId: user.id,
+        hasWebsiteContent: !!validatedData.websiteContent,
+        nodeEnv: process.env.NODE_ENV
+      });
+      return NextResponse.json({ 
+        error: 'Site not found',
+        message: `Site with ID ${id} not found. The site may not have been created yet. Please generate the site first.`
+      }, { 
+        status: 404,
+        headers: corsHeaders,
+      });
+    }
+
+    const updatedSite = await updateSite(id, user.id, validatedData);
+    if (!updatedSite) {
+      console.error('Failed to update site', { siteId: id, userId: user.id });
+      return NextResponse.json({ 
+        error: 'Failed to update site',
+        message: 'Site was found but update failed'
+      }, { 
+        status: 500,
+        headers: corsHeaders,
+      });
+    }
+
+    return NextResponse.json(updatedSite, {
+      headers: corsHeaders,
+    });
+  } catch (error) {
+    console.error('Error updating site:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { 
+        status: 500,
+        headers: corsHeaders,
+      }
+    );
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const corsHeaders = getCorsHeaders(request);
+  
   try {
     const user = await getUser();
     if (!user) {
