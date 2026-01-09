@@ -2,6 +2,7 @@
 // CHANGELOG: 2025-10-27 - Updated to use LovableProvider for AI website generation
 // CHANGELOG: 2025-12-23 - Switched to DeepSeek AI for better website generation (DeepSite-inspired)
 // CHANGELOG: 2026-01-06 - Added user integration support (Stripe, GA, etc.)
+// CHANGELOG: 2026-01-07 - Fixed CORS handling to use shared getCorsHeaders utility
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 import { DeepSeekWebsiteGenerator } from "@/lib/providers/impl/deepseek-website-generator";
@@ -17,23 +18,18 @@ import {
   generateGoogleAnalyticsCode,
   getUserActiveIntegrations 
 } from "@/lib/integrations";
+import { getCorsHeaders } from "@/lib/cors";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-email',
-};
-
-export async function OPTIONS() {
+export async function OPTIONS(req: NextRequest) {
   return new NextResponse(null, {
     status: 200,
-    headers: corsHeaders,
+    headers: getCorsHeaders(req),
   });
 }
 
 const GenerateSiteSchema = z.object({
   name: z.string().min(1, "Site name is required").max(100, "Site name too long"),
-  description: z.string().min(1, "Description is required").max(1000, "Description too long"),
+  description: z.string().min(1, "Description is required").max(5000, "Description too long"),
   mode: z.enum(['full', 'landing', 'blog', 'ecommerce']).optional().default('full'),
   // Advanced AI parameters
   industry: z.string().optional(),
@@ -56,9 +52,16 @@ const GenerateSiteSchema = z.object({
   ecommerce: z.boolean().optional().default(false),
   social: z.boolean().optional().default(false),
   ai: z.boolean().optional().default(true),
+  // Modification support
+  siteId: z.string().optional(),
+  multiPage: z.boolean().optional().default(true),
+  messages: z.array(z.any()).optional(),
+  currentCode: z.record(z.string()).optional(),
 });
 
 export async function POST(req: NextRequest) {
+  const corsHeaders = getCorsHeaders(req);
+  
   try {
     const user = await getUser();
     if (!user) {
@@ -92,7 +95,11 @@ export async function POST(req: NextRequest) {
       cms,
       ecommerce,
       social,
-      ai
+      ai,
+      siteId,
+      multiPage,
+      messages,
+      currentCode,
     } = GenerateSiteSchema.parse(body);
 
     logInfo('Starting Lovable website generation', { 
@@ -235,10 +242,12 @@ export async function POST(req: NextRequest) {
       logInfo('Starting Gemini website generation', {
         name,
         description: generationRequest.description.substring(0, 100),
+        hasCurrentCode: !!currentCode && Object.keys(currentCode).length > 0,
+        messagesCount: messages?.length || 0,
       });
 
-      // Generate website using Gemini AI
-      const websiteResult = await generator.generateWebsite(generationRequest);
+      // Generate website using Gemini AI (pass currentCode for modifications)
+      const websiteResult = await generator.generateWebsite(generationRequest, messages, currentCode);
       
       // Validate that we got website content
       if (!websiteResult.files || Object.keys(websiteResult.files).length === 0) {

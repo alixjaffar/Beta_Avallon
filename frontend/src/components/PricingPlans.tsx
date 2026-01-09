@@ -21,57 +21,72 @@ export function PricingPlans({ currentPlan = 'free', userEmail }: PricingPlansPr
       period: "forever",
       description: "Perfect for getting started",
       features: [
-        "3 Websites",
-        "1 AI Agent",
-        "1 Domain",
-        "Basic Support",
-        "Community Access"
+        "15 credits/month",
+        "1 generated site",
+        "Basic customization",
+        "No AI agents",
+        "Community Support"
       ],
       buttonText: "Current Plan",
       popular: false,
       planId: "free" as const
     },
     {
-      name: "Pro",
-      price: "$29",
+      name: "Starter",
+      price: "$24.99",
+      period: "month",
+      description: "For creators and small projects",
+      features: [
+        "100 credits/month",
+        "Custom domain hosting",
+        "Multi-site creation",
+        "1 AI agent",
+        "External App integration",
+        "Email Support"
+      ],
+      buttonText: "Upgrade to Starter",
+      popular: false,
+      planId: "starter" as const
+    },
+    {
+      name: "Growth",
+      price: "$39.99",
       period: "month",
       description: "For growing businesses",
       features: [
-        "Unlimited Websites",
-        "5 AI Agents",
-        "5 Domains",
+        "250 credits/month",
+        "Everything in Starter",
+        "Up to 4 AI agents",
+        "Email Hosting",
         "Priority Support",
-        "Advanced Analytics",
-        "Custom Branding",
-        "API Access"
+        "Advanced Analytics"
       ],
-      buttonText: "Upgrade to Pro",
+      buttonText: "Upgrade to Growth",
       popular: true,
-      planId: "pro" as const
+      planId: "growth" as const
     },
     {
-      name: "Business",
+      name: "Enterprise",
       price: "Custom",
       period: "pricing",
       description: "For teams and agencies",
       features: [
-        "Unlimited Everything",
-        "Unlimited AI Agents",
-        "Unlimited Domains",
+        "400+ credits/month",
+        "10+ AI employees",
+        "Compliance + SLA",
+        "Dedicated infrastructure",
+        "Custom features",
         "24/7 Priority Support",
-        "White-label Options",
-        "Team Collaboration",
-        "Advanced Security",
         "Dedicated Account Manager"
       ],
       buttonText: "Contact Us",
       popular: false,
-      planId: "business" as const,
+      planId: "enterprise" as const,
       contactEmail: "hello@avallon.ca"
     }
   ];
 
-  const handleUpgrade = async (plan: "pro" | "business", interval: "monthly" | "yearly" = "monthly") => {
+  const handleUpgrade = async (plan: "starter" | "growth" | "enterprise", interval: "monthly" | "yearly" = "monthly") => {
     if (plan === currentPlan) {
       toast({
         title: "Already on this plan",
@@ -134,7 +149,7 @@ export function PricingPlans({ currentPlan = 'free', userEmail }: PricingPlansPr
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {plans.map((plan) => {
           const isCurrentPlan = plan.planId === currentPlan;
           const isLoading = loading === plan.planId;
@@ -191,11 +206,11 @@ export function PricingPlans({ currentPlan = 'free', userEmail }: PricingPlansPr
                   variant={plan.popular ? "default" : "outline"}
                   disabled={isCurrentPlan || isLoading}
                   onClick={() => {
-                    if (plan.planId === 'business' && (plan as any).contactEmail) {
-                      // Open email client for Business plan
-                      window.location.href = `mailto:${(plan as any).contactEmail}?subject=Business Plan Inquiry&body=Hello, I'm interested in the Business plan. Please contact me with more information.`;
+                    if (plan.planId === 'enterprise' && (plan as any).contactEmail) {
+                      // Open email client for Enterprise plan
+                      window.location.href = `mailto:${(plan as any).contactEmail}?subject=Enterprise Plan Inquiry&body=Hello, I'm interested in the Enterprise plan. Please contact me with more information.`;
                     } else if (plan.planId !== 'free') {
-                      handleUpgrade(plan.planId, "monthly");
+                      handleUpgrade(plan.planId as "starter" | "growth" | "enterprise", "monthly");
                     }
                   }}
                 >
@@ -211,9 +226,9 @@ export function PricingPlans({ currentPlan = 'free', userEmail }: PricingPlansPr
                     </>
                   ) : (
                     <>
-                      {plan.planId === 'pro' && <Zap className="w-4 h-4 mr-2" />}
-                      {plan.planId === 'business' && <Rocket className="w-4 h-4 mr-2" />}
-                      {plan.planId === 'free' && <Sparkles className="w-4 h-4 mr-2" />}
+                      {plan.planId === 'starter' && <Zap className="w-4 h-4 mr-2" />}
+                      {plan.planId === 'growth' && <Sparkles className="w-4 h-4 mr-2" />}
+                      {plan.planId === 'enterprise' && <Rocket className="w-4 h-4 mr-2" />}
                       {plan.buttonText}
                     </>
                   )}

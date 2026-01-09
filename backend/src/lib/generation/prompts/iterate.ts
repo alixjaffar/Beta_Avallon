@@ -3,12 +3,14 @@
  * Generates updated SiteSpec or partial spec changes
  */
 import { SiteSpec } from '../site-spec';
+import { applyToonStylePrompt } from '../prompt-utils';
 
 export function buildIterationPrompt(
   userRequest: string,
   currentSpec: SiteSpec,
   chatHistory?: any[]
 ): string {
+  const styledRequest = applyToonStylePrompt(userRequest);
   // Compress spec JSON to save tokens
   const currentSpecJson = JSON.stringify(currentSpec);
   const historyContext = chatHistory && chatHistory.length > 0
@@ -17,7 +19,7 @@ export function buildIterationPrompt(
 
   return `Modify SiteSpec per request. Return ONLY changed fields as JSON diff.
 
-REQUEST: "${userRequest}"${historyContext}
+REQUEST: "${styledRequest}"${historyContext}
 
 CURRENT:${currentSpecJson}
 

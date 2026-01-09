@@ -1,5 +1,6 @@
 // Lovable Build with URL API Integration
 // Documentation: https://docs.lovable.dev/api/build-with-url
+import { applyToonStylePrompt } from './generation/prompt-utils';
 
 export interface LovableUrlOptions {
   prompt: string;
@@ -14,10 +15,11 @@ export interface LovableUrlOptions {
  */
 export function generateLovableUrl(options: LovableUrlOptions): string {
   const baseUrl = 'https://lovable.dev/?autosubmit=true#';
+  const styledPrompt = applyToonStylePrompt(options.prompt);
   
   // URL encode the prompt (max 50,000 characters)
   // encodeURIComponent handles special characters properly
-  const encodedPrompt = encodeURIComponent(options.prompt.substring(0, 50000));
+  const encodedPrompt = encodeURIComponent(styledPrompt.substring(0, 50000));
   
   // Build hash parameters manually (since URLSearchParams uses ? not #)
   const hashParts: string[] = [];
@@ -52,7 +54,7 @@ export function buildLovablePrompt(params: {
   features?: string[];
   mode?: string;
 }): string {
-  let prompt = params.description;
+  let prompt = applyToonStylePrompt(params.description);
   
   // Add name if provided
   if (params.name) {
@@ -106,4 +108,3 @@ export function buildLovablePrompt(params: {
   
   return prompt;
 }
-

@@ -1,3 +1,4 @@
+// CHANGELOG: 2025-01-07 - Add plan-based feature gating for AI agents
 // CHANGELOG: 2025-10-12 - Enforce plan limits and return embed snippets
 // CHANGELOG: 2025-10-12 - Add monitoring events for agent provisioning
 // CHANGELOG: 2025-10-11 - Refactor to use data access helpers
@@ -8,7 +9,7 @@ import { z } from "zod";
 import { getAgentProvider } from "@/lib/providers";
 import { getUser } from "@/lib/auth/getUser";
 import { createAgent, updateAgent, listAgentsByUser } from "@/data/agents";
-import { checkLimit } from "@/lib/billing/limits";
+import { checkLimit, getUserPlan, canAccessAgents } from "@/lib/billing/limits";
 import { logError } from "@/lib/log";
 import { trackEvent } from "@/lib/monitoring";
 
@@ -42,6 +43,24 @@ export async function POST(req: NextRequest) {
 
     const { name, prompt } = parsed.data;
 
+    // Check if user's plan allows AI agents
+    try {
+      const userPlan = await getUserPlan(user.id);
+      if (!canAccessAgents(userPlan)) {
+        return NextResponse.json({
+          error: "AI Agents are not available on the Free plan. Upgrade to Starter or higher to create AI agents.",
+          upgradeRequired: true,
+          requiredPlan: "starter",
+        }, { status: 403, headers: corsHeaders });
+      }
+    } catch (planError: any) {
+      // If plan check fails, default to free (restricted)
+      logError('Plan check failed', planError);
+      return NextResponse.json({
+        error: "Unable to verify plan. Please try again.",
+      }, { status: 500, headers: corsHeaders });
+    }
+
     // Check limits (skip if database unavailable)
     let limitCheck;
     try {
@@ -49,6 +68,7 @@ export async function POST(req: NextRequest) {
       if (!limitCheck.allowed) {
         return NextResponse.json({
           error: `Agent limit reached. You have ${limitCheck.current}/${limitCheck.limit} agents. Upgrade your plan to create more.`,
+          upgradeRequired: true,
         }, { status: 403, headers: corsHeaders });
       }
     } catch (limitError: any) {
@@ -122,13 +142,27 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     const user = await getUser();
+    
+    // Check if user's plan allows AI agents
+    const userPlan = await getUserPlan(user.id);
+    const hasAgentAccess = canAccessAgents(userPlan);
+    
+    if (!hasAgentAccess) {
+      return NextResponse.json({ 
+        agents: [],
+        featureGated: true,
+        message: "AI Agents are not available on the Free plan. Upgrade to Starter or higher to access AI agents.",
+        requiredPlan: "starter",
+      }, { headers: corsHeaders });
+    }
+    
     const agents = await listAgentsByUser(user.id);
     const provider = getAgentProvider();
     const enrichedAgents = agents.map(agent => ({
       ...agent,
       embedCode: agent.n8nId ? provider.getEmbedCode(agent.n8nId) : null,
     }));
-    return NextResponse.json({ agents: enrichedAgents }, { headers: corsHeaders });
+    return NextResponse.json({ agents: enrichedAgents, featureGated: false }, { headers: corsHeaders });
   } catch (error: unknown) {
     logError('List agents failed', error);
     if (error instanceof Error && error.message === 'Authentication required') {

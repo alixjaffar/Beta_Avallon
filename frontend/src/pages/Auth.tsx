@@ -1,33 +1,114 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Command, Mail, Calendar, User, Github } from "lucide-react";
+import { Command, Mail, Calendar, User, Github, Eye, EyeOff, Lock, CheckCircle2, XCircle, ArrowLeft, Loader2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { OAuthModal } from "@/components/OAuthModal";
 
+// Local password validation (doesn't need Firebase)
+function validatePasswordLocal(password: string): string | null {
+  if (password.length < 8) return 'Password must be at least 8 characters long';
+  if (!/[A-Z]/.test(password)) return 'Password must contain at least one uppercase letter';
+  if (!/[a-z]/.test(password)) return 'Password must contain at least one lowercase letter';
+  if (!/[0-9]/.test(password)) return 'Password must contain at least one number';
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) return 'Password must contain at least one special character';
+  return null;
+}
+
+function validateEmailLocal(email: string): string | null {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) return 'Please enter a valid email address';
+  return null;
+}
+
 const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [birthday, setBirthday] = useState("");
   const [loading, setLoading] = useState(false);
   const [emailSubscription, setEmailSubscription] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isLogin, setIsLogin] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
+  const [forgotPasswordSent, setForgotPasswordSent] = useState(false);
   const [oauthModalOpen, setOAuthModalOpen] = useState(false);
-  const [oauthProvider, setOAuthProvider] = useState<'google' | 'github' | 'apple'>('google');
+  const [oauthProvider, setOAuthProvider] = useState<'google' | 'github'>('google');
+  
+  // Password strength indicators
+  const [passwordChecks, setPasswordChecks] = useState({
+    length: false,
+    uppercase: false,
+    lowercase: false,
+    number: false,
+    special: false,
+  });
+  
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
 
+  // Check if we have a generate prompt from landing page
+  const generatePrompt = (location.state as { generatePrompt?: string })?.generatePrompt;
+
+  // Check if user is already logged in
   useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    
+    const checkAuth = async () => {
+      try {
+        // First check localStorage
+        const sessionData = localStorage.getItem('avallon_session');
+        if (sessionData) {
+          const session = JSON.parse(sessionData);
+          if (session.email) {
+            navigate("/dashboard");
+            return;
+          }
+        }
+        
+        // Then try Firebase (lazy import)
+        const { onAuthChange } = await import('@/lib/firebase');
+        unsubscribe = onAuthChange((user) => {
+          if (user) {
+            navigate("/dashboard");
+          }
+        });
+      } catch (error) {
+        console.warn('Firebase not available for auth check');
+      }
+    };
+    
+    checkAuth();
+    
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [navigate]);
+
+  // Update password strength indicators
+  useEffect(() => {
+    setPasswordChecks({
+      length: password.length >= 8,
+      uppercase: /[A-Z]/.test(password),
+      lowercase: /[a-z]/.test(password),
+      number: /[0-9]/.test(password),
+      special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
+    });
+  }, [password]);
+
     // Restore form state if returning from terms/privacy pages
+  useEffect(() => {
     const savedState = sessionStorage.getItem('signup_form_state');
     if (savedState) {
       try {
@@ -38,55 +119,68 @@ const Auth = () => {
         setPassword(formState.password || '');
         setEmailSubscription(formState.emailSubscription || false);
         setTermsAccepted(formState.termsAccepted || false);
-        sessionStorage.removeItem('signup_form_state'); // Clear after restoring
+        sessionStorage.removeItem('signup_form_state');
       } catch (e) {
-        // Ignore if parsing fails
+        // Ignore parsing errors
       }
     }
-
-    // Handle OAuth callback
-    const params = new URLSearchParams(window.location.search);
-    const oauthSuccess = params.get('oauth');
-    const provider = params.get('provider');
-    const error = params.get('error');
-
-    if (oauthSuccess === 'success' && provider) {
-      // OAuth callback successful - user will need to provide info or we extract from URL
-      // For now, show a message
-      toast({
-        title: "OAuth Success",
-        description: `Successfully authenticated with ${provider}. Please complete your profile.`,
-      });
-    }
-
-    if (error) {
-      toast({
-        title: "OAuth Error",
-        description: error === 'oauth_failed' ? 'Failed to authenticate. Please try again.' : error,
-        variant: "destructive",
-      });
-    }
-  }, [navigate, toast]);
+  }, []);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    // Mock sign up - validate required fields
+    // Validate all required fields
     if (!name || !email || !password || !birthday) {
       setLoading(false);
       toast({
-        title: "Error",
+        title: "Missing Information",
         description: "Please fill in all required fields.",
         variant: "destructive",
       });
       return;
     }
 
+    // Validate email
+    const emailError = validateEmailLocal(email);
+    if (emailError) {
+      setLoading(false);
+      toast({
+        title: "Invalid Email",
+        description: emailError,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate password strength
+    const passwordError = validatePasswordLocal(password);
+    if (passwordError) {
+      setLoading(false);
+      toast({
+        title: "Weak Password",
+        description: passwordError,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check password confirmation
+    if (password !== confirmPassword) {
+      setLoading(false);
+      toast({
+        title: "Passwords Don't Match",
+        description: "Please make sure your passwords match.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check terms acceptance
     if (!termsAccepted) {
       setLoading(false);
       toast({
-        title: "Error",
+        title: "Terms Required",
         description: "You must accept the Terms of Service to create an account.",
         variant: "destructive",
       });
@@ -94,93 +188,93 @@ const Auth = () => {
     }
 
     try {
+      // Register with Firebase (lazy import)
+      const { registerUser } = await import('@/lib/firebase');
+      const result = await registerUser(email, password, name);
+      
+      if (result.error) {
+        setLoading(false);
+        toast({
+          title: "Registration Failed",
+          description: result.error,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Get Firebase token for backend
+      const user = result.user!;
+      const token = await user.getIdToken();
+
+      // Store session with Firebase token
+      localStorage.setItem("avallon_session", JSON.stringify({ 
+        email, 
+        name, 
+        ts: Date.now(),
+        uid: user.uid 
+      }));
+      localStorage.setItem("firebase_token", token);
+
       // Send signup notification to backend
-      const response = await fetch(`${process.env.NODE_ENV === 'production' ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000'}/api/signup-notification`, {
+      const baseUrl = process.env.NODE_ENV === 'production' ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000';
+      
+      try {
+        await fetch(`${baseUrl}/api/signup-notification`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           name,
           email,
           birthday,
           emailSubscription,
+            firebaseUid: user.uid,
         }),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        const errorMessage = errorData.error || 'Failed to process signup';
-        
-        // If email already registered, show helpful message
-        if (response.status === 409 && errorMessage.includes('already registered')) {
-          toast({
-            title: "Already Registered",
-            description: "This email is already registered. Please log in instead.",
-            variant: "destructive",
-          });
-          // Switch to login tab
-          setTimeout(() => {
-            setIsLogin(true);
-          }, 1000);
-          setLoading(false);
-          return;
-        }
-        
-        throw new Error(errorMessage);
+      } catch (err) {
+        console.error('Signup notification error:', err);
       }
 
-          const result = await response.json();
-
-          // Store a lightweight demo session for dashboard access
-          try {
-            localStorage.setItem("avallon_session", JSON.stringify({ email, name, ts: Date.now() }));
-          } catch (_) {}
-
           setLoading(false);
           toast({
-            title: "Success!",
-            description: `Welcome ${name}! Your AI agent is being set up...`,
+        title: "Account Created! 🎉",
+        description: `Welcome ${name}! Please check your email to verify your account.`,
           });
+      
+      // Navigate to dashboard, passing along any generate prompt
+      if (generatePrompt) {
+        navigate("/dashboard", { state: { generatePrompt } });
+      } else {
           navigate("/dashboard");
+      }
           
-          // Onboard user asynchronously (fire and forget - don't block navigation)
-          // Use the same password for n8n account
+      // Onboard user asynchronously
           (async () => {
           try {
-            const baseUrl = process.env.NODE_ENV === 'production' ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000';
-            const onboardResponse = await fetch(`${baseUrl}/api/users/onboard`, {
+          await fetch(`${baseUrl}/api/users/onboard`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'x-user-email': email, // Pass email for user identification
+              'Authorization': `Bearer ${token}`,
+              'x-user-email': email,
               },
               body: JSON.stringify({ 
                 email,
-                password: password // Pass password to use for n8n account
+              firebaseUid: user.uid,
               }),
             });
-            
-            if (onboardResponse.ok) {
-              const onboardData = await onboardResponse.json();
-              if (!onboardData.skip) {
-                console.log('✅ User onboarded with n8n agent:', onboardData.agent);
-              }
-            } else {
-              console.warn('⚠️ Onboarding failed, but signup succeeded');
-            }
           } catch (onboardError) {
             console.error('Onboarding error (non-blocking):', onboardError);
-            // Don't block signup if onboarding fails
           }
           })();
+
     } catch (error: any) {
       setLoading(false);
-      console.error('Signup error:', error);
-      const errorMessage = error?.message || error?.error || 'Failed to create account. Please try again.';
       toast({
         title: "Error",
-        description: errorMessage,
+        description: error?.message || 'Failed to create account. Please try again.',
         variant: "destructive",
       });
     }
@@ -193,99 +287,75 @@ const Auth = () => {
     if (!email || !password) {
       setLoading(false);
       toast({
-        title: "Error",
-        description: "Please fill in all required fields.",
+        title: "Missing Information",
+        description: "Please enter your email and password.",
         variant: "destructive",
       });
       return;
     }
 
     try {
-      // Try Supabase auth first
-      // In mock mode, this resolves instantly
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        // Fallback to mock login if Supabase is not configured
-        if (error.message.includes('mock') || !import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('mock')) {
-          // Mock login for demo - instant login, no waiting
-          localStorage.setItem("avallon_session", JSON.stringify({ email, name: email.split('@')[0], ts: Date.now() }));
-          
-          // Navigate immediately - don't wait for anything
-          navigate("/dashboard");
-          
-          // Show toast after navigation (non-blocking)
-          setTimeout(() => {
+      // Login with Firebase (lazy import)
+      const { loginUser } = await import('@/lib/firebase');
+      const result = await loginUser(email, password);
+      
+      if (result.error) {
+        setLoading(false);
             toast({
-              title: "Success!",
-              description: "Welcome back!",
-            });
-          }, 100);
-          
-          setLoading(false);
-          
-          // Ensure user is onboarded asynchronously (fire and forget - don't block navigation)
-          (async () => {
-          try {
-            const baseUrl = process.env.NODE_ENV === 'production' ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000';
-            await fetch(`${baseUrl}/api/users/onboard`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-user-email': email, // Pass email for user identification
-              },
-              body: JSON.stringify({ email }), // Also in body for explicit identification
-            });
-          } catch (onboardError) {
-            console.error('Onboarding error (non-blocking):', onboardError);
-          }
-          })();
+          title: "Login Failed",
+          description: result.error,
+          variant: "destructive",
+        });
           return;
-        }
-        throw error;
       }
 
-      if (data?.user) {
+      const user = result.user!;
+      const token = result.token!;
+
+      // Store session with Firebase token
         localStorage.setItem("avallon_session", JSON.stringify({ 
-          email: data.user.email || email, 
-          name: data.user.user_metadata?.name || email.split('@')[0], 
-          ts: Date.now() 
-        }));
-        
-        // Navigate immediately - don't wait for toast or anything else
+        email: user.email || email, 
+        name: user.displayName || email.split('@')[0], 
+        ts: Date.now(),
+        uid: user.uid 
+      }));
+      localStorage.setItem("firebase_token", token);
+
+      // Navigate to dashboard, passing along any generate prompt
+      if (generatePrompt) {
+        navigate("/dashboard", { state: { generatePrompt } });
+      } else {
         navigate("/dashboard");
+      }
         
-        // Show toast after navigation (non-blocking)
-        setTimeout(() => {
           toast({
-            title: "Success!",
-            description: "Welcome back!",
+        title: "Welcome Back! 👋",
+        description: `Signed in as ${user.email}`,
           });
-        }, 100);
         
         setLoading(false);
         
-        // Ensure user is onboarded asynchronously (fire and forget - don't block navigation)
+      // Ensure user is onboarded
+      const baseUrl = process.env.NODE_ENV === 'production' ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000';
         (async () => {
         try {
-          const baseUrl = process.env.NODE_ENV === 'production' ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000';
-          const userEmail = data.user.email || email;
           await fetch(`${baseUrl}/api/users/onboard`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'x-user-email': userEmail, // Pass email for user identification
+              'Authorization': `Bearer ${token}`,
+              'x-user-email': user.email || email,
             },
-            body: JSON.stringify({ email: userEmail }), // Also in body for explicit identification
+            body: JSON.stringify({ 
+              email: user.email || email,
+              firebaseUid: user.uid,
+            }),
           });
         } catch (onboardError) {
           console.error('Onboarding error (non-blocking):', onboardError);
         }
         })();
-      }
+
     } catch (error: any) {
       setLoading(false);
       toast({
@@ -296,85 +366,116 @@ const Auth = () => {
     }
   };
 
-  const handleSocialLogin = async (provider: 'google' | 'github' | 'apple') => {
-    // Check if Supabase is in mock mode or not configured
-    const isMockMode = !import.meta.env.VITE_SUPABASE_URL || 
-                       import.meta.env.VITE_SUPABASE_URL.includes('mock') ||
-                       import.meta.env.VITE_SUPABASE_URL === 'https://mock.supabase.co';
-    
-    if (isMockMode) {
-      // Show professional OAuth modal instead of browser prompts
-      setOAuthProvider(provider);
-      setOAuthModalOpen(true);
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    if (!forgotPasswordEmail) {
+      setLoading(false);
+      toast({
+        title: "Email Required",
+        description: "Please enter your email address.",
+        variant: "destructive",
+      });
       return;
     }
 
-    // Try real Supabase OAuth (only if not in mock mode)
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: {
-          redirectTo: `${window.location.origin}/auth?oauth=callback&provider=${provider}`,
-        },
+    const emailError = validateEmailLocal(forgotPasswordEmail);
+    if (emailError) {
+      setLoading(false);
+      toast({
+        title: "Invalid Email",
+        description: emailError,
+        variant: "destructive",
       });
+      return;
+    }
 
-      if (error) {
-        throw error;
+    try {
+      // Reset password with Firebase (lazy import)
+      const { resetPassword } = await import('@/lib/firebase');
+      const result = await resetPassword(forgotPasswordEmail);
+      
+      if (result.error) {
+        setLoading(false);
+        toast({
+          title: "Error",
+          description: result.error,
+          variant: "destructive",
+      });
+        return;
       }
 
-      // If OAuth redirect was initiated, the page will redirect
-      // Handle the callback in useEffect
+      setLoading(false);
+      setForgotPasswordSent(true);
+      toast({
+        title: "Email Sent! 📧",
+        description: "Check your inbox for password reset instructions.",
+      });
+
     } catch (error: any) {
       setLoading(false);
-      // Fallback to modal if OAuth fails
-      setOAuthProvider(provider);
-      setOAuthModalOpen(true);
+      toast({
+        title: "Error",
+        description: "Failed to send reset email. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
-  const handleOAuthSuccess = async (userEmail: string, userName: string) => {
+  const handleSocialLogin = async (provider: 'google' | 'github') => {
     setLoading(true);
     const baseUrl = process.env.NODE_ENV === 'production' ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000';
-    const providerNames = { google: 'Google', github: 'GitHub', apple: 'Apple' };
+    const providerNames = { google: 'Google', github: 'GitHub' };
 
     try {
-      // Store session with user-provided info
+      // Import Firebase OAuth functions dynamically
+      const { signInWithGoogle, signInWithGithub } = await import('@/lib/firebase');
+      
+      // Call the appropriate sign-in function
+      const result = provider === 'google' 
+        ? await signInWithGoogle()
+        : await signInWithGithub();
+      
+      if (result.error) {
+        setLoading(false);
+        toast({
+          title: `${providerNames[provider]} Sign-In Failed`,
+          description: result.error,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const user = result.user!;
+      const token = result.token!;
+
+      // Store session
       const sessionData = {
-        email: userEmail,
-        name: userName,
-        provider: oauthProvider,
+        email: user.email,
+        name: user.displayName || user.email?.split('@')[0],
+        provider: provider,
+        uid: user.uid,
+        photoURL: user.photoURL,
         ts: Date.now()
       };
       
       localStorage.setItem("avallon_session", JSON.stringify(sessionData));
-      
-      // Send to backend to create session cookie
-      try {
-        await fetch(`${baseUrl}/api/auth/oauth/callback`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            provider: oauthProvider,
-            email: userEmail,
-            name: userName,
-          }),
-        });
-      } catch (err) {
-        console.error('Failed to create backend session:', err);
-      }
+      localStorage.setItem("firebase_token", token);
 
-      // Onboard user (create n8n agent)
+      // Onboard user
       try {
         await fetch(`${baseUrl}/api/users/onboard`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-user-email': userEmail,
+            'Authorization': `Bearer ${token}`,
+            'x-user-email': user.email || '',
           },
-          body: JSON.stringify({ email: userEmail }),
+          body: JSON.stringify({ 
+            email: user.email,
+            firebaseUid: user.uid 
+          }),
         });
       } catch (onboardError) {
         console.error('Onboarding error (non-blocking):', onboardError);
@@ -382,20 +483,173 @@ const Auth = () => {
 
       setLoading(false);
       toast({
-        title: "Success!",
-        description: `Logged in with ${providerNames[oauthProvider]}! Your account is being set up...`,
+        title: "Success! 🎉",
+        description: `Signed in with ${providerNames[provider]}!`,
       });
+      
+      // Navigate to dashboard, passing along any generate prompt
+      if (generatePrompt) {
+        navigate("/dashboard", { state: { generatePrompt } });
+      } else {
       navigate("/dashboard");
-    } catch (error) {
+      }
+    } catch (error: any) {
+      console.error('Social login error:', error);
       setLoading(false);
       toast({
         title: "Error",
-        description: "Failed to complete sign in. Please try again.",
+        description: error?.message || "Failed to complete sign in. Please try again.",
         variant: "destructive",
       });
     }
   };
 
+  // Legacy OAuth modal handler (keeping for compatibility)
+  const handleOAuthSuccess = async (userEmail: string, userName: string) => {
+    // This is now handled directly by handleSocialLogin
+    console.warn('handleOAuthSuccess is deprecated, use handleSocialLogin directly');
+  };
+
+  // Password strength indicator component
+  const PasswordStrengthIndicator = () => (
+    <div className="mt-2 space-y-1.5">
+      <p className="text-xs font-medium text-muted-foreground">Password must have:</p>
+      <div className="grid grid-cols-2 gap-1">
+        {[
+          { key: 'length', label: '8+ characters' },
+          { key: 'uppercase', label: 'Uppercase (A-Z)' },
+          { key: 'lowercase', label: 'Lowercase (a-z)' },
+          { key: 'number', label: 'Number (0-9)' },
+          { key: 'special', label: 'Special (!@#$...)' },
+        ].map(({ key, label }) => (
+          <div 
+            key={key} 
+            className={`flex items-center gap-1.5 text-xs ${
+              passwordChecks[key as keyof typeof passwordChecks] 
+                ? 'text-green-600 dark:text-green-400' 
+                : 'text-muted-foreground'
+            }`}
+          >
+            {passwordChecks[key as keyof typeof passwordChecks] ? (
+              <CheckCircle2 className="w-3 h-3" />
+            ) : (
+              <XCircle className="w-3 h-3" />
+            )}
+            {label}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // Forgot Password View
+  if (showForgotPassword) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="w-full max-w-md">
+          <div className="flex items-center justify-center mb-8">
+            <Command className="w-8 h-8 text-primary mr-2" />
+            <h1 className="text-3xl font-bold">Avallon</h1>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Lock className="w-5 h-5" />
+                Reset Password
+              </CardTitle>
+              <CardDescription>
+                {forgotPasswordSent 
+                  ? "Check your email for reset instructions" 
+                  : "Enter your email to receive a password reset link"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {forgotPasswordSent ? (
+                <div className="text-center space-y-4">
+                  <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto">
+                    <Mail className="w-8 h-8 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg">Check Your Email</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      We've sent password reset instructions to:
+                    </p>
+                    <p className="font-medium text-primary mt-1">{forgotPasswordEmail}</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Didn't receive the email? Check your spam folder or try again.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      className="flex-1"
+                      onClick={() => {
+                        setForgotPasswordSent(false);
+                        setForgotPasswordEmail("");
+                      }}
+                    >
+                      Try Another Email
+                    </Button>
+                    <Button 
+                      className="flex-1"
+                      onClick={() => {
+                        setShowForgotPassword(false);
+                        setForgotPasswordSent(false);
+                        setForgotPasswordEmail("");
+                      }}
+                    >
+                      Back to Login
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="forgot-email">
+                      <Mail className="w-4 h-4 inline mr-1" />
+                      Email Address
+                    </Label>
+                    <Input
+                      id="forgot-email"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={forgotPasswordEmail}
+                      onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      "Send Reset Link"
+                    )}
+                  </Button>
+                </form>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="mt-4 text-center">
+            <Button 
+              variant="link" 
+              onClick={() => {
+                setShowForgotPassword(false);
+                setForgotPasswordSent(false);
+              }}
+            >
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              Back to Login
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -409,7 +663,7 @@ const Auth = () => {
           <CardHeader>
             <CardTitle>Welcome</CardTitle>
             <CardDescription>
-              {isLogin ? "Sign in to your account" : "Create your account to join the Avallon beta waitlist"}
+              {isLogin ? "Sign in to your account" : "Create your account to get started"}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -446,18 +700,6 @@ const Auth = () => {
                   <Github className="w-5 h-5 mr-2" />
                   Continue with GitHub
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => handleSocialLogin('apple')}
-                  disabled={loading}
-                >
-                  <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
-                  </svg>
-                  Continue with Apple
-                </Button>
               </div>
 
               <div className="relative my-6">
@@ -465,7 +707,7 @@ const Auth = () => {
                   <Separator />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+                  <span className="bg-background px-2 text-muted-foreground">Or continue with email</span>
                 </div>
               </div>
 
@@ -513,16 +755,59 @@ const Auth = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="signup-password">Password</Label>
+                    <Label htmlFor="signup-password">
+                      <Lock className="w-4 h-4 inline mr-1" />
+                      Password
+                    </Label>
+                    <div className="relative">
                     <Input
                       id="signup-password"
-                      type="password"
+                        type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
-                      minLength={6}
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {password && <PasswordStrengthIndicator />}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-confirm-password">
+                      <Lock className="w-4 h-4 inline mr-1" />
+                      Confirm Password
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="signup-confirm-password"
+                        type={showConfirmPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                        className={`pr-10 ${confirmPassword && password !== confirmPassword ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                     />
+                      <button
+                        type="button"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {confirmPassword && password !== confirmPassword && (
+                      <p className="text-xs text-red-500 flex items-center gap-1">
+                        <XCircle className="w-3 h-3" />
+                        Passwords do not match
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-4">
                     <div className="flex items-start space-x-2">
@@ -539,7 +824,7 @@ const Auth = () => {
                           Subscribe to email notifications
                         </label>
                         <p className="text-xs text-muted-foreground">
-                          Get updates about Avallon's development and beta release
+                          Get updates about new features and tips
                         </p>
                       </div>
                     </div>
@@ -563,7 +848,6 @@ const Auth = () => {
                             type="button"
                             onClick={(e) => {
                               e.preventDefault();
-                              // Store current form state before navigating
                               const formState = { name, email, birthday, password, emailSubscription, termsAccepted };
                               sessionStorage.setItem('signup_form_state', JSON.stringify(formState));
                               navigate("/terms");
@@ -578,7 +862,6 @@ const Auth = () => {
                             type="button"
                             onClick={(e) => {
                               e.preventDefault();
-                              // Store current form state before navigating
                               const formState = { name, email, birthday, password, emailSubscription, termsAccepted };
                               sessionStorage.setItem('signup_form_state', JSON.stringify(formState));
                               navigate("/privacy");
@@ -587,18 +870,23 @@ const Auth = () => {
                             Privacy Policy
                           </Button>
                         </label>
-                        <p className="text-xs text-muted-foreground">
-                          By creating an account, you agree to our Terms of Service and Privacy Policy. 
-                          You acknowledge that Avallon's concept, features, and intellectual property are 
-                          proprietary and confidential. You agree not to copy, disclose, or attempt to recreate 
-                          any part of Avallon's platform or business model without explicit written permission from Avallon.
-                        </p>
                       </div>
                     </div>
                   </div>
 
-                  <Button type="submit" className="w-full button-gradient" disabled={loading || !termsAccepted}>
-                    {loading ? "Creating account..." : "Create Account"}
+                  <Button 
+                    type="submit" 
+                    className="w-full button-gradient" 
+                    disabled={loading || !termsAccepted || password !== confirmPassword}
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Creating account...
+                      </>
+                    ) : (
+                      "Create Account"
+                    )}
                   </Button>
                 </form>
               </TabsContent>
@@ -620,18 +908,51 @@ const Auth = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="login-password">Password</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="login-password">
+                        <Lock className="w-4 h-4 inline mr-1" />
+                        Password
+                      </Label>
+                      <Button
+                        variant="link"
+                        className="p-0 h-auto text-xs"
+                        type="button"
+                        onClick={() => {
+                          setForgotPasswordEmail(email);
+                          setShowForgotPassword(true);
+                        }}
+                      >
+                        Forgot password?
+                      </Button>
+                    </div>
+                    <div className="relative">
                     <Input
                       id="login-password"
-                      type="password"
+                        type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
+                        className="pr-10"
                     />
+                      <button
+                        type="button"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
                   <Button type="submit" className="w-full button-gradient" disabled={loading}>
-                    {loading ? "Signing in..." : "Sign In"}
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Signing in...
+                      </>
+                    ) : (
+                      "Sign In"
+                    )}
                   </Button>
                 </form>
               </TabsContent>

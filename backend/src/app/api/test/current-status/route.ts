@@ -41,33 +41,48 @@ export async function GET() {
       deepseekError = "DEEPSEEK_API_KEY not set (will use Gemini as fallback)";
     }
     
-    // Test Gemini API (Primary - using Gemini 3.0 Pro)
+    // Test Gemini API (Primary - using Gemini 2.5 Pro / Gemini 3 Pro)
     let geminiStatus = "❌ Not tested";
     let geminiError = "";
-    if (geminiKey) {
+    const apiKey = geminiKey || process.env.GOOGLE_CLOUD_API_KEY;
+    const useVertexAI = process.env.USE_VERTEX_AI === 'true' || (apiKey && apiKey.startsWith('AQ.'));
+    
+    if (apiKey) {
       try {
-        // Try Gemini 3.0 Pro first, fallback to 3.0 Flash, then 2.5 Pro
-        const models = ['gemini-3.0-pro', 'gemini-3.0-flash', 'gemini-2.5-pro'];
+        // Try Gemini 2.5 Pro first (Gemini 3 Pro), then fallbacks
+        const models = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash-exp'];
         let lastError: any = null;
         let success = false;
+        const cleanKey = apiKey.replace(/^["']|["']$/g, '').trim();
         
         for (const model of models) {
           try {
+            let apiUrl: string;
+            let headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            
+            if (useVertexAI) {
+              const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID || '';
+              const region = process.env.GOOGLE_CLOUD_REGION || 'us-central1';
+              apiUrl = `https://${region}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${region}/publishers/google/models/${model}:generateContent`;
+              headers['Authorization'] = `Bearer ${cleanKey}`;
+              headers['x-goog-api-key'] = cleanKey;
+            } else {
+              apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanKey}`;
+            }
+            
             const response = await axios.post(
-              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey.replace(/^["']|["']$/g, '').trim()}`,
+              apiUrl,
               {
                 contents: [{
                   parts: [{ text: "Say Hello" }]
                 }]
               },
               {
-                headers: {
-                  'Content-Type': 'application/json'
-                },
+                headers,
                 timeout: 10000
               }
             );
-            geminiStatus = `✅ Working (${model})`;
+            geminiStatus = `✅ Working (${model}${useVertexAI ? ' via Vertex AI' : ''})`;
             success = true;
             break;
           } catch (error: any) {
@@ -86,7 +101,7 @@ export async function GET() {
       }
     } else {
       geminiStatus = "⚠️ Not configured";
-      geminiError = "GEMINI_API_KEY not set";
+      geminiError = "GEMINI_API_KEY or GOOGLE_CLOUD_API_KEY not set";
     }
     
     // Test Claude API (Fallback)

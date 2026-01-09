@@ -1,4 +1,5 @@
 // API endpoint for deploying websites to GitHub and Vercel
+// CHANGELOG: 2026-01-07 - Added proper CORS handling
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 import { z } from "zod";
@@ -6,16 +7,26 @@ import { getUser } from "@/lib/auth/getUser";
 import { getSiteById, updateSite } from "@/data/sites";
 import { GitHubClient } from "@/lib/clients/github";
 import { VercelProvider } from "@/lib/providers/impl/vercel";
+import { getCorsHeaders } from "@/lib/cors";
 
 const DeployToVercelSchema = z.object({
   siteId: z.string().min(1, "Site ID is required"),
 });
 
+export async function OPTIONS(req: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: getCorsHeaders(req),
+  });
+}
+
 export async function POST(req: NextRequest) {
+  const corsHeaders = getCorsHeaders(req);
+  
   try {
     const user = await getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
     }
 
     const body = await req.json();
@@ -26,13 +37,13 @@ export async function POST(req: NextRequest) {
     // Get the site with its files
     const site = await getSiteById(siteId, user.id);
     if (!site) {
-      return NextResponse.json({ error: "Site not found" }, { status: 404 });
+      return NextResponse.json({ error: "Site not found" }, { status: 404, headers: corsHeaders });
     }
 
     // Get website files from websiteContent
     const files = site.websiteContent?.files || site.websiteContent || {};
     if (!files || Object.keys(files).length === 0) {
-      return NextResponse.json({ error: "No website files found" }, { status: 400 });
+      return NextResponse.json({ error: "No website files found" }, { status: 400, headers: corsHeaders });
     }
 
     let repoUrl: string | undefined;
@@ -136,19 +147,19 @@ export async function POST(req: NextRequest) {
         previewUrl,
         repoUrl,
         message: "Website deployed successfully!"
-      });
+      }, { headers: corsHeaders });
     } catch (deployError: any) {
       logError('Deployment failed', deployError);
       return NextResponse.json({
         error: "Deployment failed",
         details: deployError.message
-      }, { status: 500 });
+      }, { status: 500, headers: corsHeaders });
     }
   } catch (error: any) {
     logError('Vercel deployment failed', error);
     if (error.name === 'ZodError') {
-      return NextResponse.json({ error: "Invalid input", details: error.errors }, { status: 400 });
+      return NextResponse.json({ error: "Invalid input", details: error.errors }, { status: 400, headers: corsHeaders });
     }
-    return NextResponse.json({ error: "Internal server error", details: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error", details: error.message }, { status: 500, headers: corsHeaders });
   }
 }

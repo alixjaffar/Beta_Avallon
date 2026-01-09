@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Trash2, Check, ExternalLink, Key, CreditCard, MessageSquare, Mail, BarChart3, Bot } from 'lucide-react';
+import { Loader2, Plus, Trash2, Check, ExternalLink, Key, CreditCard, MessageSquare, Mail, BarChart3, Bot, Lock, Rocket } from 'lucide-react';
 
 interface Integration {
   id: string;
@@ -70,7 +70,11 @@ const fieldPlaceholders: Record<string, string> = {
   measurementId: 'G-XXXXXXXXXX',
 };
 
-export function IntegrationsManager() {
+interface IntegrationsManagerProps {
+  onUpgradeClick?: () => void;
+}
+
+export function IntegrationsManager({ onUpgradeClick }: IntegrationsManagerProps) {
   const [connected, setConnected] = useState<Integration[]>([]);
   const [available, setAvailable] = useState<AvailableProvider[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,6 +83,8 @@ export function IntegrationsManager() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<AvailableProvider | null>(null);
   const [skipValidation, setSkipValidation] = useState(false);
+  const [featureGated, setFeatureGated] = useState(false);
+  const [gateMessage, setGateMessage] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchIntegrations = async () => {
@@ -94,6 +100,15 @@ export function IntegrationsManager() {
 
       if (response.ok) {
         const data = await response.json();
+        
+        // Check if feature is gated
+        if (data.featureGated) {
+          setFeatureGated(true);
+          setGateMessage(data.message || "External App integrations are not available on your current plan.");
+          setLoading(false);
+          return;
+        }
+        
         console.log('✅ Integrations fetched:', { 
           connected: data.connected?.length || 0, 
           available: data.available?.length || 0,
@@ -237,6 +252,38 @@ export function IntegrationsManager() {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Show gated UI if feature is not available
+  if (featureGated) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <Card className="max-w-lg w-full">
+          <CardContent className="p-12 text-center">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center shadow-lg mx-auto mb-6">
+              <Lock className="w-10 h-10 text-blue-500" />
+            </div>
+            <h3 className="text-2xl font-bold mb-4">Integrations - Premium Feature</h3>
+            <p className="text-muted-foreground mb-6">
+              {gateMessage || "External App integrations are not available on the Free plan. Upgrade to Starter ($24.99/mo) or higher to connect Stripe, Twilio, SendGrid, and more."}
+            </p>
+            <div className="space-y-3">
+              <Button
+                onClick={onUpgradeClick}
+                className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:opacity-90"
+                size="lg"
+              >
+                <Rocket className="w-5 h-5 mr-2" />
+                Upgrade to Starter
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Get access to External App integrations, AI Agents, and more
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }

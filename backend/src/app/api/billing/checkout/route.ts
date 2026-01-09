@@ -21,23 +21,37 @@ export async function OPTIONS() {
 }
 
 const Body = z.object({
-  plan: z.enum(["pro", "business"]),
+  plan: z.enum(["starter", "growth", "enterprise", "pro", "business"]),
   interval: z.enum(["monthly", "yearly"]).default("monthly"),
 });
 
 const PRICE_ENV_MAP: Record<string, Record<string, string | undefined>> = {
+  // New pricing tiers
+  starter: {
+    monthly: process.env.STRIPE_PRICE_STARTER_MONTHLY,
+    yearly: process.env.STRIPE_PRICE_STARTER_YEARLY,
+  },
+  growth: {
+    monthly: process.env.STRIPE_PRICE_GROWTH_MONTHLY,
+    yearly: process.env.STRIPE_PRICE_GROWTH_YEARLY,
+  },
+  enterprise: {
+    monthly: process.env.STRIPE_PRICE_ENTERPRISE_MONTHLY,
+    yearly: process.env.STRIPE_PRICE_ENTERPRISE_YEARLY,
+  },
+  // Legacy plans (backwards compatibility)
   pro: {
-    monthly: process.env.STRIPE_PRICE_PRO_MONTHLY,
-    yearly: process.env.STRIPE_PRICE_PRO_YEARLY,
+    monthly: process.env.STRIPE_PRICE_PRO_MONTHLY || process.env.STRIPE_PRICE_STARTER_MONTHLY,
+    yearly: process.env.STRIPE_PRICE_PRO_YEARLY || process.env.STRIPE_PRICE_STARTER_YEARLY,
   },
   business: {
-    monthly: process.env.STRIPE_PRICE_BUSINESS_MONTHLY,
-    yearly: process.env.STRIPE_PRICE_BUSINESS_YEARLY,
+    monthly: process.env.STRIPE_PRICE_BUSINESS_MONTHLY || process.env.STRIPE_PRICE_GROWTH_MONTHLY,
+    yearly: process.env.STRIPE_PRICE_BUSINESS_YEARLY || process.env.STRIPE_PRICE_GROWTH_YEARLY,
   },
 };
 
-function resolvePriceId(plan: "pro" | "business", interval: "monthly" | "yearly"): string | null {
-  return PRICE_ENV_MAP[plan][interval] ?? null;
+function resolvePriceId(plan: string, interval: "monthly" | "yearly"): string | null {
+  return PRICE_ENV_MAP[plan]?.[interval] ?? null;
 }
 
 export async function POST(req: NextRequest) {
@@ -74,18 +88,28 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const subscription = await prisma.subscription.findFirst({
-      where: { userId: user.id },
-    });
+    // Try to get existing subscription (but don't fail if DB is unavailable)
+    let existingCustomerId: string | undefined;
+    try {
+      const subscription = await prisma.subscription.findFirst({
+        where: { userId: user.id },
+      });
+      existingCustomerId = subscription?.stripeCustomerId || undefined;
+    } catch (dbError) {
+      // Database not available or table doesn't exist - proceed without existing customer
+      console.log('Note: Could not fetch existing subscription (DB may be unavailable), proceeding with new customer');
+      existingCustomerId = undefined;
+    }
 
     const origin = req.headers.get("origin") || process.env.APP_URL || "http://localhost:8080";
-    const successUrl = `${origin}/dashboard?upgrade=success`;
+    // Include session_id and plan in success URL for activation
+    const successUrl = `${origin}/dashboard?upgrade=success&session_id={CHECKOUT_SESSION_ID}&plan=${plan}`;
     const cancelUrl = `${origin}/dashboard?upgrade=cancelled`;
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
-      customer: subscription?.stripeCustomerId || undefined,
-      customer_email: subscription?.stripeCustomerId ? undefined : user.email,
+      customer: existingCustomerId,
+      customer_email: existingCustomerId ? undefined : user.email,
       line_items: [
         {
           price: priceId,

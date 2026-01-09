@@ -1,3 +1,4 @@
+// CHANGELOG: 2025-01-07 - Add plan-based feature gating for email hosting
 // CHANGELOG: 2025-10-12 - Enforce limits and persist email inbox creation
 // CHANGELOG: 2025-10-12 - Add monitoring events for email provisioning
 // CHANGELOG: 2025-10-11 - Refactor to use data access helpers (no persistence)
@@ -9,7 +10,7 @@ import { getEmailProvider } from "@/lib/providers";
 import { getUser } from "@/lib/auth/getUser";
 import { findDomainByNameAndUser } from "@/data/domains";
 import { createEmailAccount, findEmailAccountByDomainAndInbox } from "@/data/emailAccounts";
-import { checkLimit } from "@/lib/billing/limits";
+import { checkLimit, getUserPlan, canAccessEmailHosting } from "@/lib/billing/limits";
 import { logError } from "@/lib/log";
 import { trackEvent } from "@/lib/monitoring";
 
@@ -21,6 +22,17 @@ const Body = z.object({
 export async function POST(req: NextRequest) {
   try {
     const user = await getUser();
+    
+    // Check if user's plan allows email hosting
+    const userPlan = await getUserPlan(user.id);
+    if (!canAccessEmailHosting(userPlan)) {
+      return NextResponse.json({
+        error: "Email Hosting is not available on your current plan. Upgrade to Growth ($39.99/mo) or higher to access Email Hosting.",
+        upgradeRequired: true,
+        requiredPlan: "growth",
+      }, { status: 403 });
+    }
+    
     const json = await req.json();
     const parsed = Body.safeParse(json);
     

@@ -4,14 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Bot, Loader2, Save, Sparkles, ExternalLink } from "lucide-react";
+import { Bot, Loader2, Save, Sparkles, ExternalLink, Lock, Rocket } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 interface AgentBuilderPageProps {
   onAgentCreated?: (agentId: string, n8nId: string) => void;
+  onUpgradeClick?: () => void;
 }
 
-export function AgentBuilderPage({ onAgentCreated }: AgentBuilderPageProps) {
+export function AgentBuilderPage({ onAgentCreated, onUpgradeClick }: AgentBuilderPageProps) {
   const [name, setName] = useState("");
   const [prompt, setPrompt] = useState("");
   const [creating, setCreating] = useState(false);
@@ -19,6 +21,8 @@ export function AgentBuilderPage({ onAgentCreated }: AgentBuilderPageProps) {
   const [agentId, setAgentId] = useState<string | null>(null);
   const [n8nId, setN8nId] = useState<string | null>(null);
   const [n8nUrl, setN8nUrl] = useState<string | null>(null);
+  const [featureGated, setFeatureGated] = useState(false);
+  const [gateMessage, setGateMessage] = useState<string | null>(null);
   const { toast } = useToast();
 
   const baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
@@ -27,12 +31,38 @@ export function AgentBuilderPage({ onAgentCreated }: AgentBuilderPageProps) {
 
   const n8nBaseUrl = 'https://agents.avallon.ca';
 
-  // Auto-create workflow when component mounts
+  // Check feature access when component mounts
   useEffect(() => {
-    if (!agentId && !creating) {
-      handleAutoCreate();
-    }
+    checkFeatureAccess();
   }, []);
+
+  const checkFeatureAccess = async () => {
+    try {
+      // First check if agents are gated for this user (using fetchWithAuth for proper plan check)
+      const response = await fetchWithAuth(`${baseUrl}/api/n8n/agents`, {
+        method: 'GET',
+      });
+
+      const data = await response.json();
+
+      if (data.featureGated) {
+        setFeatureGated(true);
+        setGateMessage(data.message || "AI Agents are not available on your current plan.");
+        return;
+      }
+
+      // If not gated, auto-create workflow
+      if (!agentId && !creating) {
+        handleAutoCreate();
+      }
+    } catch (error) {
+      console.error('Error checking feature access:', error);
+      // If can't check, try to create anyway
+      if (!agentId && !creating) {
+        handleAutoCreate();
+      }
+    }
+  };
 
   const handleAutoCreate = async () => {
     setCreating(true);
@@ -42,11 +72,8 @@ export function AgentBuilderPage({ onAgentCreated }: AgentBuilderPageProps) {
     setName(defaultName);
 
     try {
-      const response = await fetch(`${baseUrl}/api/n8n/agents`, {
+      const response = await fetchWithAuth(`${baseUrl}/api/n8n/agents`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ 
           name: defaultName, 
           prompt: defaultPrompt 
@@ -56,6 +83,12 @@ export function AgentBuilderPage({ onAgentCreated }: AgentBuilderPageProps) {
       const data = await response.json();
 
       if (!response.ok) {
+        // Check if this is a feature gating error
+        if (data.upgradeRequired || response.status === 403) {
+          setFeatureGated(true);
+          setGateMessage(data.error || "AI Agents are not available on your current plan.");
+          return;
+        }
         throw new Error(data.error || 'Failed to create agent');
       }
 
@@ -100,11 +133,8 @@ export function AgentBuilderPage({ onAgentCreated }: AgentBuilderPageProps) {
     setSaving(true);
     try {
       // Update agent name
-      const response = await fetch(`${baseUrl}/api/n8n/agents/${agentId}`, {
+      const response = await fetchWithAuth(`${baseUrl}/api/n8n/agents/${agentId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ 
           name
         }),
@@ -134,6 +164,38 @@ export function AgentBuilderPage({ onAgentCreated }: AgentBuilderPageProps) {
     }
   };
 
+  // Show gated UI if feature is not available
+  if (featureGated) {
+    return (
+      <div className="h-[calc(100vh-200px)] flex flex-col items-center justify-center">
+        <Card className="max-w-lg w-full">
+          <CardContent className="p-12 text-center">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center shadow-lg mx-auto mb-6">
+              <Lock className="w-10 h-10 text-purple-500" />
+            </div>
+            <h3 className="text-2xl font-bold mb-4">AI Agents - Premium Feature</h3>
+            <p className="text-muted-foreground mb-6">
+              {gateMessage || "AI Agents are not available on the Free plan. Upgrade to Starter ($24.99/mo) or higher to create AI agents with n8n workflows."}
+            </p>
+            <div className="space-y-3">
+              <Button
+                onClick={onUpgradeClick}
+                className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90"
+                size="lg"
+              >
+                <Rocket className="w-5 h-5 mr-2" />
+                Upgrade to Starter
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Get access to AI Agents, External App integrations, and more
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="h-[calc(100vh-200px)] flex flex-col">
       {/* Header */}
@@ -152,7 +214,49 @@ export function AgentBuilderPage({ onAgentCreated }: AgentBuilderPageProps) {
             variant="outline"
             onClick={async () => {
               try {
-                // Get user email from localStorage session
+                // Step 1: Send n8n invitation to user
+                toast({
+                  title: "Sending invitation...",
+                  description: "Setting up your n8n access",
+                });
+                
+                try {
+                  const inviteResponse = await fetchWithAuth(`${baseUrl}/api/n8n/invite`, {
+                    method: 'POST',
+                  });
+                  
+                  const inviteData = await inviteResponse.json();
+                  
+                  if (inviteResponse.ok) {
+                    if (inviteData.alreadyActive) {
+                      // User already has active account - just open n8n
+                      toast({
+                        title: "✅ You already have an account!",
+                        description: "Opening n8n login page...",
+                      });
+                      window.open(`${inviteData.n8nUrl || n8nBaseUrl}/signin`, '_blank', 'noopener,noreferrer');
+                    } else {
+                      // Invitation sent - tell user to check email
+                      toast({
+                        title: "📧 Invitation Sent!",
+                        description: "Check your email to set up your n8n account.",
+                        duration: 10000,
+                      });
+                      
+                      // Show alert with more details
+                      alert(`Invitation sent to: ${inviteData.email}\n\nCheck your email (including spam folder) for the invitation to set up your n8n account.\n\nOnce you set up your account, you can access n8n at:\n${inviteData.n8nUrl || n8nBaseUrl}`);
+                    }
+                    return;
+                  } else {
+                    // Show error but continue to fallback
+                    console.error('Invite error:', inviteData.error);
+                  }
+                } catch (inviteError) {
+                  console.error('Invite error:', inviteError);
+                  // Continue with password flow as fallback
+                }
+                
+                // Get user email from localStorage session (for display purposes)
                 let userEmail = null;
                 try {
                   const sessionData = localStorage.getItem('avallon_session');
@@ -165,15 +269,8 @@ export function AgentBuilderPage({ onAgentCreated }: AgentBuilderPageProps) {
                 }
                 
                 // Get password and show it to user, then redirect to n8n
-                const headers: HeadersInit = {
-                  'Content-Type': 'application/json',
-                };
-                if (userEmail) {
-                  headers['x-user-email'] = userEmail;
-                }
-                
-                const passwordResponse = await fetch(`${baseUrl}/api/n8n/password`, {
-                  headers,
+                const passwordResponse = await fetchWithAuth(`${baseUrl}/api/n8n/password`, {
+                  method: 'GET',
                 });
                 
                 const passwordData = await passwordResponse.json();
@@ -199,12 +296,8 @@ export function AgentBuilderPage({ onAgentCreated }: AgentBuilderPageProps) {
                   if (errorMsg.includes('not found') || errorMsg.includes('onboarding')) {
                     // Try to trigger onboarding
                     try {
-                      const onboardResponse = await fetch(`${baseUrl}/api/users/onboard`, {
+                      const onboardResponse = await fetchWithAuth(`${baseUrl}/api/users/onboard`, {
                         method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'x-user-email': userEmail || '',
-                        },
                         body: JSON.stringify({ email: userEmail }),
                       });
                       
@@ -226,8 +319,8 @@ export function AgentBuilderPage({ onAgentCreated }: AgentBuilderPageProps) {
                         }
                         
                         // Retry getting password from password endpoint
-                        const retryResponse = await fetch(`${baseUrl}/api/n8n/password`, {
-                          headers,
+                        const retryResponse = await fetchWithAuth(`${baseUrl}/api/n8n/password`, {
+                          method: 'GET',
                         });
                         const retryData = await retryResponse.json();
                         
@@ -395,19 +488,14 @@ export function AgentBuilderPage({ onAgentCreated }: AgentBuilderPageProps) {
                           }
                           
                           // Get password and show it to user, then redirect to n8n
-                          const headers: HeadersInit = {
-                            'Content-Type': 'application/json',
-                          };
-                          if (userEmail) {
-                            headers['x-user-email'] = userEmail;
-                          } else {
+                          if (!userEmail) {
                             // Show error if email not found
                             alert('Could not find your email. Please log out and log back in.');
                             return;
                           }
                           
-                          const passwordResponse = await fetch(`${baseUrl}/api/n8n/password`, {
-                            headers,
+                          const passwordResponse = await fetchWithAuth(`${baseUrl}/api/n8n/password`, {
+                            method: 'GET',
                           });
                           
                           const passwordData = await passwordResponse.json();

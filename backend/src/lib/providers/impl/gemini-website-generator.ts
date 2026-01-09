@@ -1,7 +1,10 @@
 // CHANGELOG: 2025-01-15 - Gemini AI website generation (based on open-source AI Website Builder)
 // Reference: https://github.com/Ratna-Babu/Ai-Website-Builder
+// UPDATED: 2025-01-07 - Using Vertex AI with Gemini 3 Pro Preview (global endpoint)
 import axios from 'axios';
 import { logError, logInfo } from '@/lib/log';
+import { VertexAI } from '@google-cloud/vertexai';
+import { GoogleAuth } from 'google-auth-library';
 
 // Ensure environment variables are loaded
 if (typeof process !== 'undefined' && process.env) {
@@ -87,28 +90,63 @@ interface TextContent {
 }
 
 export class GeminiWebsiteGenerator {
-  private apiKey: string;
-  private baseUrl: string;
+  private vertexAI: VertexAI | null = null;
+  private googleAuth: GoogleAuth | null = null;
+  private projectId: string;
+  private region: string;
 
   constructor() {
-    // Get API key, removing quotes if present
-    const apiKey = process.env.GEMINI_API_KEY || '';
-    this.apiKey = apiKey.replace(/^["']|["']$/g, '').trim();
-    this.baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
+    // Google Cloud Project configuration
+    this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID || 'coastal-cascade-483522-i2';
+    this.region = process.env.GOOGLE_CLOUD_REGION || 'us-central1';
     
-    // Debug: Log key info
-    logInfo('GeminiWebsiteGenerator initialized', {
-      keyLength: this.apiKey.length,
-      keyPrefix: this.apiKey.substring(0, 10),
-      keySuffix: this.apiKey.substring(this.apiKey.length - 4),
-      envKeyRaw: process.env.GEMINI_API_KEY?.substring(0, 15),
-    });
+    // Set credentials path for service account
+    const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || './credentials/vertex-ai-service-account.json';
+    if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = credentialsPath;
+    }
     
-    if (!this.apiKey) {
-      logError('Gemini API key not configured', undefined, {
-        hasGeminiKey: !!process.env.GEMINI_API_KEY
+    // Initialize Google Auth for Gemini 3 Pro (global endpoint)
+    try {
+      this.googleAuth = new GoogleAuth({
+        scopes: ['https://www.googleapis.com/auth/cloud-platform']
+      });
+      logInfo('✅ Google Auth initialized for Gemini 3 Pro Preview', {
+        projectId: this.projectId,
+        credentialsPath,
+      });
+    } catch (error) {
+      logError('Failed to initialize Google Auth', error, {
+        projectId: this.projectId,
       });
     }
+    
+    // Initialize Vertex AI SDK for fallback models
+    try {
+      this.vertexAI = new VertexAI({
+        project: this.projectId,
+        location: this.region,
+      });
+      logInfo('✅ Vertex AI SDK initialized for fallback models', {
+        projectId: this.projectId,
+        region: this.region,
+      });
+    } catch (error) {
+      logError('Failed to initialize Vertex AI SDK', error, {
+        projectId: this.projectId,
+        region: this.region
+      });
+    }
+    
+    // Debug: Log config
+    logInfo('GeminiWebsiteGenerator initialized', {
+      hasGoogleAuth: !!this.googleAuth,
+      hasVertexAI: !!this.vertexAI,
+      projectId: this.projectId,
+      region: this.region,
+      primaryModel: 'gemini-3-pro-preview',
+      fallbackModels: ['gemini-2.5-pro', 'gemini-2.5-flash']
+    });
   }
 
   /**
@@ -701,7 +739,7 @@ export class GeminiWebsiteGenerator {
     // Multi-page sites also need high tokens
     // Gemini 3.0 supports up to 2M context, so we can be more generous
     const isCloneOperation = isCopyRequest && websiteUrl;
-    const maxOutputTokens = isCloneOperation ? 81920 : (isMultiPage ? 81920 : 49152); // Increased for better quality
+    const maxOutputTokens = isCloneOperation ? 65000 : (isMultiPage ? 65000 : 49152); // Max 65536 for Gemini API
     const timeout = isCloneOperation ? 300000 : (isMultiPage ? 240000 : 180000); // Increased timeouts for better results
     
     logInfo('Generating website', { 
@@ -711,152 +749,178 @@ export class GeminiWebsiteGenerator {
       promptLength: prompt.length 
     });
     
-    // Using latest Gemini models for best quality output
-    // Try Gemini 3.0 models first (latest), then fallback to 2.5 models
+    // Using Gemini 3 Pro Preview (global endpoint) with fallback to Vertex AI models
     // Order: Best quality → Fastest fallback
     const models = [
-      'gemini-3.0-pro',           // Latest flagship model (best quality)
-      'gemini-3.0-flash',         // Latest fast model (great quality + speed)
-      'gemini-2.5-pro',           // Fallback: proven quality
-      'gemini-2.5-flash'          // Fallback: proven speed
+      { name: 'gemini-3-pro-preview', useGlobal: true },   // Gemini 3 Pro - BEST quality (global endpoint)
+      { name: 'gemini-2.5-pro', useGlobal: false },        // Gemini 2.5 Pro - excellent fallback
+      { name: 'gemini-2.5-flash', useGlobal: false },      // Fast model - great quality + speed
     ];
     let lastError: any = null;
     
-    for (const model of models) {
+    for (const modelConfig of models) {
+      const model = modelConfig.name;
       try {
-        // Log which model we're attempting (3.0 Pro is first priority)
+        // Log which model we're attempting
         logInfo('🚀 Attempting Gemini API call', { 
           model, 
           isMultiPage,
-          priority: models.indexOf(model) + 1,
-          isPrimary: model === 'gemini-3.0-pro'
+          priority: models.findIndex(m => m.name === model) + 1,
+          isPrimary: model === 'gemini-3-pro-preview',
+          useGlobalEndpoint: modelConfig.useGlobal,
+          projectId: this.projectId
         });
         
-        const response = await axios.post(
-          `${this.baseUrl}/models/${model}:generateContent?key=${this.apiKey}`,
-          {
-            contents: [{
-              parts: [{
-                text: prompt
-              }]
-            }],
-            generationConfig: {
-              // Optimized for high-quality website generation
-              temperature: isCloneOperation ? 0.3 : 0.6, // Lower for clones (more precise), slightly lower for normal (more consistent)
-              topK: isCloneOperation ? 20 : 32,        // More focused sampling for clones
-              topP: 0.95,                               // Nucleus sampling - keep high for diversity
-              maxOutputTokens: maxOutputTokens,
-              // Add response format hints for better HTML structure
-              responseMimeType: 'text/plain',           // Explicit text output
-            }
-          },
-          {
-            headers: {
-              'Content-Type': 'application/json',
+        let content: string;
+        
+        if (modelConfig.useGlobal && this.googleAuth) {
+          // Use global endpoint for Gemini 3 Pro Preview
+          logInfo('Using global endpoint for Gemini 3 Pro Preview', { model });
+          
+          const client = await this.googleAuth.getClient();
+          const tokenResponse = await client.getAccessToken();
+          const token = tokenResponse.token;
+          
+          const url = `https://aiplatform.googleapis.com/v1/projects/${this.projectId}/locations/global/publishers/google/models/${model}:generateContent`;
+          
+          const response = await axios.post(
+            url,
+            {
+              contents: [{ role: 'user', parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: isCloneOperation ? 0.3 : 0.6,
+                topK: isCloneOperation ? 20 : 32,
+                topP: 0.95,
+                maxOutputTokens: maxOutputTokens,
+              }
             },
-            timeout: timeout
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              timeout: timeout
+            }
+          );
+          
+          if (!response.data.candidates || response.data.candidates.length === 0) {
+            throw new Error('Gemini 3 Pro returned no candidates');
           }
-        );
-
-        // Check if response has candidates
-        if (!response.data.candidates || response.data.candidates.length === 0) {
-          logError('Gemini API returned no candidates', undefined, { responseData: response.data });
-          throw new Error('Gemini API returned no content. Response: ' + JSON.stringify(response.data));
+          
+          const candidate = response.data.candidates[0];
+          if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
+            throw new Error('Gemini 3 Pro candidate has no content parts');
+          }
+          
+          content = candidate.content.parts[0].text || '';
+        } else if (this.vertexAI) {
+          // Use Vertex AI SDK for regional models
+          const generativeModel = this.vertexAI.getGenerativeModel({
+            model: model,
+            generationConfig: {
+              temperature: isCloneOperation ? 0.3 : 0.6,
+              topK: isCloneOperation ? 20 : 32,
+              topP: 0.95,
+              maxOutputTokens: maxOutputTokens,
+            },
+          });
+          
+          const result = await generativeModel.generateContent({
+            contents: [{
+              role: 'user',
+              parts: [{ text: prompt }]
+            }]
+          });
+          
+          const response = result.response;
+          if (!response.candidates || response.candidates.length === 0) {
+            throw new Error('Vertex AI returned no candidates');
+          }
+          
+          const candidate = response.candidates[0];
+          if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
+            throw new Error('Vertex AI candidate has no content parts');
+          }
+          
+          content = candidate.content.parts[0].text || '';
+        } else {
+          throw new Error('No authentication method available');
         }
         
-        const candidate = response.data.candidates[0];
-        if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
-          logError('Gemini API candidate has no content', undefined, { candidate });
-          throw new Error('Gemini API candidate has no content parts');
-        }
-        
-        const content = candidate.content.parts[0].text;
         if (!content) {
-          logError('Gemini API content is empty', undefined, { candidate });
-          throw new Error('Gemini API returned empty content');
+          throw new Error('API returned empty content');
         }
         
         logInfo('✅ Gemini response received successfully', { 
           model, 
           contentLength: content.length, 
           contentPreview: content.substring(0, 200),
-          isGemini30Pro: model === 'gemini-3.0-pro',
-          modelUsed: model
+          isGemini3Pro: model === 'gemini-3-pro-preview',
+          modelUsed: model,
+          projectId: this.projectId
         });
         
         // Log success with model version for verification
-        if (model === 'gemini-3.0-pro') {
-          logInfo('🎯 SUCCESS: Using Gemini 3.0 Pro (latest flagship model)', { model });
+        if (model === 'gemini-3-pro-preview') {
+          logInfo('🎯 SUCCESS: Using Gemini 3 Pro Preview (latest flagship model)', { model });
         }
         
         return this.parseGeneratedCode(content);
       } catch (error: any) {
         lastError = error;
-        const status = error.response?.status;
-        const errorCode = error.response?.data?.error?.code;
+        const errorMessage = error.message || error.response?.data?.error?.message || '';
         
-        // If quota exceeded (429) or resource exhausted, try next model
-        if (status === 429 || errorCode === 429 || errorCode === 'RESOURCE_EXHAUSTED') {
+        // If quota exceeded or resource exhausted, try next model
+        if (errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED') || errorMessage.includes('429')) {
           logInfo(`⚠️ Model ${model} quota exceeded, trying next model in chain`, { 
             model, 
-            status, 
-            errorCode,
-            nextModel: models[models.indexOf(model) + 1] || 'none'
+            error: errorMessage,
+            nextModel: models[models.findIndex(m => m.name === model) + 1]?.name || 'none'
           });
-          continue; // Try next model
+          continue;
         }
         
-        // If model not found (404), try next model (3.0 might not be available yet)
-        if (status === 404) {
-          logInfo(`⚠️ Model ${model} not found (may not be available), trying next model`, { 
+        // If model not found, try next model
+        if (errorMessage.includes('NOT_FOUND') || errorMessage.includes('not found') || errorMessage.includes('404')) {
+          logInfo(`⚠️ Model ${model} not found, trying next model`, { 
             model, 
-            status,
-            nextModel: models[models.indexOf(model) + 1] || 'none',
-            error: error.response?.data?.error?.message || error.message
+            error: errorMessage,
+            nextModel: models[models.findIndex(m => m.name === model) + 1]?.name || 'none'
           });
-          continue; // Try next model
+          continue;
         }
         
         // If authentication error, don't try other models
-        if (status === 401 || status === 403) {
-          throw new Error(`Gemini API authentication failed. Please check your API key. Status: ${status}`);
+        if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('UNAUTHENTICATED') || errorMessage.includes('403') || errorMessage.includes('401')) {
+          throw new Error(`Gemini API authentication failed. Please check your service account credentials. Error: ${errorMessage}`);
         }
         
         // For other errors, try next model
         logInfo(`⚠️ Model ${model} failed, trying next model in fallback chain`, { 
           model, 
-          status, 
-          error: error.message,
-          nextModel: models[models.indexOf(model) + 1] || 'none',
-          responseData: JSON.stringify(error.response?.data || {}),
-          keyUsed: this.apiKey.substring(0, 10) + '...' + this.apiKey.substring(this.apiKey.length - 4)
+          error: errorMessage,
+          nextModel: models[models.findIndex(m => m.name === model) + 1]?.name || 'none'
         });
         continue;
       }
     }
     
-    // If we get here, all models failed (including Gemini 3.0 Pro)
-    logError('❌ All Gemini models failed (including 3.0 Pro)', lastError, {
-      modelsTried: models,
-      primaryModel: 'gemini-3.0-pro',
-      lastStatus: lastError?.response?.status,
-      lastErrorCode: lastError?.response?.data?.error?.code,
-      lastMessage: lastError?.response?.data?.error?.message,
-      note: 'Tried Gemini 3.0 Pro first, then fallbacks'
+    // If we get here, all models failed
+    logError('❌ All Gemini models failed', lastError, {
+      modelsTried: models.map(m => m.name),
+      primaryModel: 'gemini-3-pro-preview',
+      lastMessage: lastError?.message || lastError?.response?.data?.error?.message,
+      note: 'Tried Gemini 3 Pro Preview first, then fallbacks'
     });
     
-    const errorMessage = lastError?.response?.data?.error?.message || lastError?.message || 'Unknown error';
-    const status = lastError?.response?.status;
+    const errorMessage = lastError?.message || lastError?.response?.data?.error?.message || 'Unknown error';
     
     // Provide helpful error messages
-    if (status === 400 && (errorMessage?.toLowerCase().includes('expired') || errorMessage?.toLowerCase().includes('invalid'))) {
-      throw new Error(`Gemini API key expired or invalid. Please get a new key from https://aistudio.google.com/apikey and update GEMINI_API_KEY in your backend/.env file. Error: ${errorMessage}`);
+    if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('UNAUTHENTICATED')) {
+      throw new Error(`Gemini API authentication failed. Please ensure your service account has the "Vertex AI User" role. Error: ${errorMessage}`);
     }
-    if (status === 401 || status === 403) {
-      throw new Error(`Gemini API authentication failed. Please check your API key is valid and update GEMINI_API_KEY in your backend/.env file. Error: ${errorMessage}`);
-    }
-    if (status === 429 || lastError?.response?.data?.error?.code === 429) {
-      throw new Error(`Gemini API quota exceeded. ${errorMessage}. Please check your billing/quota at https://ai.google.dev/`);
+    if (errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+      throw new Error(`Gemini API quota exceeded. ${errorMessage}. Please check your Google Cloud billing/quota.`);
     }
     
     throw new Error(`Gemini API failed with all models: ${errorMessage}`);
@@ -929,83 +993,80 @@ LOVABLE-LEVEL QUALITY BAR (MUST FOLLOW):
     }
     
     if (isModification) {
-      // Extract original website type from chat history
-      const firstUserMsg = chatHistory?.find((msg: any) => msg.role === 'user');
-      const originalWebsiteType = firstUserMsg?.content?.toLowerCase() || '';
-      const isEcommerce = originalWebsiteType.includes('e-commerce') || originalWebsiteType.includes('ecommerce') || originalWebsiteType.includes('store') || originalWebsiteType.includes('shop');
-      const isSaaS = originalWebsiteType.includes('saas') || originalWebsiteType.includes('software');
-      const isRestaurant = originalWebsiteType.includes('restaurant') || originalWebsiteType.includes('food') || originalWebsiteType.includes('menu') || originalWebsiteType.includes('cafe');
+      // =====================================================
+      // WEBSITE EDITOR MODE - Make targeted changes ONLY
+      // =====================================================
       
-      // Detect the type of modification requested
-      const modLower = originalPrompt.toLowerCase();
-      const isNameChange = modLower.includes('change') && (modLower.includes('name') || modLower.includes('title') || modLower.includes('brand'));
-      const isColorChange = modLower.includes('change') && modLower.includes('color');
-      const isTextChange = modLower.includes('change') && (modLower.includes('text') || modLower.includes('say') || modLower.includes('wording'));
-      const isMinorChange = isNameChange || isColorChange || isTextChange;
-      
-      // Build modification prompt with COPY-PASTE-MODIFY approach
-      let modificationPrompt = `You are a CODE EDITOR, not a website generator.
+      // Build modification prompt with STRICT preservation rules
+      let modificationPrompt = `🛠️ WEBSITE EDITOR MODE - NOT A GENERATOR 🛠️
 
-🚨🚨🚨 CRITICAL: COPY-PASTE-THEN-MODIFY APPROACH 🚨🚨🚨
+You are a SURGICAL CODE EDITOR. Your ONLY job is to make the EXACT change the user requested.
+You are NOT a website generator. You are NOT redesigning anything. You are making a TARGETED EDIT.
 
-Your job is to take the EXISTING code below and make ONE SMALL CHANGE.
-You are NOT regenerating the website. You are EDITING existing code.
-
-STEP 1: Copy the ENTIRE existing HTML code below EXACTLY as-is
-STEP 2: Find the specific text/element that needs to change
-STEP 3: Make ONLY that one change
-STEP 4: Return the modified code
-
-USER REQUEST: "${originalPrompt}"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 USER'S EDIT REQUEST: "${originalPrompt}"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ${currentCodeContext}
 
-🎯 WHAT TO CHANGE:
-${isNameChange ? `- Find the business/brand name in the HTML and replace it with the new name
-- Look in: <title>, <h1>, navigation logo, footer, anywhere the brand name appears
-- Change ONLY the name text, keep everything else identical` : ''}
-${isColorChange ? `- Find the specific color values in the CSS/styles
-- Change ONLY those color values
-- Keep all other styles, structure, and content identical` : ''}
-${isTextChange ? `- Find the specific text mentioned by the user
-- Change ONLY that text
-- Keep all other content, styles, and structure identical` : ''}
-${!isMinorChange ? `- Make ONLY the specific change requested
-- Do NOT redesign or regenerate other parts` : ''}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚨 CRITICAL RULES - YOU MUST FOLLOW THESE EXACTLY:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-❌ ABSOLUTELY DO NOT:
-- Change the website type (${isEcommerce ? 'keep it as e-commerce' : isRestaurant ? 'keep it as restaurant' : isSaaS ? 'keep it as SaaS' : 'keep the same type'})
-- Redesign sections that weren't mentioned
-- Change colors that weren't mentioned
-- Remove or add sections
-- Change the navigation structure
-- Modify images or their URLs
-- Change fonts or spacing
-- Rewrite content that wasn't mentioned
-- Generate a "new and improved" version
+1️⃣ PRESERVE EVERYTHING:
+   - Keep the EXACT same HTML structure
+   - Keep the EXACT same CSS styles
+   - Keep the EXACT same layout and sections
+   - Keep the EXACT same colors (unless user asks to change them)
+   - Keep the EXACT same fonts
+   - Keep the EXACT same images
+   - Keep the EXACT same navigation
+   - Keep the EXACT same footer
 
-✅ CORRECT APPROACH:
-If user says "change the name to Pizza Palace":
-1. Find: <span class="gradient-text">Sol y Sabor</span>
-2. Change to: <span class="gradient-text">Pizza Palace</span>
-3. Find all other occurrences of "Sol y Sabor" and change to "Pizza Palace"
-4. Return the ENTIRE HTML with ONLY those name changes
+2️⃣ CHANGE ONLY WHAT USER ASKED:
+   - If user says "add multi-page" → Add navigation links and create additional pages
+   - If user says "change name" → Change ONLY the name text, nothing else
+   - If user says "change color" → Change ONLY that specific color
+   - If user says "add section" → Add section WITHOUT modifying existing sections
 
-⚠️ YOUR OUTPUT MUST BE:
-- 99% IDENTICAL to the input code
-- Only the specifically requested element changed
-- Same file structure (if multi-page, return ALL pages)
-- Complete, valid HTML
+3️⃣ OUTPUT FORMAT:
+   Return the COMPLETE modified HTML. For multi-page sites:
+   === FILE: index.html ===
+   [complete HTML - preserve original design]
+   
+   === FILE: about.html ===
+   [complete HTML - MATCH the style of index.html exactly]
+   
+   (etc for each page)
+
+4️⃣ STYLE MATCHING FOR NEW PAGES:
+   When adding new pages, they MUST:
+   - Use the EXACT same CSS variables and colors from index.html
+   - Use the EXACT same navigation structure
+   - Use the EXACT same footer
+   - Use the EXACT same fonts and typography
+   - Feel like part of the SAME website
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+❌ FORBIDDEN ACTIONS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Do NOT redesign the website
+- Do NOT change the color scheme (unless asked)
+- Do NOT change the layout structure (unless asked)
+- Do NOT remove existing sections
+- Do NOT change text content that wasn't mentioned
+- Do NOT "improve" or "enhance" anything not requested
+- Do NOT change the overall look and feel
+- Do NOT generate a fresh design
+- Do NOT interpret the request broadly
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ YOUR TASK: Apply ONLY this edit: "${originalPrompt}"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ${wantsStripe ? this.getStripeIntegrationInstructions() : ''}
 
-Return the COMPLETE modified HTML. For multi-page sites, use:
-=== FILE: index.html ===
-[complete HTML]
-
-=== FILE: about.html ===
-[complete HTML]
-(etc for each page)`;
+Now return the complete modified code with ONLY the requested change applied:`;
       
       return modificationPrompt;
     }
@@ -2039,16 +2100,16 @@ Create beautiful, functional payment buttons that are ready to use!`;
     if (!currentCode || Object.keys(currentCode).length === 0) return '';
     
     let context = `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📄 EXISTING WEBSITE CODE - YOU MUST PRESERVE THIS DESIGN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🚨🚨🚨 EXISTING CODE - COPY THIS EXACTLY AND MODIFY ONLY THE REQUESTED PART 🚨🚨🚨
+The code below is the user's CURRENT website. This is what they see right now.
+Your job is to make a SURGICAL EDIT - change ONLY what the user asked for.
 
-The following is the COMPLETE current website code. Your job is to:
-1. COPY this entire code
-2. Find the specific element/text to change
-3. Make ONLY that change
-4. Return the result
-
-DO NOT regenerate. DO NOT redesign. COPY and EDIT.
+⚠️ WARNING: If you change the design, colors, layout, or structure beyond
+what the user explicitly requested, the user will be frustrated and confused.
+Their website should look 99% the same after your edit.
 
 `;
     
@@ -2063,13 +2124,14 @@ DO NOT regenerate. DO NOT redesign. COPY and EDIT.
         ? htmlContent.substring(0, maxLength) + `\n<!-- ... [${htmlContent.length - maxLength} more characters truncated] ... -->`
         : htmlContent;
       
-      context += `\n=== FILE: ${filename} (COPY AND EDIT) ===\n\`\`\`html\n${truncatedHtml}\n\`\`\`\n`;
+      context += `\n=== CURRENT FILE: ${filename} ===\n\`\`\`html\n${truncatedHtml}\n\`\`\`\n`;
     });
     
     context += `
-
-⚠️ IMPORTANT: The code above is the EXACT code to modify. 
-Your output should be 99% identical - only the requested change should differ.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎯 PRESERVE: Colors, fonts, layout, sections, navigation, footer
+🎯 CHANGE: ONLY what the user explicitly requested above
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
     
     return context;
@@ -2238,31 +2300,48 @@ Your output should be 99% identical - only the requested change should differ.
 
   private fixImageUrls(html: string): string {
     // Fix broken Unsplash URLs that are missing the domain
-    // Pattern: photo-XXXXXXXX-XXXXXXXX (without https://images.unsplash.com/)
+    // Pattern 1: photo-XXXXXXXX-XXXXXXXX (without https://images.unsplash.com/)
     // This handles cases like: src="photo-1554971672-091448c99a35"
-    const brokenUnsplashPattern = /src=["'](photo-\d+-\d+[^"']*)["']/gi;
+    const brokenUnsplashPattern = /src=["'](photo-\d+-[a-zA-Z0-9]+[^"']*)["']/gi;
     html = html.replace(brokenUnsplashPattern, (match, photoId) => {
-      // Extract just the photo ID part (remove any query params that might be there)
       const cleanPhotoId = photoId.split('?')[0].split('&')[0];
       const fixedUrl = `https://images.unsplash.com/${cleanPhotoId}?w=800&h=600&fit=crop`;
       logInfo('Fixed broken Unsplash URL', { original: photoId, fixed: fixedUrl });
       return `src="${fixedUrl}"`;
     });
     
+    // Pattern 2: Numeric Unsplash IDs like "1497366216548-37526070297c"
+    // These are raw Unsplash photo IDs without the "photo-" prefix
+    const numericUnsplashPattern = /src=["'](\d{10,}-[a-zA-Z0-9]+)["']/gi;
+    html = html.replace(numericUnsplashPattern, (match, photoId) => {
+      const fixedUrl = `https://images.unsplash.com/photo-${photoId}?w=800&h=600&fit=crop`;
+      logInfo('Fixed numeric Unsplash URL', { original: photoId, fixed: fixedUrl });
+      return `src="${fixedUrl}"`;
+    });
+    
     // Also fix URLs in quotes that are just photo IDs
-    const brokenQuotedPattern = /(["'])(photo-\d+-\d+[^"']*)(["'])/g;
+    const brokenQuotedPattern = /(["'])(photo-\d+-[a-zA-Z0-9]+[^"']*)(["'])/g;
     html = html.replace(brokenQuotedPattern, (match, quote1, photoId, quote2) => {
+      if (!photoId.startsWith('https://')) {
       const cleanPhotoId = photoId.split('?')[0].split('&')[0];
       const fixedUrl = `https://images.unsplash.com/${cleanPhotoId}?w=800&h=600&fit=crop`;
       logInfo('Fixed broken quoted Unsplash URL', { original: photoId, fixed: fixedUrl });
+        return `${quote1}${fixedUrl}${quote2}`;
+      }
+      return match;
+    });
+    
+    // Fix numeric IDs in quotes too
+    const numericQuotedPattern = /(["'])(\d{10,}-[a-zA-Z0-9]+)(["'])/g;
+    html = html.replace(numericQuotedPattern, (match, quote1, photoId, quote2) => {
+      const fixedUrl = `https://images.unsplash.com/photo-${photoId}?w=800&h=600&fit=crop`;
+      logInfo('Fixed numeric quoted Unsplash URL', { original: photoId, fixed: fixedUrl });
       return `${quote1}${fixedUrl}${quote2}`;
     });
     
     // Fix any src attributes that are just photo IDs without proper URL
-    // Handle cases where src might be just the photo ID
-    const brokenSrcPattern = /src=["']([^"']*photo-\d+-\d+[^"']*)["']/gi;
+    const brokenSrcPattern = /src=["']([^"']*photo-\d+-[a-zA-Z0-9]+[^"']*)["']/gi;
     html = html.replace(brokenSrcPattern, (match, url) => {
-      // If it doesn't start with http:// or https://, it's broken
       if (!url.match(/^https?:\/\//)) {
         const cleanPhotoId = url.split('?')[0].split('&')[0];
         const fixedUrl = `https://images.unsplash.com/${cleanPhotoId}?w=800&h=600&fit=crop`;
@@ -2276,11 +2355,17 @@ Your output should be 99% identical - only the requested change should differ.
     // Look for src attributes that don't start with http:// or https:// or / or data:
     const brokenImagePattern = /src=["'](?!https?:\/\/|data:|\.\/|\/|#)([^"']+)["']/g;
     html = html.replace(brokenImagePattern, (match, brokenUrl) => {
-      // If it looks like a photo ID, use Unsplash
-      if (brokenUrl.match(/^photo-\d+-\d+/)) {
+      // If it looks like a photo ID (photo-XXX or numeric-XXX), use Unsplash
+      if (brokenUrl.match(/^photo-\d+-[a-zA-Z0-9]+/)) {
         const cleanPhotoId = brokenUrl.split('?')[0].split('&')[0];
         const fixedUrl = `https://images.unsplash.com/${cleanPhotoId}?w=800&h=600&fit=crop`;
         logInfo('Fixed broken image URL', { original: brokenUrl, fixed: fixedUrl });
+        return `src="${fixedUrl}"`;
+      }
+      // If it looks like a numeric Unsplash ID
+      if (brokenUrl.match(/^\d{10,}-[a-zA-Z0-9]+/)) {
+        const fixedUrl = `https://images.unsplash.com/photo-${brokenUrl}?w=800&h=600&fit=crop`;
+        logInfo('Fixed numeric image URL', { original: brokenUrl, fixed: fixedUrl });
         return `src="${fixedUrl}"`;
       }
       // Otherwise use a placeholder service

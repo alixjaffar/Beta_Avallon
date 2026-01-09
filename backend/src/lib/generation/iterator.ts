@@ -9,14 +9,26 @@ import axios from 'axios';
 
 export class SiteIterator {
   private apiKey: string;
-  private baseUrl: string = 'https://generativelanguage.googleapis.com/v1beta';
+  private baseUrl: string;
+  private useVertexAI: boolean;
 
   constructor() {
-    const apiKey = process.env.GEMINI_API_KEY || '';
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_CLOUD_API_KEY || '';
     this.apiKey = apiKey.replace(/^["']|["']$/g, '').trim();
     
+    // Check if using Vertex AI (Google Cloud) or standard Gemini API
+    this.useVertexAI = process.env.USE_VERTEX_AI === 'true' || this.apiKey.startsWith('AQ.');
+    const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID || process.env.GCP_PROJECT_ID || '';
+    const region = process.env.GOOGLE_CLOUD_REGION || process.env.GCP_REGION || 'us-central1';
+    
+    if (this.useVertexAI) {
+      this.baseUrl = `https://${region}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${region}/publishers/google/models`;
+    } else {
+      this.baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
+    }
+    
     if (!this.apiKey) {
-      throw new Error('GEMINI_API_KEY not configured');
+      throw new Error('GEMINI_API_KEY or GOOGLE_CLOUD_API_KEY not configured');
     }
   }
 
@@ -37,16 +49,28 @@ export class SiteIterator {
 
       const prompt = buildIterationPrompt(userRequest, currentSpec, chatHistory);
       
-      // Use Gemini models - prioritize 2.5 Pro as most reliable
-      const models = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-3.0-pro', 'gemini-3.0-flash'];
+      // Use Gemini models - prioritize 2.5 Pro (Gemini 3 Pro) as most reliable
+      const models = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash-exp', 'gemini-1.5-pro'];
       let lastError: any = null;
 
       for (const model of models) {
         try {
-          logInfo('Calling Gemini for iteration', { model });
+          logInfo('Calling Gemini for iteration', { model, useVertexAI: this.useVertexAI });
+
+          // Build URL and headers based on API type
+          let apiUrl: string;
+          let headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          
+          if (this.useVertexAI) {
+            apiUrl = `${this.baseUrl}/${model}:generateContent`;
+            headers['Authorization'] = `Bearer ${this.apiKey}`;
+            headers['x-goog-api-key'] = this.apiKey;
+          } else {
+            apiUrl = `${this.baseUrl}/models/${model}:generateContent?key=${this.apiKey}`;
+          }
 
           const response = await axios.post(
-            `${this.baseUrl}/models/${model}:generateContent?key=${this.apiKey}`,
+            apiUrl,
             {
               contents: [{
                 parts: [{
@@ -62,9 +86,7 @@ export class SiteIterator {
               }
             },
             {
-              headers: {
-                'Content-Type': 'application/json',
-              },
+              headers,
               timeout: 120000
             }
           );

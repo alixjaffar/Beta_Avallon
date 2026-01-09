@@ -1,74 +1,70 @@
+// API endpoint to cancel subscription
+// CHANGELOG: 2025-01-07 - Created for subscription cancellation
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/auth/getUser";
-import { prisma } from "@/lib/db";
-import { requireStripeClient } from "@/lib/clients/stripe";
+import { getSubscriptionByUserId, upsertSubscription } from "@/data/subscriptions";
+import { getStripeClient } from "@/lib/clients/stripe";
 import { logInfo, logError } from "@/lib/log";
+import { getCorsHeaders } from "@/lib/cors";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
-
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 200, headers: corsHeaders });
+export async function OPTIONS(req: NextRequest) {
+  return new NextResponse(null, { status: 200, headers: getCorsHeaders(req) });
 }
 
-/**
- * Cancel user's subscription
- */
 export async function POST(req: NextRequest) {
+  const corsHeaders = getCorsHeaders(req);
+  
   try {
     const user = await getUser();
-    const stripe = requireStripeClient();
-
-    // Find user's subscription
-    const subscription = await prisma.subscription.findFirst({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    if (!subscription || !subscription.stripeSubscriptionId) {
-      return NextResponse.json(
-        { error: "No active subscription found" },
-        { status: 404, headers: corsHeaders }
-      );
+    
+    // Get current subscription
+    const subscription = getSubscriptionByUserId(user.id);
+    
+    if (!subscription || subscription.status !== 'active') {
+      return NextResponse.json({
+        error: "No active subscription found",
+      }, { status: 400, headers: corsHeaders });
     }
 
-    // Cancel at period end (don't cancel immediately)
-    const canceledSubscription = await stripe.subscriptions.update(
-      subscription.stripeSubscriptionId,
-      {
-        cancel_at_period_end: true,
+    // If there's a Stripe subscription, cancel it there too
+    if (subscription.stripeSubscriptionId) {
+      const stripe = getStripeClient();
+      if (stripe) {
+        try {
+          await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
+            cancel_at_period_end: true,
+          });
+          logInfo('Stripe subscription set to cancel at period end', { 
+            subscriptionId: subscription.stripeSubscriptionId 
+          });
+        } catch (stripeError: any) {
+          logError('Failed to cancel Stripe subscription', stripeError);
+          // Continue with local cancellation
+        }
       }
-    );
+    }
 
-    // Update database
-    await prisma.subscription.update({
-      where: { id: subscription.id },
-      data: {
-        cancelAtPeriodEnd: true,
-        status: 'canceled',
-      },
+    // Update local subscription status
+    upsertSubscription({
+      userId: user.id,
+      plan: 'free',
+      status: 'canceled',
     });
 
-    logInfo('Subscription canceled', { 
-      userId: user.id, 
-      subscriptionId: subscription.stripeSubscriptionId,
-      cancelAt: canceledSubscription.cancel_at 
-    });
+    logInfo('Subscription cancelled', { userId: user.id, previousPlan: subscription.plan });
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
-      message: "Subscription will cancel at the end of the billing period",
-      cancelAt: canceledSubscription.cancel_at ? new Date(canceledSubscription.cancel_at * 1000) : null,
+      message: "Your subscription has been cancelled. You'll retain access until the end of your billing period.",
     }, { headers: corsHeaders });
 
   } catch (error: any) {
     logError('Failed to cancel subscription', error);
-    return NextResponse.json(
-      { error: error.message || "Failed to cancel subscription" },
-      { status: 500, headers: corsHeaders }
-    );
+    
+    if (error.message === 'Authentication required') {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401, headers: corsHeaders });
+    }
+    
+    return NextResponse.json({ error: error.message || "Failed to cancel subscription" }, { status: 500, headers: corsHeaders });
   }
 }

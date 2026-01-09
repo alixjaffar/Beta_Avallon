@@ -9,7 +9,8 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 5000, // 5 second timeout for all API calls
+  timeout: 30000, // 30 second timeout for all API calls
+  withCredentials: true, // Include credentials for CORS
 });
 
 // Add user email to all requests for proper data isolation
@@ -28,6 +29,18 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// Add response interceptor to handle errors gracefully
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Don't log network errors in production
+    if (error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED') {
+      console.warn('Network error:', error.message);
+    }
+    return Promise.reject(error);
+  }
+);
 
 export interface Site {
   id: string;

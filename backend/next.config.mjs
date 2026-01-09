@@ -1,7 +1,17 @@
+import { dirname, resolve } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   distDir: '.next',
-  experimental: { serverActions: { bodySizeLimit: '2mb' } },
+  experimental: { 
+    serverActions: { bodySizeLimit: '2mb' },
+  },
+  turbopack: {
+    root: __dirname,
+  },
   webpack: (config) => {
     config.watchOptions = {
       ...config.watchOptions,

@@ -3,15 +3,25 @@ import { emailService } from "@/lib/emailService";
 import { signupStorage } from "@/lib/signupStorage";
 import { prisma } from "@/lib/db";
 import { z } from "zod";
+import { getCorsHeaders } from "@/lib/cors";
 
 const SignupSchema = z.object({
   name: z.string().min(1, "Name is required"),
   email: z.string().email("Valid email is required"),
-  birthday: z.string().min(1, "Birthday is required"),
+  birthday: z.string().optional(),
   emailSubscription: z.boolean().default(false),
+  firebaseUid: z.string().optional(),
 });
 
+export async function OPTIONS(req: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: getCorsHeaders(req),
+});
+}
+
 export async function POST(req: NextRequest) {
+  const corsHeaders = getCorsHeaders(req);
   try {
     const body = await req.json();
     const validatedData = SignupSchema.parse(body);
@@ -25,7 +35,7 @@ export async function POST(req: NextRequest) {
       if (existingUser) {
         return NextResponse.json(
           { error: "An account with this email already exists. Please log in instead." },
-          { status: 409 }
+          { status: 409, headers: corsHeaders }
         );
       }
     } catch (dbError) {
@@ -41,7 +51,7 @@ export async function POST(req: NextRequest) {
       if (existingSignup) {
         return NextResponse.json(
           { error: "This email is already registered. Please log in instead." },
-          { status: 409 }
+          { status: 409, headers: corsHeaders }
         );
       }
     } catch (signupError) {
@@ -77,7 +87,7 @@ export async function POST(req: NextRequest) {
       message: "Signup processed successfully",
       signupId: signup.id,
       notificationSent,
-    });
+    }, { headers: corsHeaders });
 
   } catch (error) {
     console.error("Signup notification error:", error);
@@ -85,20 +95,20 @@ export async function POST(req: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { error: "Invalid data", details: error.errors },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
     if (error instanceof Error && error.message.includes('already registered')) {
       return NextResponse.json(
         { error: error.message },
-        { status: 409 }
+        { status: 409, headers: corsHeaders }
       );
     }
 
     return NextResponse.json(
       { error: "Failed to process signup notification" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }

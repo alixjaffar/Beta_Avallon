@@ -61,6 +61,10 @@ export async function POST(req: NextRequest) {
         if (session.mode === 'subscription' && session.subscription) {
           await handleSubscriptionCheckout(session);
         }
+        // Handle credit purchase checkout (pay-as-you-go)
+        else if (session.metadata?.type === 'credit_purchase') {
+          await handleCreditPurchase(session);
+        }
         // Handle domain purchase checkout
         else if (session.metadata?.type === 'domain_purchase') {
           const domain = session.metadata.domain;
@@ -205,6 +209,79 @@ async function handleSubscriptionCheckout(session: Stripe.Checkout.Session) {
     logInfo('Subscription activated', { userId, plan: finalPlan, creditsAdded: credits });
   } catch (error: any) {
     logError('Failed to handle subscription checkout', error, { sessionId: session.id });
+  }
+}
+
+/**
+ * Handle pay-as-you-go credit purchase
+ */
+async function handleCreditPurchase(session: Stripe.Checkout.Session) {
+  try {
+    const userId = session.client_reference_id || session.metadata?.userId;
+    const userEmail = session.metadata?.userEmail || session.customer_email;
+    const quantity = parseInt(session.metadata?.quantity || '0', 10);
+    
+    if (!userId && !userEmail) {
+      logError('No user ID or email in credit purchase session', new Error('Missing user info'), { sessionId: session.id });
+      return;
+    }
+
+    if (quantity <= 0) {
+      logError('Invalid credit quantity', new Error('quantity <= 0'), { sessionId: session.id, quantity });
+      return;
+    }
+
+    logInfo('Processing credit purchase', { userId, userEmail, quantity, sessionId: session.id });
+
+    // Try to find user by ID first, then by email
+    let user = null;
+    if (userId) {
+      user = await prisma.user.findUnique({ where: { id: userId } });
+    }
+    if (!user && userEmail) {
+      user = await prisma.user.findUnique({ where: { email: userEmail } });
+    }
+
+    if (user) {
+      // Update user in database
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          credits: {
+            increment: quantity,
+          },
+        },
+      });
+      logInfo('Credits added to user account', { userId: user.id, creditsAdded: quantity, newTotal: user.credits + quantity });
+    } else {
+      // Fallback: Update JSON file for users not in database
+      const fs = await import('fs');
+      const path = await import('path');
+      const creditsPath = path.join(process.cwd(), 'user-credits.json');
+      
+      let creditsData: Record<string, { credits: number; lastUpdated: string }> = {};
+      try {
+        if (fs.existsSync(creditsPath)) {
+          creditsData = JSON.parse(fs.readFileSync(creditsPath, 'utf-8'));
+        }
+      } catch {
+        creditsData = {};
+      }
+
+      const email = userEmail || userId;
+      const currentCredits = creditsData[email]?.credits || 0;
+      creditsData[email] = {
+        credits: currentCredits + quantity,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      fs.writeFileSync(creditsPath, JSON.stringify(creditsData, null, 2));
+      logInfo('Credits added to JSON file', { email, creditsAdded: quantity, newTotal: creditsData[email].credits });
+    }
+
+    logInfo('Credit purchase completed', { userId, userEmail, quantity });
+  } catch (error: any) {
+    logError('Failed to handle credit purchase', error, { sessionId: session.id });
   }
 }
 

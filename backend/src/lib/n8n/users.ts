@@ -93,147 +93,81 @@ export async function createN8nUser(input: CreateN8nUserInput): Promise<N8nUser>
         
         logInfo('n8n user created via API', { userId: user.id, email: user.email, isPending: user.isPending });
         
-        // If user is pending, try to activate them automatically
+        // If user is pending, try to activate them using password change method
         if (user.isPending) {
-          try {
-            logInfo('User is pending, attempting to activate via API key', { userId: user.id, email: user.email });
-            
-            // Try to activate user by updating isPending to false
-            const cleanApiKey = N8N_KEY.trim().replace(/^["']|["']$/g, '');
-            await axios.patch(
-              `${N8N}/api/v1/users/${user.id}`,
-              { isPending: false },
-              {
-                headers: {
-                  'X-N8N-API-KEY': cleanApiKey,
-                  'Content-Type': 'application/json',
+          logInfo('User is pending, attempting activation via password change', { userId: user.id, email: user.email });
+          
+          // Method 1: Try to change password via admin session (this activates the user)
+          if (N8N_ADMIN_EMAIL && N8N_ADMIN_PASSWORD) {
+            try {
+              // Login as admin
+              const loginResponse = await axios.post(
+                `${N8N}/rest/login`,
+                {
+                  emailOrLdapLoginId: N8N_ADMIN_EMAIL,
+                  password: N8N_ADMIN_PASSWORD,
                 },
-              }
-            );
-            
-            logInfo('User activated successfully via API key', { userId: user.id, email: user.email });
-            user.isPending = false; // Update local user object
-          } catch (activateError: any) {
-            // If activation fails, try alternative method: accept invitation URL programmatically
-            if (user.inviteAcceptUrl) {
-              try {
-                logInfo('Trying to accept invitation URL programmatically', { 
-                  userId: user.id, 
-                  email: user.email,
-                  inviteUrl: user.inviteAcceptUrl 
-                });
-                
-                // Extract invitation token from URL if possible
-                // n8n invitation URLs typically look like: /signup?inviterId=xxx or /signup/xxx
-                try {
-                  let inviteToken = null;
-                  
-                  // Try to parse URL
-                  try {
-                    const inviteUrl = new URL(user.inviteAcceptUrl.startsWith('http') 
-                      ? user.inviteAcceptUrl 
-                      : `${N8N}${user.inviteAcceptUrl}`);
-                    
-                    // Try query params first
-                    inviteToken = inviteUrl.searchParams.get('inviterId') || 
-                                 inviteUrl.searchParams.get('token') ||
-                                 inviteUrl.searchParams.get('inviteToken');
-                    
-                    // If no token in query, try path
-                    if (!inviteToken) {
-                      const pathParts = inviteUrl.pathname.split('/').filter(p => p);
-                      const lastPart = pathParts[pathParts.length - 1];
-                      if (lastPart && lastPart !== 'signup') {
-                        inviteToken = lastPart;
-                      }
-                    }
-                  } catch (urlParseError) {
-                    // If URL parsing fails, try to extract from string directly
-                    const urlString = user.inviteAcceptUrl;
-                    // Try to find token patterns: /signup/TOKEN or ?token=TOKEN
-                    const pathMatch = urlString.match(/\/signup\/([^\/\?]+)/);
-                    const queryMatch = urlString.match(/[?&](?:token|inviterId|inviteToken)=([^&]+)/);
-                    inviteToken = queryMatch?.[1] || pathMatch?.[1];
-                  }
-                  
-                  // If still no token, try to get from invitations API
-                  if (!inviteToken) {
-                    try {
-                      const cleanApiKey = N8N_KEY.trim().replace(/^["']|["']$/g, '');
-                      const invitationsResponse = await axios.get(
-                        `${N8N}/api/v1/invitations`,
-                        {
-                          headers: {
-                            'X-N8N-API-KEY': cleanApiKey,
-                            'Content-Type': 'application/json',
-                          },
-                        }
-                      );
-                      
-                      const invitations = invitationsResponse.data?.data || invitationsResponse.data || [];
-                      const userInvitation = invitations.find((inv: any) => inv.email === user.email);
-                      
-                      if (userInvitation?.id) {
-                        inviteToken = userInvitation.id;
-                        logInfo('Found invitation token from API', { 
-                          userId: user.id, 
-                          email: user.email,
-                          token: inviteToken 
-                        });
-                      }
-                    } catch (inviteApiError) {
-                      logInfo('Could not fetch invitation token from API', { userId: user.id, email: user.email });
-                    }
-                  }
-                  
-                  if (inviteToken && inviteToken !== 'signup') {
-                    // Try to accept invitation via API
-                    const cleanApiKey = N8N_KEY.trim().replace(/^["']|["']$/g, '');
-                    await axios.post(
-                      `${N8N}/rest/invitations/${inviteToken}/accept`,
-                      { password: password },
-                      {
-                        headers: {
-                          'X-N8N-API-KEY': cleanApiKey,
-                          'Content-Type': 'application/json',
-                        },
-                      }
-                    );
-                    logInfo('Invitation accepted successfully', { userId: user.id, email: user.email, token: inviteToken });
-                    user.isPending = false;
-                  } else {
-                    logInfo('Could not extract valid invitation token', { 
-                      userId: user.id, 
-                      email: user.email,
-                      inviteAcceptUrl: user.inviteAcceptUrl 
-                    });
-                  }
-                } catch (urlError: any) {
-                  // If URL parsing fails, log but don't fail
-                  logInfo('Could not parse invitation URL, skipping invitation acceptance', { 
-                    userId: user.id, 
-                    email: user.email,
-                    error: urlError.message 
-                  });
+                {
+                  headers: { 'Content-Type': 'application/json' },
+                  timeout: 10000,
                 }
-              } catch (inviteError: any) {
-                logError('Failed to accept invitation programmatically', inviteError, { 
-                  userId: user.id, 
-                  email: user.email 
-                });
+              );
+              
+              const sessionCookie = loginResponse.headers['set-cookie']?.[0];
+              
+              if (sessionCookie) {
+                // Change user's password via admin - this also activates them
+                await axios.patch(
+                  `${N8N}/rest/users/${user.id}/password`,
+                  { newPassword: password },
+                  {
+                    headers: {
+                      'Cookie': sessionCookie,
+                      'Content-Type': 'application/json',
+                    },
+                  }
+                );
+                
+                logInfo('User activated via admin password change', { userId: user.id, email: user.email });
+                user.isPending = false;
               }
-            }
-            
-            // If both methods fail, log warning but don't throw - user was created
-            if (user.isPending) {
-              logError('Failed to activate user via API key (non-critical)', activateError, { 
+            } catch (adminError: any) {
+              logInfo('Admin password change failed, trying API method', { 
                 userId: user.id, 
                 email: user.email,
-                note: 'User can still be activated manually in n8n admin UI'
+                error: adminError.message 
               });
-              console.warn(`⚠️ n8n user ${user.email} is pending. Attempted auto-activation failed.`);
-              console.warn(`   Activate manually in n8n admin UI: Settings → Users → Activate`);
             }
+          }
+          
+          // Method 2: Try direct API activation if admin method failed
+          if (user.isPending) {
+            try {
+              const cleanApiKey = N8N_KEY.trim().replace(/^["']|["']$/g, '');
+              await axios.patch(
+                `${N8N}/api/v1/users/${user.id}`,
+                { isPending: false },
+                {
+                  headers: {
+                    'X-N8N-API-KEY': cleanApiKey,
+                    'Content-Type': 'application/json',
+                  },
+                }
+              );
+              logInfo('User activated via API patch', { userId: user.id, email: user.email });
+              user.isPending = false;
+            } catch (apiError: any) {
+              logInfo('API activation failed (non-critical)', { 
+                userId: user.id, 
+                email: user.email,
+                error: apiError.message
+              });
+            }
+          }
+          
+          // If still pending, log warning
+          if (user.isPending) {
+            console.warn(`⚠️ n8n user ${user.email} created but pending. User may need to use "Forgot Password" to activate.`);
           }
         }
         

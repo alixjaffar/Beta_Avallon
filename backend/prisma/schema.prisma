@@ -13,7 +13,7 @@ model User {
   email         String         @unique
   n8nPassword   String? // Encrypted n8n password for automatic login
   n8nUserId     String? // n8n user ID
-  credits       Int            @default(20) // Credits for AI website generation (free plan gets 20 credits)
+  credits       Int            @default(15) // Credits for AI website generation (free plan gets 15 credits)
   createdAt     DateTime       @default(now())
   sites         Site[]
   agents        Agent[]

@@ -19,18 +19,21 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Geist', 'sans-serif'],
+        sans: ['Inter', 'sans-serif'],
+        display: ['Inter', 'sans-serif'],
         inter: ['Inter', 'sans-serif'],
       },
       colors: {
+        // Original shadcn colors
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         primary: {
-          DEFAULT: "hsl(var(--primary))",
+          DEFAULT: "#2547f4",
           foreground: "hsl(var(--primary-foreground))",
+          hover: "#1a3acb",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
@@ -56,6 +59,24 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // New Avallon design tokens
+        "background-light": "#f5f6f8",
+        "background-dark": "#101322",
+        "surface-dark": "#161b2c",
+        "panel-dark": "#111218",
+        "panel-border": "#282b39",
+        "border-dark": "#2a2e42",
+        "input-bg": "#1c1f2e",
+        "canvas-bg": "#050505",
+        "card-dark": "#1a1d2d",
+        "card-hover": "#202436",
+      },
+      borderRadius: {
+        DEFAULT: "0.25rem",
+        lg: "0.5rem",
+        xl: "0.75rem",
+        "2xl": "1rem",
+        full: "9999px",
       },
       keyframes: {
         marquee: {

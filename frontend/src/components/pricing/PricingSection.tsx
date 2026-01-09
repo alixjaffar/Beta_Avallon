@@ -70,43 +70,54 @@ export const PricingSection = () => {
         </motion.p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
         <PricingTier
-          name="Starter"
+          name="Free"
           price="$0"
-          description="Perfect for personal projects and testing"
+          description="Perfect for getting started"
           features={[
-            "1 AI-generated website",
-            "Basic templates access",
-            "1 custom domain",
-            "Email support"
+            "15 credits/month",
+            "1 generated site",
+            "Basic customization",
+            "No AI agents",
+            "Community support"
           ]}
         />
         <PricingTier
-          name="Professional"
-          price="$29"
-          description="For creators and growing businesses"
+          name="Starter"
+          price="$24.99"
+          description="For creators and small projects"
           features={[
-            "5 AI-generated websites",
-            "AI Agent builder access",
-            "5 custom domains",
-            "Custom email hosting",
-            "Priority support",
-            "API access"
+            "100 credits/month",
+            "Custom domain hosting",
+            "Multi-site creation",
+            "1 AI agent",
+            "External App integration"
+          ]}
+        />
+        <PricingTier
+          name="Growth"
+          price="$39.99"
+          description="For growing businesses"
+          features={[
+            "250 credits/month",
+            "Everything in Starter",
+            "Up to 4 AI agents",
+            "Email Hosting",
+            "Priority support"
           ]}
           isPopular
         />
         <PricingTier
           name="Enterprise"
           price="Custom"
-          description="Advanced solutions for agencies and teams"
+          description="For teams and agencies"
           features={[
-            "Unlimited websites",
-            "Advanced AI agents",
-            "Unlimited domains",
-            "White-label options",
-            "Dedicated account manager",
-            "24/7 priority support"
+            "400+ credits/month",
+            "10+ AI employees",
+            "Compliance + SLA",
+            "Dedicated infrastructure",
+            "Custom features"
           ]}
         />
       </div>

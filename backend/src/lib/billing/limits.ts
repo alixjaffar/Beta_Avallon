@@ -1,5 +1,6 @@
-// CHANGELOG: 2025-10-11 - Add usage limits per subscription plan
-import { prisma } from "@/lib/db";
+// CHANGELOG: 2025-01-07 - Updated pricing tiers: Free, Starter, Growth, Enterprise
+// CHANGELOG: 2025-01-07 - Switch to file-based subscription storage
+import { getSubscriptionByUserId } from "@/data/subscriptions";
 
 export type PlanLimits = {
   sites: number;
@@ -7,53 +8,112 @@ export type PlanLimits = {
   domains: number;
   customDomains: boolean;
   emailAccounts: number;
+  credits: number;
+  integrations: boolean;
+  multiSite: boolean;
 };
 
 export const PLAN_LIMITS: Record<string, PlanLimits> = {
+  // Free Tier - 15 credits/month, 1 site, no AI agents, no integrations
   free: {
     sites: 1,
-    agents: 1,
+    agents: 0,           // No AI agents on free tier
     domains: 0,
     customDomains: false,
     emailAccounts: 0,
+    credits: 15,
+    integrations: false, // No integrations on free tier
+    multiSite: false,
   },
-  pro: {
-    sites: 3,
-    agents: 3,
+  // Starter - $24.99/mo - 100 credits, multi-site, 1 AI agent, integrations
+  starter: {
+    sites: 5,
+    agents: 1,
     domains: 1,
     customDomains: true,
-    emailAccounts: 5,
+    emailAccounts: 0,
+    credits: 100,
+    integrations: true,
+    multiSite: true,
+  },
+  // Growth - $39.99/mo - 250 credits, 4 AI agents, email hosting
+  growth: {
+    sites: 10,
+    agents: 4,
+    domains: 3,
+    customDomains: true,
+    emailAccounts: 10,
+    credits: 250,
+    integrations: true,
+    multiSite: true,
+  },
+  // Enterprise - Custom - 400+ credits, 10+ AI agents, everything
+  enterprise: {
+    sites: 999,
+    agents: 999,
+    domains: 999,
+    customDomains: true,
+    emailAccounts: 999,
+    credits: 400,
+    integrations: true,
+    multiSite: true,
+  },
+  // Legacy plans (for backwards compatibility)
+  pro: {
+    sites: 5,
+    agents: 1,
+    domains: 1,
+    customDomains: true,
+    emailAccounts: 0,
+    credits: 100,
+    integrations: true,
+    multiSite: true,
   },
   business: {
-    sites: 25,
-    agents: 25,
-    domains: 5,
+    sites: 10,
+    agents: 4,
+    domains: 3,
     customDomains: true,
-    emailAccounts: 50,
+    emailAccounts: 10,
+    credits: 250,
+    integrations: true,
+    multiSite: true,
   },
 };
 
+// Feature access checks
+export function canAccessAgents(plan: string): boolean {
+  const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
+  return limits.agents > 0;
+}
+
+export function canAccessIntegrations(plan: string): boolean {
+  const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
+  return limits.integrations;
+}
+
+export function canCreateMultipleSites(plan: string): boolean {
+  const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
+  return limits.multiSite;
+}
+
+export function canAccessEmailHosting(plan: string): boolean {
+  const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
+  // Email hosting only available on Growth and Enterprise (plans with emailAccounts > 0)
+  return limits.emailAccounts > 0;
+}
+
 export async function getUserPlan(userId: string): Promise<string> {
   try {
-    const subscription = await prisma.subscription.findFirst({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-    }).catch((error: any) => {
-      // Catch Prisma connection errors
-      if (error?.code === 'P1001' || error?.message?.includes("Can't reach database")) {
-        throw new Error('DATABASE_UNAVAILABLE');
-      }
-      throw error;
-    });
-
-    return subscription?.plan || 'free';
-  } catch (error: any) {
-    // If database is not available, default to free plan
-    if (error.message === 'DATABASE_UNAVAILABLE' || error?.code === 'P1001' || error?.message?.includes("Can't reach database")) {
-      console.warn('Database not available, defaulting to free plan');
-      return 'free';
+    // Use file-based subscription storage
+    const subscription = getSubscriptionByUserId(userId);
+    
+    if (subscription && subscription.status === 'active') {
+      return subscription.plan || 'free';
     }
-    // For other errors, also default to free plan
+    
+    return 'free';
+  } catch (error: any) {
     console.warn('Error getting user plan, defaulting to free plan:', error.message);
     return 'free';
   }
@@ -78,60 +138,19 @@ export async function checkLimit(
     const limits = await getUserLimits(userId);
     const limit = limits[resource] as number;
 
-    let current = 0;
-    try {
-      switch (resource) {
-        case 'sites':
-          current = await prisma.site.count({ where: { ownerId: userId } }).catch((e: any) => {
-            if (e?.code === 'P1001' || e?.message?.includes("Can't reach database")) throw new Error('DATABASE_UNAVAILABLE');
-            throw e;
-          });
-          break;
-        case 'agents':
-          current = await prisma.agent.count({ where: { ownerId: userId } }).catch((e: any) => {
-            if (e?.code === 'P1001' || e?.message?.includes("Can't reach database")) throw new Error('DATABASE_UNAVAILABLE');
-            throw e;
-          });
-          break;
-        case 'domains':
-          current = await prisma.domain.count({ where: { ownerId: userId } }).catch((e: any) => {
-            if (e?.code === 'P1001' || e?.message?.includes("Can't reach database")) throw new Error('DATABASE_UNAVAILABLE');
-            throw e;
-          });
-          break;
-        case 'emailAccounts':
-          current = await prisma.emailAccount.count({ where: { ownerId: userId } }).catch((e: any) => {
-            if (e?.code === 'P1001' || e?.message?.includes("Can't reach database")) throw new Error('DATABASE_UNAVAILABLE');
-            throw e;
-          });
-          break;
-      }
-    } catch (dbError: any) {
-      // If database query fails, assume current count is 0
-      if (dbError.message === 'DATABASE_UNAVAILABLE' || dbError?.code === 'P1001' || dbError?.message?.includes("Can't reach database")) {
-        console.warn('Database unavailable, assuming current count is 0');
-      } else {
-        console.warn('Database query failed, assuming current count is 0:', dbError.message);
-      }
-      current = 0;
-    }
-
-    return {
-      allowed: current < limit,
-      current,
-      limit,
-    };
-  } catch (error: any) {
-    // If database is not available, allow creation (fail open)
-    if (error.message === 'DATABASE_UNAVAILABLE' || error?.code === 'P1001' || error?.message?.includes("Can't reach database")) {
-      console.warn('Database not available, allowing resource creation');
-    } else {
-      console.warn('Error checking limit, allowing resource creation:', error.message);
-    }
+    // For now, allow all operations (database counting not available)
+    // Resource counting will be implemented with local file storage
     return {
       allowed: true,
       current: 0,
-      limit: 999, // High limit when DB unavailable
+      limit,
+    };
+  } catch (error: any) {
+    console.warn('Error checking limit, allowing resource creation:', error.message);
+    return {
+      allowed: true,
+      current: 0,
+      limit: 999,
     };
   }
 }

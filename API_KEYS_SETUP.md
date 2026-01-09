@@ -33,7 +33,6 @@ To run the **Agent Builder** (website generation + n8n agent), you need:
 GEMINI_API_KEY="your_gemini_api_key_here"
 ```
 
-**Reference:** Based on [AI Website Builder](https://github.com/Ratna-Babu/Ai-Website-Builder) open-source project
 
 ---
 

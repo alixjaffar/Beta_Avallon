@@ -1,112 +1,78 @@
-import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import avallonLogo from "@/assets/avallon-logo.png";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { apiClient, Site } from "@/lib/api";
-import { fetchWithAuth } from "@/lib/fetchWithAuth";
-// Using unified Kirin AI website generation
+import { fetchWithAuth, clearAuth } from "@/lib/fetchWithAuth";
 import { WebsiteEditor } from "@/components/WebsiteEditor";
-import { Badge } from "@/components/ui/badge";
-import { 
-  Globe, 
-  Bot, 
-  Mail, 
-  Server, 
-  Plus, 
-  LogOut,
-  Sparkles,
-  Zap,
-  Shield,
-  ChevronRight,
-  Rocket,
-  Database,
-  Settings,
-  LayoutDashboard,
-  Plug
-} from "lucide-react";
-import IntegrationsManager from "@/components/IntegrationsManager";
-import { User } from "@supabase/supabase-js";
-import { DomainSetupFlow } from "@/components/DomainSetupFlow";
-import { PricingModal } from "@/components/PricingModal";
-import { AgentCreationModal } from "@/components/AgentCreationModal";
-import { AgentBuilderPage } from "@/components/AgentBuilderPage";
+import { ThemeToggleButton } from "@/components/ThemeToggleButton";
+import { UserProfileDropdown } from "@/components/UserProfileDropdown";
+import { SettingsModal } from "@/components/SettingsModal";
+
+// User type - simplified for Firebase
+interface FirebaseUser {
+  email: string | null;
+  displayName: string | null;
+  uid: string;
+  photoURL: string | null;
+}
 
 const Dashboard = () => {
-  const [user, setUser] = useState<User | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { toast } = useToast();
+  
+  const [user, setUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [sites, setSites] = useState<Site[]>([]);
   const [creatingSite, setCreatingSite] = useState(false);
   const [editingSite, setEditingSite] = useState<Site | null>(null);
   const [deletingSiteId, setDeletingSiteId] = useState<string | null>(null);
-  const [currentPlan, setCurrentPlan] = useState<string>('free');
-  const [credits, setCredits] = useState<number>(20); // Default to 20 credits (free plan)
-  const [creditCosts, setCreditCosts] = useState<{ generateWebsite: number; modifyWebsite: number } | null>(null);
-  const [pricingModalOpen, setPricingModalOpen] = useState(false);
-  const [agentModalOpen, setAgentModalOpen] = useState(false);
-  const [connectedIntegrations, setConnectedIntegrations] = useState<any[]>([]);
-  const navigate = useNavigate();
-  const { toast } = useToast();
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [credits, setCredits] = useState<number | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+
+  const baseUrl = process.env.NODE_ENV === 'production' 
+    ? 'https://beta-avallon.onrender.com' 
+    : 'http://localhost:3000';
 
   const loadSites = async () => {
     try {
-      // Use apiClient which now includes user email via interceptor
       const response = await apiClient.getSites();
-      const sitesData = response.data?.data || [];
-      // Sort sites by createdAt (most recent first)
+      // Handle both response formats: { data: [...] } or direct array
+      const sitesData = response?.data?.data || response?.data || [];
       const sortedSites = [...sitesData].sort((a, b) => {
         const dateA = new Date(a.createdAt || a.updatedAt || 0).getTime();
         const dateB = new Date(b.createdAt || b.updatedAt || 0).getTime();
-        return dateB - dateA; // Descending order (newest first)
+        return dateB - dateA;
       });
       setSites(sortedSites);
     } catch (error: any) {
-      console.error('Failed to load sites:', error);
-      // Don't show error toast if it's just an empty response
-      if (error?.response?.status !== 401 && error?.response?.status !== 500) {
-        toast({
-          title: "Error",
-          description: error?.response?.data?.error || "Failed to load websites",
-          variant: "destructive",
-        });
+      // Silently handle errors - show empty state instead of crashing
+      // Only log in development
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Could not load sites:', error?.response?.status || error?.message);
       }
-      // Set empty array on error so UI doesn't break
       setSites([]);
     }
   };
 
-  const loadIntegrations = async () => {
+  const loadCredits = async () => {
     try {
-      const baseUrl = process.env.NODE_ENV === 'production' ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000';
-      const response = await fetch(`${baseUrl}/api/integrations`, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-      });
-
+      const response = await fetchWithAuth(`${baseUrl}/api/billing/credits`);
       if (response.ok) {
         const data = await response.json();
-        setConnectedIntegrations(data.connected || []);
+        setCredits(data.credits ?? data.remainingCredits ?? 20);
       }
     } catch (error) {
-      console.error('Failed to load integrations:', error);
+      console.error('Failed to load credits:', error);
+      setCredits(15); // Default to 15 on error
     }
   };
 
-  const handleCreateWebsite = async () => {
-    // Create a new site immediately and open the editor (like open-source AI Website Builder)
+  const handleCreateWebsite = async (initialPrompt?: string) => {
     try {
       setCreatingSite(true);
-      const baseUrl = process.env.NODE_ENV === 'production' 
-        ? 'https://beta-avallon.onrender.com' 
-        : 'http://localhost:3000';
       
-      // Create a new empty site in the backend
       const siteName = `Website ${Date.now()}`;
       const response = await fetchWithAuth(`${baseUrl}/api/sites`, {
         method: 'POST',
@@ -122,29 +88,28 @@ const Dashboard = () => {
       }
 
       const result = await response.json();
-      // API returns { result: newSite } or { data: newSite }
       const newSite = result.result || result.data || result;
       
-      // Ensure the site has an id
       if (!newSite.id) {
-        console.error('Site creation response:', result);
         throw new Error('Site was created but no ID was returned');
       }
       
-      // Ensure status is set to 'generating' for new sites
       if (newSite.status !== 'generating') {
         newSite.status = 'generating';
       }
       
-      // Add to sites list
-      setSites(prev => [...prev, newSite]);
+      setSites(prev => [newSite, ...prev]);
       
-      // Immediately open the editor (like the open-source AI Website Builder)
-      setEditingSite(newSite);
+      // Open editor with initial prompt if provided
+      if (initialPrompt) {
+        setEditingSite({ ...newSite, initialPrompt });
+      } else {
+        setEditingSite(newSite);
+      }
       
       toast({
         title: "Editor Opened",
-        description: "Enter your website description in the chat to generate your website with Kirin",
+        description: "Enter your website description to generate your website with AI",
       });
     } catch (error: any) {
       console.error('Failed to create site:', error);
@@ -158,23 +123,8 @@ const Dashboard = () => {
     }
   };
 
-  const handleWebsiteCreated = (site: Site & { websiteContent?: any }) => {
-    setSites(prev => [...prev, site]);
-    toast({
-      title: "Success",
-      description: "Website created successfully! Opening editor...",
-    });
-      // Automatically open the Lovable-style editor
-      setEditingSite(site);
-      
-      // Reload credits after website creation
-      loadUserCredits();
-    };
-
   const handleEditWebsite = (site: Site) => {
     setEditingSite(site);
-    // Reload credits when opening editor
-    loadUserCredits();
   };
 
   const handleWebsiteUpdated = (updatedSite: Site) => {
@@ -185,6 +135,7 @@ const Dashboard = () => {
 
   const handleCloseEditor = () => {
     setEditingSite(null);
+    loadSites(); // Refresh sites after editing
   };
 
   const handleDeleteWebsite = async (site: Site) => {
@@ -193,15 +144,9 @@ const Dashboard = () => {
     }
 
     setDeletingSiteId(site.id);
+    setMenuOpenId(null);
 
     try {
-      // Show loading state
-      toast({
-        title: "Deleting...",
-        description: `Removing "${site.name}"...`,
-      });
-
-      const baseUrl = process.env.NODE_ENV === 'production' ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000';
       const response = await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`, {
         method: 'DELETE',
       });
@@ -210,12 +155,11 @@ const Dashboard = () => {
         throw new Error('Failed to delete website');
       }
 
-      // Remove from local state
       setSites(prev => prev.filter(s => s.id !== site.id));
       
       toast({
         title: "Success",
-        description: `Website "${site.name}" has been deleted successfully.`,
+        description: `Website "${site.name}" has been deleted.`,
       });
     } catch (error) {
       console.error('Error deleting website:', error);
@@ -229,882 +173,425 @@ const Dashboard = () => {
     }
   };
 
+  const handleSignOut = async () => {
+    try {
+      // Sign out from Firebase (lazy import to avoid blocking)
+      const { logoutUser } = await import('@/lib/firebase');
+      await logoutUser();
+      // Clear local auth data
+      clearAuth();
+      // Clear backend session
+      await fetch(`${baseUrl}/api/session/me`, { method: 'DELETE' }).catch(() => {});
+    } catch (error) {
+      console.error('Sign out error:', error);
+    }
+    setUser(null);
+    navigate("/");
+  };
+
+  const getTimeAgo = (date: string | Date) => {
+    const now = new Date();
+    const past = new Date(date);
+    const diffMs = now.getTime() - past.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffWeeks = Math.floor(diffDays / 7);
+    
+    if (diffHours < 1) return 'Just now';
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return `${diffWeeks}w ago`;
+  };
+
   useEffect(() => {
-    // Check for upgrade success/cancel in URL params
-    const params = new URLSearchParams(window.location.search);
-    const upgradeStatus = params.get('upgrade');
-    if (upgradeStatus === 'success') {
-      toast({
-        title: "Upgrade Successful!",
-        description: "Your subscription has been activated. Welcome to Premium!",
-      });
-      // Remove query param from URL
-      window.history.replaceState({}, '', '/dashboard');
-      // Reload plan and credits
-      loadUserPlan();
-      loadUserCredits();
-    } else if (upgradeStatus === 'cancelled') {
-      toast({
-        title: "Upgrade Cancelled",
-        description: "No charges were made. You can upgrade anytime.",
-      });
-      window.history.replaceState({}, '', '/dashboard');
+    // Check if coming from landing page with a prompt
+    const state = location.state as { generatePrompt?: string } | null;
+    if (state?.generatePrompt) {
+      // Clear the state
+      window.history.replaceState({}, document.title);
+      // Create website with the prompt after loading
+      setTimeout(() => {
+        handleCreateWebsite(state.generatePrompt);
+      }, 500);
     }
 
-    // Get user from localStorage (set during login) or try Supabase session
     const loadUser = async () => {
       try {
-        // First check localStorage for session (instant - no async needed)
+        // First check localStorage session
         const sessionData = localStorage.getItem('avallon_session');
         if (sessionData) {
           const session = JSON.parse(sessionData);
-          const userFromSession = {
-            id: session.email || 'user_id',
+          const userFromSession: FirebaseUser = {
+            uid: session.uid || session.email || 'user_id',
             email: session.email || 'user@example.com',
-            user_metadata: { name: session.name || session.email?.split('@')[0] || 'User' }
-          } as User;
+            displayName: session.name || session.email?.split('@')[0] || 'User',
+            photoURL: session.photoURL || null
+          };
           setUser(userFromSession);
-          // Show UI immediately after user is loaded
           setLoading(false);
-        } else {
-          // Try to get Supabase session (with timeout)
-          try {
-            const sessionPromise = supabase.auth.getSession();
-            const timeoutPromise = new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Session timeout')), 2000)
-            );
-            const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
-          if (session?.user) {
-            setUser(session.user);
-          } else {
-            // Fallback to mock user
-            const mockUser = {
-              id: 'mock_user_id',
-              email: 'user@example.com',
-              user_metadata: { name: 'Demo User' }
-            } as User;
-            setUser(mockUser);
-          }
-          } catch (sessionError) {
-            // Fallback to mock user if session check fails or times out
-            const mockUser = {
-              id: 'mock_user_id',
-              email: 'user@example.com',
-              user_metadata: { name: 'Demo User' }
-            } as User;
-            setUser(mockUser);
-          }
-          // Show UI immediately after user is loaded
+          loadSites();
+          loadCredits();
+          return;
+        }
+
+        // Try to load Firebase user (lazy import)
+        try {
+          const { onAuthChange } = await import('@/lib/firebase');
+          const unsubscribe = onAuthChange((firebaseUser) => {
+            if (firebaseUser) {
+              const userData: FirebaseUser = {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                displayName: firebaseUser.displayName,
+                photoURL: firebaseUser.photoURL
+              };
+              setUser(userData);
+              // Save to session
+              localStorage.setItem('avallon_session', JSON.stringify({
+                email: firebaseUser.email,
+                name: firebaseUser.displayName,
+                uid: firebaseUser.uid,
+                photoURL: firebaseUser.photoURL
+              }));
+            } else {
+              // No user - redirect to auth
+              navigate('/auth');
+            }
+            setLoading(false);
+          });
+          
+          // Cleanup on unmount
+          return () => unsubscribe();
+        } catch (firebaseError) {
+          console.warn('Firebase not available, using session data only');
+          // Redirect to auth if no session
+          navigate('/auth');
           setLoading(false);
         }
       } catch (error) {
         console.error('Error loading user:', error);
-        // Fallback to mock user
-        const mockUser = {
-          id: 'mock_user_id',
-          email: 'user@example.com',
-          user_metadata: { name: 'Demo User' }
-        } as User;
-        setUser(mockUser);
-        // Show UI even on error
+        navigate('/auth');
         setLoading(false);
       }
       
-      // Load all data in parallel AFTER UI is shown (non-blocking)
-      // Add timeouts to prevent hanging
-      const loadWithTimeout = async (fn: () => Promise<void>, timeoutMs: number) => {
-        try {
-          await Promise.race([
-            fn(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeoutMs))
-          ]);
-        } catch (err) {
-          console.error('Load operation timed out or failed:', err);
-        }
-      };
-      
-      // Load data with individual timeouts (don't block UI)
-      Promise.all([
-        loadWithTimeout(() => loadSites(), 5000), // 5 second timeout
-        loadWithTimeout(() => loadUserPlan(), 3000), // 3 second timeout
-        loadWithTimeout(() => loadUserCredits(), 3000), // 3 second timeout
-        loadWithTimeout(() => loadIntegrations(), 3000), // 3 second timeout
-      ]).catch(err => console.error('Some data failed to load:', err));
-      
-      // Ensure user is onboarded asynchronously (don't block page load)
-      ensureUserOnboarded();
+      loadSites();
+      loadCredits();
     };
     
     loadUser();
   }, []);
 
-  const ensureUserOnboarded = async () => {
-    try {
-      const baseUrl = process.env.NODE_ENV === 'production' 
-        ? 'https://beta-avallon.onrender.com' 
-        : 'http://localhost:3000';
-      
-      // Get user email from session
-      const sessionData = localStorage.getItem('avallon_session');
-      const userEmail = sessionData ? JSON.parse(sessionData).email : user?.email || 'user@example.com';
-      
-      // Check if user is onboarded
-      const checkResponse = await fetchWithAuth(`${baseUrl}/api/users/onboard`, {
-        method: 'GET',
-      }).catch(() => null);
-      
-      if (checkResponse?.ok) {
-        const data = await checkResponse.json();
-        if (!data.onboarded) {
-          // User not onboarded, create their agent
-          const onboardResponse = await fetchWithAuth(`${baseUrl}/api/users/onboard`, {
-            method: 'POST',
-            body: JSON.stringify({ email: userEmail }),
-          }).catch(() => null);
-          
-          if (onboardResponse?.ok) {
-            console.log('✅ User onboarded with n8n agent');
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Onboarding check error (non-blocking):', error);
-      // Don't block dashboard load if onboarding fails
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => setMenuOpenId(null);
+    if (menuOpenId) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
     }
-  };
-
-  const loadUserPlan = async () => {
-    try {
-      const baseUrl = process.env.NODE_ENV === 'production' 
-        ? 'https://beta-avallon.onrender.com' 
-        : 'http://localhost:3000';
-      
-      // Try to get user plan from backend
-      const response = await fetchWithAuth(`${baseUrl}/api/billing/plan`, {
-        method: 'GET',
-      }).catch(() => null);
-      
-      if (response?.ok) {
-        const data = await response.json();
-        setCurrentPlan(data.plan || 'free');
-      } else {
-        // Default to free plan if API fails
-        console.log('Plan API not available, defaulting to free');
-        setCurrentPlan('free');
-      }
-    } catch (error) {
-      console.error('Error loading plan:', error);
-      // Default to free plan on error
-      setCurrentPlan('free');
-    }
-  };
-
-  const loadUserCredits = async () => {
-    try {
-      const baseUrl = process.env.NODE_ENV === 'production' 
-        ? 'https://beta-avallon.onrender.com' 
-        : 'http://localhost:3000';
-      
-      const response = await fetchWithAuth(`${baseUrl}/api/billing/credits`, {
-        method: 'GET',
-      }).catch(() => null);
-      
-      if (response?.ok) {
-        const data = await response.json();
-        // Default to 20 credits if API returns 0 or null (matches backend default)
-        setCredits(data.credits || 20);
-        if (data.costs) {
-          setCreditCosts(data.costs);
-        }
-      } else {
-        // Default to 20 credits if API fails (free plan default)
-        setCredits(20);
-      }
-    } catch (error) {
-      console.error('Error loading credits:', error);
-      // Default to 20 credits on error (free plan default)
-      setCredits(20);
-    }
-  };
-
-  const handleSignOut = async () => {
-    // Clear localStorage session
-    localStorage.removeItem('avallon_session');
-    
-    // Clear backend session cookie
-    try {
-      const baseUrl = process.env.NODE_ENV === 'production' ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000';
-      await fetch(`${baseUrl}/api/session/me`, {
-        method: 'DELETE',
-      }).catch(() => {
-        // Ignore errors - session will be cleared on next request
-      });
-    } catch (error) {
-      // Ignore errors
-    }
-    
-    setUser(null);
-    navigate("/");
-  };
+  }, [menuOpenId]);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-pulse text-lg">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-background-dark">
+        <div className="animate-pulse text-lg text-white">Loading...</div>
+      </div>
+    );
+  }
+
+  // If editing a site, show the editor full screen
+  if (editingSite) {
+    return (
+      <div className="fixed inset-0 z-50 bg-background-dark">
+        <WebsiteEditor
+          site={editingSite}
+          onUpdate={handleWebsiteUpdated}
+          onClose={handleCloseEditor}
+        />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-lg sticky top-0 z-50">
-        <div className="container max-w-7xl mx-auto px-6 lg:px-8 h-20 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-            <img src={avallonLogo} alt="Avallon Logo" className="w-10 h-10" />
-            <div>
-              <h1 className="text-xl font-bold">Avallon</h1>
-              <p className="text-xs text-muted-foreground">Dashboard</p>
-            </div>
-          </Link>
-          
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-3">
-              <div className="flex flex-col items-end">
-                <span className="text-sm font-medium">{user?.email || 'Loading...'}</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground capitalize">{currentPlan} Plan</span>
-                  <span className="text-xs font-semibold text-purple-500">
-                    {credits} Credits
-                  </span>
-                </div>
+    <div className="bg-background-light dark:bg-background-dark font-display min-h-screen flex flex-col overflow-x-hidden text-slate-900 dark:text-white">
+      {/* Top Navigation Bar */}
+      <header className="sticky top-0 z-50 w-full border-b border-solid border-slate-200 dark:border-border-dark bg-white/80 dark:bg-[#101322]/80 backdrop-blur-md px-6 py-3">
+        <div className="max-w-[1280px] mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-10">
+            {/* Logo */}
+            <Link to="/" className="flex items-center gap-3 text-primary">
+              <div className="size-8">
+                <svg fill="currentColor" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                  <path clipRule="evenodd" d="M39.475 21.6262C40.358 21.4363 40.6863 21.5589 40.7581 21.5934C40.7876 21.655 40.8547 21.857 40.8082 22.3336C40.7408 23.0255 40.4502 24.0046 39.8572 25.2301C38.6799 27.6631 36.5085 30.6631 33.5858 33.5858C30.6631 36.5085 27.6632 38.6799 25.2301 39.8572C24.0046 40.4502 23.0255 40.7407 22.3336 40.8082C21.8571 40.8547 21.6551 40.7875 21.5934 40.7581C21.5589 40.6863 21.4363 40.358 21.6262 39.475C21.8562 38.4054 22.4689 36.9657 23.5038 35.2817C24.7575 33.2417 26.5497 30.9744 28.7621 28.762C30.9744 26.5497 33.2417 24.7574 35.2817 23.5037C36.9657 22.4689 38.4054 21.8562 39.475 21.6262ZM4.41189 29.2403L18.7597 43.5881C19.8813 44.7097 21.4027 44.9179 22.7217 44.7893C24.0585 44.659 25.5148 44.1631 26.9723 43.4579C29.9052 42.0387 33.2618 39.5667 36.4142 36.4142C39.5667 33.2618 42.0387 29.9052 43.4579 26.9723C44.1631 25.5148 44.659 24.0585 44.7893 22.7217C44.9179 21.4027 44.7097 19.8813 43.5881 18.7597L29.2403 4.41187C27.8527 3.02428 25.8765 3.02573 24.2861 3.36776C22.6081 3.72863 20.7334 4.58419 18.8396 5.74801C16.4978 7.18716 13.9881 9.18353 11.5858 11.5858C9.18354 13.988 7.18717 16.4978 5.74802 18.8396C4.58421 20.7334 3.72865 22.6081 3.36778 24.2861C3.02574 25.8765 3.02429 27.8527 4.41189 29.2403Z" fillRule="evenodd"></path>
+                </svg>
               </div>
-              {currentPlan === 'free' && (
-                <Button 
-                  onClick={() => setPricingModalOpen(true)}
-                  className="bg-gradient-to-r from-purple-500 to-blue-500 hover:opacity-90"
-                  size="sm"
-                >
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Upgrade
-                </Button>
-              )}
+              <h2 className="text-slate-900 dark:text-white text-xl font-bold leading-tight tracking-[-0.015em]">Avallon</h2>
+            </Link>
+            
+            {/* Navigation Links */}
+            <nav className="hidden md:flex items-center gap-6">
+              <span className="text-primary text-sm font-semibold leading-normal relative py-4 cursor-default">
+                Websites
+                <span className="absolute bottom-0 left-0 w-full h-[2px] bg-primary rounded-t-full"></span>
+              </span>
+              <span className="text-slate-500 dark:text-slate-400 text-sm font-medium leading-normal flex items-center gap-1 cursor-not-allowed opacity-60">
+                Analytics
+                <span className="material-symbols-outlined text-[16px]">lock</span>
+              </span>
+              <button 
+                onClick={() => setShowSettings(true)}
+                className="text-slate-500 dark:text-slate-400 text-sm font-medium leading-normal hover:text-slate-900 dark:hover:text-white transition-colors"
+              >
+                Settings
+              </button>
+            </nav>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            {/* Credits Display */}
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <span className="material-symbols-outlined text-amber-500 text-[18px]">token</span>
+              <span className="text-sm font-semibold text-amber-600 dark:text-amber-400">
+                {credits !== null ? credits : '...'} credits
+              </span>
             </div>
-            <ThemeToggle />
-            <Button variant="outline" size="icon" onClick={handleSignOut}>
-              <LogOut className="w-4 h-4" />
-            </Button>
+            
+            <button 
+              onClick={() => handleCreateWebsite()}
+              disabled={creatingSite}
+              className="hidden sm:flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-9 px-4 bg-primary hover:bg-blue-600 transition-colors text-white text-sm font-bold leading-normal tracking-[0.015em] shadow-lg shadow-blue-500/20 disabled:opacity-50"
+            >
+              {creatingSite ? (
+                <span className="material-symbols-outlined mr-2 text-[18px] animate-spin">progress_activity</span>
+              ) : (
+                <span className="material-symbols-outlined mr-2 text-[18px]">add</span>
+              )}
+              <span className="truncate">New Website</span>
+            </button>
+            
+            <div className="h-6 w-[1px] bg-slate-200 dark:bg-border-dark"></div>
+            
+            {/* Theme Toggle */}
+            <ThemeToggleButton />
+            
+            {/* Profile Dropdown */}
+            <UserProfileDropdown 
+              user={user}
+              credits={credits}
+              onSignOut={handleSignOut}
+              onOpenSettings={() => setShowSettings(true)}
+            />
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="container max-w-7xl mx-auto px-6 lg:px-8 py-12">
-        {/* Hero Section */}
-        <div className="mb-12">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-1 w-12 bg-gradient-to-r from-primary to-primary/50 rounded-full"></div>
-            <span className="text-sm font-medium text-primary uppercase tracking-wider">Welcome Back</span>
+      {/* Main Dashboard Content */}
+      <main className="flex-1 w-full max-w-[1280px] mx-auto px-6 py-8">
+        {/* Page Heading */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-slate-900 dark:text-white text-3xl font-bold tracking-tight mb-1">Your Websites</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">Manage, edit, and publish your AI-generated sites.</p>
           </div>
-          <h2 className="text-4xl md:text-5xl font-bold mb-4">
-            Your Web Creation Hub
-          </h2>
-          <p className="text-xl text-muted-foreground max-w-2xl">
-            Build, automate, and scale your web presence from one unified platform
-          </p>
+          
+          {/* Mobile specific Create Button */}
+          <button 
+            onClick={() => handleCreateWebsite()}
+            disabled={creatingSite}
+            className="sm:hidden flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined mr-2">add_circle</span>
+            Create New Website
+          </button>
         </div>
 
-        {/* Tabbed Navigation */}
-        <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-6 mb-12 h-auto p-1 bg-muted/50">
-            <TabsTrigger value="overview" className="flex items-center gap-2 py-3">
-              <LayoutDashboard className="w-4 h-4" />
-              <span className="hidden sm:inline">Overview</span>
-            </TabsTrigger>
-            <TabsTrigger value="websites" className="flex items-center gap-2 py-3">
-              <Globe className="w-4 h-4" />
-              <span className="hidden sm:inline">Websites</span>
-            </TabsTrigger>
-            <TabsTrigger value="agents" className="flex items-center gap-2 py-3">
-              <Bot className="w-4 h-4" />
-              <span className="hidden sm:inline">AI Agents</span>
-            </TabsTrigger>
-            <TabsTrigger value="domains" className="flex items-center gap-2 py-3">
-              <Database className="w-4 h-4" />
-              <span className="hidden sm:inline">Domains</span>
-            </TabsTrigger>
-            <TabsTrigger value="email" className="flex items-center gap-2 py-3">
-              <Mail className="w-4 h-4" />
-              <span className="hidden sm:inline">Email</span>
-            </TabsTrigger>
-            <TabsTrigger value="integrations" className="flex items-center gap-2 py-3">
-              <Plug className="w-4 h-4" />
-              <span className="hidden sm:inline">Integrations</span>
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-16">
-            {/* Upgrade CTA Section */}
-            {currentPlan === 'free' && (
-              <section>
-                <Card className="bg-gradient-to-br from-purple-500/10 via-blue-500/10 to-transparent border-2 border-purple-200 dark:border-purple-800">
-                  <CardContent className="p-8">
-                    <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                      <div className="flex-1">
-                        <h3 className="text-2xl font-bold mb-2 flex items-center gap-2">
-                          <Sparkles className="w-6 h-6 text-purple-500" />
-                          Unlock Premium Features
-                        </h3>
-                        <p className="text-muted-foreground">
-                          Upgrade to Pro or Business to get unlimited websites, advanced AI agents, priority support, and more.
-                        </p>
-                      </div>
-                      <Button 
-                        onClick={() => setPricingModalOpen(true)}
-                        className="bg-gradient-to-r from-purple-500 to-blue-500 hover:opacity-90"
-                        size="lg"
-                      >
-                        <Rocket className="w-5 h-5 mr-2" />
-                        View Plans
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </section>
-            )}
-
-            {/* Quick Actions Section */}
-            <section>
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h3 className="text-2xl font-bold mb-2">Quick Actions</h3>
-                  <p className="text-muted-foreground">Get started with these powerful tools</p>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <Card className="group hover:shadow-xl transition-all duration-300 cursor-pointer border-2 hover:border-primary/50">
-                  <CardContent className="p-6">
-                    <div className="w-14 h-14 rounded-2xl bg-purple-500/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                      <Sparkles className="w-7 h-7 text-purple-500" />
-                    </div>
-                    <h4 className="font-semibold text-lg mb-2">Generate with AI</h4>
-                    <p className="text-sm text-muted-foreground mb-4">Create content instantly</p>
-                    <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:translate-x-1 transition-transform" />
-                  </CardContent>
-                </Card>
-
-                <Card className="group hover:shadow-xl transition-all duration-300 cursor-pointer border-2 hover:border-primary/50">
-                  <CardContent className="p-6">
-                    <div className="w-14 h-14 rounded-2xl bg-blue-500/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                      <Zap className="w-7 h-7 text-blue-500" />
-                    </div>
-                    <h4 className="font-semibold text-lg mb-2">Quick Deploy</h4>
-                    <p className="text-sm text-muted-foreground mb-4">Launch in seconds</p>
-                    <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:translate-x-1 transition-transform" />
-                  </CardContent>
-                </Card>
-
-                <Card className="group hover:shadow-xl transition-all duration-300 cursor-pointer border-2 hover:border-primary/50">
-                  <CardContent className="p-6">
-                    <div className="w-14 h-14 rounded-2xl bg-orange-500/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                      <Server className="w-7 h-7 text-orange-500" />
-                    </div>
-                    <h4 className="font-semibold text-lg mb-2">Manage Hosting</h4>
-                    <p className="text-sm text-muted-foreground mb-4">Control your servers</p>
-                    <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:translate-x-1 transition-transform" />
-                  </CardContent>
-                </Card>
-
-                <Card className="group hover:shadow-xl transition-all duration-300 cursor-pointer border-2 hover:border-primary/50">
-                  <CardContent className="p-6">
-                    <div className="w-14 h-14 rounded-2xl bg-green-500/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                      <Shield className="w-7 h-7 text-green-500" />
-                    </div>
-                    <h4 className="font-semibold text-lg mb-2">Security</h4>
-                    <p className="text-sm text-muted-foreground mb-4">Protect your assets</p>
-                    <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:translate-x-1 transition-transform" />
-                  </CardContent>
-                </Card>
-              </div>
-            </section>
-
-            {/* Connected Integrations Section */}
-            <section>
-              <div className="mb-8">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-2xl font-bold mb-2">Connected Integrations</h3>
-                    <p className="text-muted-foreground">External services connected to your account</p>
+        {/* Websites Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {sites.map((site) => (
+            <article 
+              key={site.id} 
+              className="group relative flex flex-col bg-white dark:bg-card-dark rounded-xl border border-slate-200 dark:border-border-dark hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300"
+            >
+              {/* Thumbnail with Mini Live Preview */}
+              <div className="relative aspect-[16/10] overflow-hidden bg-slate-100 dark:bg-[#0b0d15] rounded-t-xl">
+                {site.websiteContent && Object.keys(site.websiteContent).length > 0 ? (
+                  <div className="absolute inset-0 pointer-events-none">
+                    <iframe
+                      srcDoc={(() => {
+                        const html = site.websiteContent['index.html'] || Object.values(site.websiteContent)[0] || '';
+                        // Add scale transform to fit preview
+                        return html.replace('</head>', `
+                          <style>
+                            body { transform: scale(0.25); transform-origin: top left; width: 400%; height: 400%; }
+                            * { pointer-events: none !important; }
+                          </style>
+                        </head>`);
+                      })()}
+                      className="w-[400%] h-[400%] border-0 scale-[0.25] origin-top-left"
+                      title={`Preview of ${site.name}`}
+                      loading="lazy"
+                      sandbox="allow-same-origin allow-scripts"
+                    />
                   </div>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => {
-                      const integrationsTab = document.querySelector('[value="integrations"]') as HTMLElement;
-                      if (integrationsTab) integrationsTab.click();
-                    }}
-                  >
-                    <Plug className="w-4 h-4 mr-2" />
-                    Manage Integrations
-                  </Button>
-                </div>
-              </div>
-              
-              {connectedIntegrations.length === 0 ? (
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="text-center py-8">
-                      <Plug className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-50" />
-                      <p className="text-muted-foreground mb-4">
-                        No integrations connected yet
-                      </p>
-                      <Button 
-                        variant="outline"
-                        onClick={() => {
-                          const integrationsTab = document.querySelector('[value="integrations"]') as HTMLElement;
-                          if (integrationsTab) integrationsTab.click();
-                        }}
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Connect Your First Integration
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {connectedIntegrations.map((integration) => (
-                    <Card key={integration.id} className="hover:border-primary/50 transition-colors">
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                              <Plug className="w-5 h-5 text-primary" />
-                            </div>
-                            <div>
-                              <h4 className="font-semibold">{integration.providerInfo?.name || integration.provider}</h4>
-                              <p className="text-xs text-muted-foreground">
-                                {integration.metadata?.accountName || 'Connected'}
-                              </p>
-                            </div>
-                          </div>
-                          <Badge variant="default" className="bg-green-500">Active</Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            {/* Platform Stats Section */}
-            <section>
-              <div className="mb-8">
-                <h3 className="text-2xl font-bold mb-2">Platform Overview</h3>
-                <p className="text-muted-foreground">Your activity and resources at a glance</p>
-              </div>
-
-              <Card className="bg-gradient-to-br from-card to-card/50">
-                <CardContent className="p-8">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <div className="text-center">
-                      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
-                        <Rocket className="w-8 h-8 text-primary" />
-                      </div>
-                      <div className="text-4xl font-bold mb-2">0</div>
-                      <p className="text-muted-foreground">Total Projects</p>
-                    </div>
-
-                    <div className="text-center">
-                      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
-                        <Bot className="w-8 h-8 text-primary" />
-                      </div>
-                      <div className="text-4xl font-bold mb-2">0</div>
-                      <p className="text-muted-foreground">Active Agents</p>
-                    </div>
-
-                    <div className="text-center">
-                      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
-                        <Globe className="w-8 h-8 text-primary" />
-                      </div>
-                      <div className="text-4xl font-bold mb-2">0</div>
-                      <p className="text-muted-foreground">Active Domains</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-8 pt-8 border-t border-border">
-                    <div className="flex items-start gap-4">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                        <Sparkles className="w-5 h-5 text-primary" />
-                      </div>
-                      <div>
-                        <h4 className="font-semibold mb-2">Ready to get started?</h4>
-                        <p className="text-sm text-muted-foreground mb-4">
-                          Create your first website, build an AI agent, or register a domain to begin your journey with Avallon.
-                        </p>
-                        <Button className="button-gradient">
-                          <Rocket className="w-4 h-4 mr-2" />
-                          Start Building
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </section>
-          </TabsContent>
-
-          {/* Websites Tab */}
-          <TabsContent value="websites" className="space-y-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-3xl font-bold mb-2">Websites</h3>
-              </div>
-              <Button 
-                onClick={handleCreateWebsite}
-                disabled={creatingSite}
-                className="bg-gradient-to-r from-purple-500 to-blue-500 hover:opacity-90"
-              >
-                {creatingSite ? (
-                  <>
-                    <Sparkles className="w-4 h-4 mr-2 animate-spin" />
-                    Opening Editor...
-                  </>
                 ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Create Website with AI
-                  </>
-                )}
-              </Button>
-            </div>
-
-            {sites.length === 0 ? (
-              <Card className="relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-cyan-500/5 to-transparent"></div>
-                <CardContent className="p-12 text-center relative">
-                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg mx-auto mb-6">
-                    <Globe className="w-10 h-10 text-white" />
-                  </div>
-                  <h4 className="text-2xl font-bold mb-4">No websites yet</h4>
-                  <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-                    Create stunning websites with AI assistance, templates, and drag-and-drop tools
-                  </p>
-                  <Button 
-                    onClick={handleCreateWebsite}
-                    className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:opacity-90"
+                  <div 
+                    className="absolute inset-0 bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center"
                   >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create Your First Website
-                  </Button>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-6">
-                {/* Most Recent Website - Featured Section */}
-                {sites.length > 0 && (
-                  <div>
-                    <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-purple-500" />
-                      Most Recent Website
-                    </h4>
-                    <Card className="group hover:shadow-xl transition-all duration-300 border-2 border-purple-200 dark:border-purple-800 bg-gradient-to-br from-purple-50/50 to-blue-50/50 dark:from-purple-950/20 dark:to-blue-950/20">
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-lg">
-                              <Globe className="w-6 h-6 text-white" />
-                            </div>
-                            <div>
-                              <CardTitle className="text-xl">{sites[0].name}</CardTitle>
-                              <CardDescription className="mt-1">
-                                Created {new Date(sites[0].createdAt || sites[0].updatedAt).toLocaleDateString('en-US', { 
-                                  month: 'long', 
-                                  day: 'numeric', 
-                                  year: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </CardDescription>
-                            </div>
-                          </div>
-                          <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            sites[0].status === 'deployed' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
-                            sites[0].status === 'generating' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
-                            sites[0].status === 'failed' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
-                            'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
-                          }`}>
-                            {sites[0].status}
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="pt-0">
-                        <div className="space-y-4">
-                          {sites[0].previewUrl && (
-                            <div className="flex items-center gap-2 text-sm">
-                              <Globe className="w-4 h-4 text-purple-500" />
-                              <a 
-                                href={sites[0].previewUrl} 
-                                target="_blank" 
-                                rel="noopener noreferrer" 
-                                className="text-purple-600 dark:text-purple-400 hover:underline font-medium"
-                              >
-                                View Live Preview
-                              </a>
-                            </div>
-                          )}
-                          {sites[0].repoUrl && (
-                            <div className="flex items-center gap-2 text-sm">
-                              <Database className="w-4 h-4 text-purple-500" />
-                              <a 
-                                href={sites[0].repoUrl} 
-                                target="_blank" 
-                                rel="noopener noreferrer" 
-                                className="text-purple-600 dark:text-purple-400 hover:underline font-medium"
-                              >
-                                View Repository
-                              </a>
-                            </div>
-                          )}
-                          <div className="flex items-center gap-2 pt-2">
-                            <Button 
-                              variant="default" 
-                              size="sm"
-                              onClick={() => handleEditWebsite(sites[0])}
-                              className="bg-gradient-to-r from-purple-500 to-blue-500 hover:opacity-90"
-                            >
-                              <Sparkles className="w-4 h-4 mr-2" />
-                              Edit Website
-                            </Button>
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
-                              onClick={() => handleDeleteWebsite(sites[0])}
-                              disabled={deletingSiteId === sites[0].id}
-                            >
-                              {deletingSiteId === sites[0].id ? (
-                                <>
-                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600 mr-2"></div>
-                                  Deleting...
-                                </>
-                              ) : (
-                                'Delete'
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <span className="material-symbols-outlined text-[48px] text-slate-300 dark:text-slate-600">web</span>
                   </div>
                 )}
-
-                {/* Other Websites Grid */}
-                {sites.length > 1 && (
-                  <div>
-                    <h4 className="text-lg font-semibold mb-4">All Websites</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {sites.slice(1).map((site) => (
-                        <Card key={site.id || `site-${site.name}-${site.createdAt}`} className="group hover:shadow-xl transition-all duration-300">
-                          <CardHeader className="pb-3">
-                            <div className="flex items-center justify-between">
-                              <CardTitle className="text-lg">{site.name}</CardTitle>
-                              <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                site.status === 'deployed' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
-                                site.status === 'generating' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
-                                site.status === 'failed' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
-                                'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
-                              }`}>
-                                {site.status}
-                              </div>
-                            </div>
-                            <CardDescription>
-                              Created {new Date(site.createdAt || site.updatedAt).toLocaleDateString('en-US', { 
-                                month: 'short', 
-                                day: 'numeric', 
-                                year: 'numeric'
-                              })}
-                            </CardDescription>
-                          </CardHeader>
-                          <CardContent className="pt-0">
-                            <div className="space-y-3">
-                              {site.previewUrl && (
-                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                  <Globe className="w-4 h-4" />
-                                  <a href={site.previewUrl} target="_blank" rel="noopener noreferrer" className="hover:text-primary">
-                                    Preview Site
-                                  </a>
-                                </div>
-                              )}
-                              {site.repoUrl && (
-                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                  <Database className="w-4 h-4" />
-                                  <a href={site.repoUrl} target="_blank" rel="noopener noreferrer" className="hover:text-primary">
-                                    View Repository
-                                  </a>
-                                </div>
-                              )}
-                              <div className="flex items-center gap-2 pt-2">
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  onClick={() => handleEditWebsite(site)}
-                                >
-                                  Edit
-                                </Button>
-                                <Button 
-                                  variant="outline" 
-                                  size="sm" 
-                                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
-                                  onClick={() => handleDeleteWebsite(site)}
-                                  disabled={deletingSiteId === site.id}
-                                >
-                                  {deletingSiteId === site.id ? (
-                                    <>
-                                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600 mr-2"></div>
-                                      Deleting...
-                                    </>
-                                  ) : (
-                                    'Delete'
-                                  )}
-                                </Button>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
+                
+                {/* Overlay Actions */}
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 backdrop-blur-[2px]">
+                  <button 
+                    onClick={() => handleEditWebsite(site)}
+                    className="flex items-center justify-center h-10 px-4 bg-primary hover:bg-blue-600 text-white text-sm font-semibold rounded-lg shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-all duration-300"
+                  >
+                    Edit Site
+                  </button>
+                  {site.previewUrl && (
+                    <a 
+                      href={site.previewUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center size-10 bg-white dark:bg-card-dark hover:bg-slate-100 dark:hover:bg-border-dark text-slate-900 dark:text-white rounded-lg shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 delay-75"
+                      title="Preview"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">visibility</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+              
+              {/* Content */}
+              <div className="p-4 flex flex-col gap-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-slate-900 dark:text-white font-semibold text-lg leading-tight truncate">{site.name}</h3>
+                    {site.previewUrl ? (
+                      <a 
+                        href={site.previewUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-slate-500 dark:text-slate-400 text-xs hover:text-primary transition-colors truncate block mt-0.5"
+                      >
+                        {site.previewUrl.replace('https://', '')}
+                      </a>
+                    ) : (
+                      <p className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">Not connected</p>
+                    )}
+                  </div>
+                  
+                  {/* More menu */}
+                  <div className="relative">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuOpenId(menuOpenId === site.id ? null : site.id);
+                      }}
+                      className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors -mr-2 p-1 rounded-md hover:bg-slate-100 dark:hover:bg-border-dark"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">more_vert</span>
+                    </button>
+                    
+                    {menuOpenId === site.id && (
+                      <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-card-dark border border-slate-200 dark:border-border-dark rounded-lg shadow-xl z-50">
+                        <button
+                          onClick={() => handleEditWebsite(site)}
+                          className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-border-dark flex items-center gap-2"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">edit</span>
+                          Edit
+                        </button>
+                        {site.previewUrl && (
+                          <a
+                            href={site.previewUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-border-dark flex items-center gap-2"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                            Open
+                          </a>
+                        )}
+                        <button
+                          onClick={() => handleDeleteWebsite(site)}
+                          disabled={deletingSiteId === site.id}
+                          className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">delete</span>
+                          {deletingSiteId === site.id ? 'Deleting...' : 'Delete'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-border-dark mt-1">
+                  {site.status === 'deployed' ? (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                      <div className="size-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                      <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Published</span>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </TabsContent>
-
-          {/* AI Agents Tab */}
-          <TabsContent value="agents" className="space-y-0">
-            <AgentBuilderPage 
-              onAgentCreated={(agentId, n8nId) => {
-                toast({
-                  title: "Agent Created!",
-                  description: "Your AI agent workflow has been created successfully.",
-                });
-                // Optionally refresh agent list or update state
-              }}
-            />
-          </TabsContent>
-
-          {/* Domains Tab */}
-          <TabsContent value="domains">
-            <DomainSetupFlow sites={sites} />
-          </TabsContent>
-
-          {/* Email Tab */}
-          <TabsContent value="email" className="space-y-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-3xl font-bold mb-2">Email Hosting</h3>
-                <p className="text-muted-foreground">Professional email for all your domains</p>
-              </div>
-              <Button className="bg-gradient-to-r from-green-500 to-emerald-500 hover:opacity-90">
-                <Plus className="w-4 h-4 mr-2" />
-                Setup Email
-              </Button>
-            </div>
-
-            <Card className="relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 via-emerald-500/5 to-transparent"></div>
-              <CardContent className="p-12 text-center relative">
-                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center shadow-lg mx-auto mb-6">
-                  <Mail className="w-10 h-10 text-white" />
+                  ) : (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-700/30 border border-slate-200 dark:border-slate-700/50">
+                      <div className="size-1.5 rounded-full bg-slate-400 dark:bg-slate-500"></div>
+                      <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                        {site.status === 'generating' ? 'Generating' : 'Draft'}
+                      </span>
+                    </div>
+                  )}
+                  <span className="text-slate-400 dark:text-slate-500 text-xs">
+                    {getTimeAgo(site.updatedAt || site.createdAt)}
+                  </span>
                 </div>
-                <h4 className="text-2xl font-bold mb-4">No email configured yet</h4>
-                <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-                  Set up professional email addresses for all your domains
-                </p>
-                <Button className="bg-gradient-to-r from-green-500 to-emerald-500 hover:opacity-90">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Setup Your First Email
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Integrations Tab */}
-          <TabsContent value="integrations" className="space-y-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-3xl font-bold mb-2">Integrations</h3>
-                <p className="text-muted-foreground">
-                  Connect external services to add powerful features to your generated websites
-                </p>
               </div>
+            </article>
+          ))}
+
+          {/* Create New Card */}
+          <button 
+            onClick={() => handleCreateWebsite()}
+            disabled={creatingSite}
+            className="group flex flex-col items-center justify-center bg-transparent border-2 border-dashed border-slate-300 dark:border-border-dark hover:border-primary dark:hover:border-primary rounded-xl aspect-[4/3] sm:aspect-auto hover:bg-slate-100/50 dark:hover:bg-card-hover/30 transition-all duration-300 gap-4 min-h-[300px] disabled:opacity-50"
+          >
+            <div className="size-14 rounded-full bg-slate-100 dark:bg-border-dark group-hover:bg-primary/10 flex items-center justify-center transition-colors">
+              {creatingSite ? (
+                <span className="material-symbols-outlined text-3xl text-slate-400 dark:text-slate-500 group-hover:text-primary transition-colors animate-spin">progress_activity</span>
+              ) : (
+                <span className="material-symbols-outlined text-3xl text-slate-400 dark:text-slate-500 group-hover:text-primary transition-colors">add</span>
+              )}
             </div>
-
-            {/* Info Banner */}
-            <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
-              <CardContent className="p-6">
-                <div className="flex items-start gap-3">
-                  <Zap className="w-5 h-5 text-primary mt-0.5" />
-                  <div>
-                    <h4 className="font-semibold mb-1">How Integrations Work</h4>
-                    <p className="text-sm text-muted-foreground">
-                      When you connect an integration (like Stripe), your API keys will be automatically 
-                      injected into any new websites you generate. This means your websites will have 
-                      working payment buttons, analytics, and more - without any manual setup!
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Integrations Manager */}
-            <IntegrationsManager />
-          </TabsContent>
-        </Tabs>
+            <div className="text-center px-4">
+              <p className="text-slate-900 dark:text-white font-semibold text-lg">Create New Website</p>
+              <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Start from scratch or use AI</p>
+            </div>
+          </button>
+        </div>
       </main>
 
-      {/* Pricing Modal */}
-      <PricingModal
-        open={pricingModalOpen}
-        onOpenChange={setPricingModalOpen}
-        currentPlan={currentPlan}
-        userEmail={user?.email}
-      />
+      {/* Floating Action Button */}
+      <div className="fixed bottom-8 right-8 z-40">
+        <button 
+          onClick={() => handleCreateWebsite()}
+          disabled={creatingSite}
+          className="flex items-center gap-3 bg-primary hover:bg-blue-600 text-white pl-5 pr-6 py-4 rounded-full shadow-2xl shadow-blue-600/30 transition-transform hover:scale-105 active:scale-95 group disabled:opacity-50"
+        >
+          {creatingSite ? (
+            <span className="material-symbols-outlined animate-spin">progress_activity</span>
+          ) : (
+            <span className="material-symbols-outlined group-hover:animate-pulse">auto_awesome</span>
+          )}
+          <span className="font-bold tracking-wide">Generate with AI</span>
+        </button>
+      </div>
 
-      <AgentCreationModal
-        open={agentModalOpen}
-        onOpenChange={setAgentModalOpen}
-        onSuccess={() => {
-          // Refresh agents list if needed
-          toast({
-            title: "Success!",
-            description: "Agent created successfully. Refresh the page to see it in your list.",
-          });
-        }}
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        user={user}
+        credits={credits}
       />
-
-      {/* Website Editor */}
-      {editingSite && (
-        <div className="fixed inset-0 z-50 bg-background">
-          <WebsiteEditor
-            site={editingSite}
-            onUpdate={(updatedSite) => {
-              handleWebsiteUpdated(updatedSite);
-              // Reload credits after website update
-              loadUserCredits();
-            }}
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            className="absolute top-4 right-4 z-10"
-            onClick={handleCloseEditor}
-          >
-            Close Editor
-          </Button>
-        </div>
-      )}
     </div>
   );
 };

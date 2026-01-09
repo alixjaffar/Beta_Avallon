@@ -9,8 +9,9 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Sparkles, Zap, Rocket, Loader2 } from "lucide-react";
+import { Check, Sparkles, Zap, Rocket, Loader2, Crown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 interface PricingModalProps {
   open: boolean;
@@ -30,57 +31,71 @@ export function PricingModal({ open, onOpenChange, currentPlan = 'free', userEma
       period: "forever",
       description: "Perfect for getting started",
       features: [
-        "3 Websites",
-        "1 AI Agent",
-        "1 Domain",
-        "Basic Support",
-        "Community Access"
+        "15 credits/month",
+        "1 generated site",
+        "Basic customization",
+        "No AI agents",
+        "Community Support"
       ],
       buttonText: "Current Plan",
       popular: false,
       planId: "free" as const
     },
     {
-      name: "Pro",
-      price: "$29",
+      name: "Starter",
+      price: "$24.99",
+      period: "month",
+      description: "For creators and small projects",
+      features: [
+        "100 credits/month",
+        "Custom domain hosting",
+        "Multi-site creation",
+        "1 AI agent",
+        "External App integration",
+        "Email Support"
+      ],
+      buttonText: "Upgrade to Starter",
+      popular: false,
+      planId: "starter" as const
+    },
+    {
+      name: "Growth",
+      price: "$39.99",
       period: "month",
       description: "For growing businesses",
       features: [
-        "Unlimited Websites",
-        "5 AI Agents",
-        "5 Domains",
+        "250 credits/month",
+        "Everything in Starter",
+        "Up to 4 AI agents",
+        "Email Hosting",
         "Priority Support",
-        "Advanced Analytics",
-        "Custom Branding",
-        "API Access"
+        "Advanced Analytics"
       ],
-      buttonText: "Upgrade to Pro",
+      buttonText: "Upgrade to Growth",
       popular: true,
-      planId: "pro" as const
+      planId: "growth" as const
     },
     {
-      name: "Business",
+      name: "Enterprise",
       price: "Custom",
       period: "pricing",
       description: "For teams and agencies",
       features: [
-        "Unlimited Everything",
-        "Unlimited AI Agents",
-        "Unlimited Domains",
-        "24/7 Priority Support",
-        "White-label Options",
-        "Team Collaboration",
-        "Advanced Security",
-        "Dedicated Account Manager"
+        "400+ credits/month",
+        "10+ AI employees",
+        "Compliance + SLA",
+        "Dedicated infrastructure",
+        "Custom features",
+        "24/7 Priority Support"
       ],
       buttonText: "Contact Us",
       popular: false,
-      planId: "business" as const,
+      planId: "enterprise" as const,
       contactEmail: "hello@avallon.ca"
     }
   ];
 
-  const handleUpgrade = async (plan: "pro" | "business", interval: "monthly" | "yearly" = "monthly") => {
+  const handleUpgrade = async (plan: "starter" | "growth" | "enterprise", interval: "monthly" | "yearly" = "monthly") => {
     if (plan === currentPlan) {
       toast({
         title: "Already on this plan",
@@ -95,7 +110,7 @@ export function PricingModal({ open, onOpenChange, currentPlan = 'free', userEma
         ? 'https://beta-avallon.onrender.com' 
         : 'http://localhost:3000';
       
-      const response = await fetch(`${baseUrl}/api/billing/checkout`, {
+      const response = await fetchWithAuth(`${baseUrl}/api/billing/checkout`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -147,7 +162,7 @@ export function PricingModal({ open, onOpenChange, currentPlan = 'free', userEma
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
           {plans.map((plan) => {
             const isCurrentPlan = plan.planId === currentPlan;
             const isLoading = loading === plan.planId;
@@ -157,7 +172,7 @@ export function PricingModal({ open, onOpenChange, currentPlan = 'free', userEma
                 key={plan.name}
                 className={`relative transition-all duration-300 ${
                   plan.popular
-                    ? 'border-2 border-primary shadow-lg scale-105'
+                    ? 'border-2 border-primary shadow-lg'
                     : 'border'
                 } ${
                   isCurrentPlan
@@ -166,49 +181,50 @@ export function PricingModal({ open, onOpenChange, currentPlan = 'free', userEma
                 }`}
               >
                 {plan.popular && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                    <Badge className="bg-primary text-primary-foreground">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white">
                       Most Popular
                     </Badge>
                   </div>
                 )}
                 
-                <CardHeader>
+                <CardHeader className="pb-3">
                   <div className="flex items-center justify-between mb-2">
-                    <CardTitle className="text-2xl">{plan.name}</CardTitle>
+                    <CardTitle className="text-xl">{plan.name}</CardTitle>
                     {isCurrentPlan && (
-                      <Badge variant="secondary">Current</Badge>
+                      <Badge variant="secondary" className="text-xs">Current</Badge>
                     )}
                   </div>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-4xl font-bold">{plan.price}</span>
+                    <span className="text-3xl font-bold">{plan.price}</span>
                     {plan.period !== "forever" && plan.period !== "pricing" && (
-                      <span className="text-muted-foreground">/{plan.period}</span>
+                      <span className="text-muted-foreground text-sm">/{plan.period}</span>
                     )}
                   </div>
-                  <CardDescription className="mt-2">{plan.description}</CardDescription>
+                  <CardDescription className="mt-1 text-xs">{plan.description}</CardDescription>
                 </CardHeader>
                 
-                <CardContent>
-                  <ul className="space-y-3 mb-6">
+                <CardContent className="pt-0">
+                  <ul className="space-y-2 mb-4">
                     {plan.features.map((feature, index) => (
                       <li key={index} className="flex items-start gap-2">
-                        <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                        <span className="text-sm">{feature}</span>
+                        <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                        <span className="text-xs">{feature}</span>
                       </li>
                     ))}
                   </ul>
                   
                   <Button
-                    className="w-full"
+                    className={`w-full ${plan.popular ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90' : ''}`}
                     variant={plan.popular ? "default" : "outline"}
+                    size="sm"
                     disabled={isCurrentPlan || isLoading}
                     onClick={() => {
-                      if (plan.planId === 'business' && (plan as any).contactEmail) {
-                        // Open email client for Business plan
-                        window.location.href = `mailto:${(plan as any).contactEmail}?subject=Business Plan Inquiry&body=Hello, I'm interested in the Business plan. Please contact me with more information.`;
+                      if (plan.planId === 'enterprise' && (plan as any).contactEmail) {
+                        // Open email client for Enterprise plan
+                        window.location.href = `mailto:${(plan as any).contactEmail}?subject=Enterprise Plan Inquiry&body=Hello, I'm interested in the Enterprise plan. Please contact me with more information.`;
                       } else if (plan.planId !== 'free') {
-                        handleUpgrade(plan.planId, "monthly");
+                        handleUpgrade(plan.planId as "starter" | "growth" | "enterprise", "monthly");
                       }
                     }}
                   >
@@ -220,13 +236,13 @@ export function PricingModal({ open, onOpenChange, currentPlan = 'free', userEma
                     ) : isCurrentPlan ? (
                       <>
                         <Check className="w-4 h-4 mr-2" />
-                        {plan.buttonText}
+                        Current Plan
                       </>
                     ) : (
                       <>
-                        {plan.planId === 'pro' && <Zap className="w-4 h-4 mr-2" />}
-                        {plan.planId === 'business' && <Rocket className="w-4 h-4 mr-2" />}
-                        {plan.planId === 'free' && <Sparkles className="w-4 h-4 mr-2" />}
+                        {plan.planId === 'starter' && <Zap className="w-4 h-4 mr-2" />}
+                        {plan.planId === 'growth' && <Crown className="w-4 h-4 mr-2" />}
+                        {plan.planId === 'enterprise' && <Rocket className="w-4 h-4 mr-2" />}
                         {plan.buttonText}
                       </>
                     )}

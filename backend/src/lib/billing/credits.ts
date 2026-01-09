@@ -1,79 +1,92 @@
 // Credit management system for AI website generation
-import { prisma } from "@/lib/db";
+// CHANGELOG: 2025-01-07 - Updated for new pricing tiers and token-based consumption
 import { logInfo, logError } from "@/lib/log";
+import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { join } from 'path';
 
-// Credit costs for different operations
+const USER_CREDITS_FILE = join(process.cwd(), 'user-credits.json');
+
+// Token-based credit costs (1 credit = ~1000 tokens)
 export const CREDIT_COSTS = {
-  GENERATE_WEBSITE: 10, // Cost to generate a new website
-  MODIFY_WEBSITE: 5,    // Cost to modify an existing website
+  GENERATE_WEBSITE: 15,   // ~15K tokens for full website generation
+  MODIFY_WEBSITE: 5,      // ~5K tokens for modifications
+  PER_1K_TOKENS: 1,       // 1 credit per 1000 tokens
 } as const;
 
-// Credit allocations per plan (when upgrading)
+// Credit allocations per plan (monthly)
 export const PLAN_CREDITS: Record<string, number> = {
-  free: 20,       // Free plan gets 20 credits
-  pro: 100,       // Pro plan gets 100 credits
-  business: 500, // Business plan gets 500 credits
+  free: 15,         // Free plan: 15 credits/month
+  starter: 100,     // Starter plan: 100 credits/month
+  growth: 250,      // Growth plan: 250 credits/month
+  enterprise: 400,  // Enterprise plan: 400+ credits/month
+  // Legacy plans
+  pro: 100,
+  business: 250,
 };
 
+// File-based user credits storage
+interface UserCredits {
+  [userId: string]: {
+    credits: number;
+    lastUpdated: string;
+  };
+}
+
+function loadUserCredits(): UserCredits {
+  try {
+    if (existsSync(USER_CREDITS_FILE)) {
+      const data = readFileSync(USER_CREDITS_FILE, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('Error loading user credits:', error);
+  }
+  return {};
+}
+
+function saveUserCredits(credits: UserCredits): void {
+  try {
+    writeFileSync(USER_CREDITS_FILE, JSON.stringify(credits, null, 2));
+  } catch (error) {
+    console.error('Error saving user credits:', error);
+  }
+}
+
 /**
- * Get user's current credit balance
+ * Calculate credits based on token usage
+ */
+export function calculateTokenCredits(inputTokens: number, outputTokens: number): number {
+  const totalTokens = inputTokens + outputTokens;
+  // 1 credit per 1000 tokens, minimum 1 credit
+  return Math.max(1, Math.ceil(totalTokens / 1000));
+}
+
+/**
+ * Get user's current credit balance (file-based)
  */
 export async function getUserCredits(userId: string, email?: string): Promise<number> {
-  // Skip database query for mock users (fast path)
+  const lookupId = email || userId;
+  
+  // Skip for mock users
   if (userId === 'mock_user_id' || userId.startsWith('mock_')) {
-    return 20; // Default credits for mock users
+    return 5; // Default free plan credits
   }
   
   try {
-    // Try to find user by ID first, then by email
-    let user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { credits: true, id: true },
-    });
+    const allCredits = loadUserCredits();
     
-    // If not found by ID, try by email
-    if (!user && email) {
-      user = await prisma.user.findUnique({
-        where: { email: email },
-        select: { credits: true, id: true },
-      });
+    // Try userId first, then email
+    const userCredits = allCredits[userId] || (email ? allCredits[email] : null);
+    
+    if (userCredits) {
+      return userCredits.credits;
     }
     
-    // If still not found, try raw SQL search
-    if (!user) {
-      try {
-        const results = await prisma.$queryRaw<Array<{credits: number | null, id: string}>>`
-          SELECT credits, id FROM "User" 
-          WHERE id = ${userId} OR email = ${email || ''}
-          LIMIT 1
-        `;
-        if (results && results.length > 0) {
-          const rawUser = results[0];
-          user = { id: rawUser.id, credits: rawUser.credits ?? 20 };
-        }
-      } catch (e) {
-        // Ignore raw SQL errors
-      }
-    }
-
-    const credits = user?.credits;
-    logInfo('getUserCredits result', { userId, email, credits, hasUser: !!user });
-    
-    // If credits is null/undefined, return 20 as default
-    if (credits === null || credits === undefined) {
-      return 20;
-    }
-    
-    return credits;
+    // New user - give them free plan credits
+    return PLAN_CREDITS.free;
   } catch (error: any) {
-    // Handle Prisma prepared statement errors gracefully
-    if (error?.message?.includes('prepared statement') || error?.code === '42P05') {
-      logInfo('Prisma connection pool issue, using default credits', { userId });
-      return 20;
-    }
     logError('Failed to get user credits', error, { userId, email });
-    // Return 20 as default instead of 0
-    return 20;
+    return PLAN_CREDITS.free;
   }
 }
 
@@ -103,7 +116,7 @@ export async function hasEnoughCredits(
 }
 
 /**
- * Deduct credits from user's account
+ * Deduct credits from user's account (file-based)
  * Returns true if successful, false if insufficient credits
  */
 export async function deductCredits(
@@ -112,9 +125,11 @@ export async function deductCredits(
   reason?: string,
   email?: string
 ): Promise<{ success: boolean; remainingCredits: number; error?: string }> {
+  const lookupId = email || userId;
+  
   try {
-    // Check current credits
-    const currentCredits = await getUserCredits(userId, email);
+    const allCredits = loadUserCredits();
+    const currentCredits = allCredits[lookupId]?.credits ?? PLAN_CREDITS.free;
     
     if (currentCredits < amount) {
       logInfo('Insufficient credits', {
@@ -131,70 +146,26 @@ export async function deductCredits(
       };
     }
 
-    // Find the user record first (by ID or email)
-    let dbUser = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, credits: true },
-    });
-    
-    if (!dbUser && email) {
-      dbUser = await prisma.user.findUnique({
-        where: { email: email },
-        select: { id: true, credits: true },
-      });
-    }
-    
-    if (!dbUser) {
-      // Try raw SQL
-      try {
-        const results = await prisma.$queryRaw<Array<{id: string, credits: number | null}>>`
-          SELECT id, credits FROM "User" 
-          WHERE id = ${userId} OR email = ${email || ''}
-          LIMIT 1
-        `;
-        if (results && results.length > 0) {
-          const rawUser = results[0];
-          dbUser = { id: rawUser.id, credits: rawUser.credits ?? 20 };
-        }
-      } catch (e) {
-        logInfo('Raw SQL lookup failed', { error: (e as Error).message });
-      }
-    }
-    
-    if (!dbUser) {
-      logInfo('User not found for credit deduction, using in-memory tracking', { userId, email });
-      // User doesn't exist in DB yet, but we tracked credits in memory
-      // Return success with remaining credits (won't persist but allows the operation)
-      return {
-        success: true,
-        remainingCredits: currentCredits - amount,
-      };
-    }
-
-    // Deduct credits atomically using the found user's ID
-    const updatedUser = await prisma.user.update({
-      where: { id: dbUser.id },
-      data: {
-        credits: {
-          decrement: amount,
-        },
-      },
-      select: { credits: true },
-    });
+    // Deduct credits
+    const newCredits = currentCredits - amount;
+    allCredits[lookupId] = {
+      credits: newCredits,
+      lastUpdated: new Date().toISOString(),
+    };
+    saveUserCredits(allCredits);
 
     logInfo('Credits deducted', {
       userId,
       email,
-      dbUserId: dbUser.id,
       amount,
       previousCredits: currentCredits,
-      remainingCredits: updatedUser.credits,
+      remainingCredits: newCredits,
       reason,
     });
 
     return {
       success: true,
-      remainingCredits: updatedUser.credits ?? 0,
+      remainingCredits: newCredits,
     };
   } catch (error: any) {
     logError('Failed to deduct credits', error, { userId, email, amount, reason });
@@ -207,37 +178,60 @@ export async function deductCredits(
 }
 
 /**
- * Add credits to user's account (typically when upgrading plan)
+ * Deduct credits based on token usage
+ */
+export async function deductTokenCredits(
+  userId: string,
+  inputTokens: number,
+  outputTokens: number,
+  reason?: string,
+  email?: string
+): Promise<{ success: boolean; remainingCredits: number; creditsUsed: number; error?: string }> {
+  const creditsToDeduct = calculateTokenCredits(inputTokens, outputTokens);
+  const result = await deductCredits(userId, creditsToDeduct, reason, email);
+  return {
+    ...result,
+    creditsUsed: creditsToDeduct,
+  };
+}
+
+/**
+ * Add credits to user's account (file-based)
  */
 export async function addCredits(
   userId: string,
   amount: number,
-  reason?: string
+  reason?: string,
+  email?: string
 ): Promise<{ success: boolean; newBalance: number }> {
+  const lookupId = email || userId;
+  
   try {
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        credits: {
-          increment: amount,
-        },
-      },
-      select: { credits: true },
-    });
+    const allCredits = loadUserCredits();
+    const currentCredits = allCredits[lookupId]?.credits ?? 0;
+    const newBalance = currentCredits + amount;
+    
+    allCredits[lookupId] = {
+      credits: newBalance,
+      lastUpdated: new Date().toISOString(),
+    };
+    saveUserCredits(allCredits);
 
     logInfo('Credits added', {
       userId,
+      email,
       amount,
-      newBalance: updatedUser.credits,
+      previousCredits: currentCredits,
+      newBalance,
       reason,
     });
 
     return {
       success: true,
-      newBalance: updatedUser.credits,
+      newBalance,
     };
   } catch (error: any) {
-    logError('Failed to add credits', error, { userId, amount, reason });
+    logError('Failed to add credits', error, { userId, email, amount, reason });
     return {
       success: false,
       newBalance: 0,
@@ -246,35 +240,39 @@ export async function addCredits(
 }
 
 /**
- * Set user's credits to a specific amount (typically when upgrading plan)
+ * Set user's credits to a specific amount (file-based)
  */
 export async function setCredits(
   userId: string,
   amount: number,
-  reason?: string
+  reason?: string,
+  email?: string
 ): Promise<{ success: boolean; newBalance: number }> {
+  const lookupId = email || userId;
+  
   try {
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        credits: amount,
-      },
-      select: { credits: true },
-    });
+    const allCredits = loadUserCredits();
+    
+    allCredits[lookupId] = {
+      credits: amount,
+      lastUpdated: new Date().toISOString(),
+    };
+    saveUserCredits(allCredits);
 
     logInfo('Credits set', {
       userId,
+      email,
       amount,
-      newBalance: updatedUser.credits,
+      newBalance: amount,
       reason,
     });
 
     return {
       success: true,
-      newBalance: updatedUser.credits,
+      newBalance: amount,
     };
   } catch (error: any) {
-    logError('Failed to set credits', error, { userId, amount, reason });
+    logError('Failed to set credits', error, { userId, email, amount, reason });
     return {
       success: false,
       newBalance: 0,
@@ -290,70 +288,53 @@ export function getPlanCredits(plan: string): number {
 }
 
 /**
- * Ensure user has at least the minimum credits (creates user if needed)
- * Call this when user first interacts with the system
+ * Ensure user has at least the minimum credits (file-based)
  */
 export async function ensureUserHasCredits(
   userId: string,
   email: string,
-  minCredits: number = 20
+  minCredits?: number
 ): Promise<{ success: boolean; credits: number }> {
+  const defaultCredits = minCredits ?? PLAN_CREDITS.free;
+  const lookupId = email || userId;
+  
   if (!email || email === 'user@example.com' || email === 'test@example.com') {
-    return { success: true, credits: minCredits };
+    return { success: true, credits: defaultCredits };
   }
   
   try {
-    // Check if user exists by email
-    let user = await prisma.user.findUnique({
-      where: { email },
-      select: { id: true, credits: true },
-    });
+    const allCredits = loadUserCredits();
     
-    if (user) {
-      // User exists, check if they need credits
-      if (user.credits === null || user.credits < minCredits) {
-        const updated = await prisma.user.update({
-          where: { id: user.id },
-          data: { credits: minCredits },
-          select: { credits: true },
-        });
-        logInfo('Updated existing user credits', { email, userId: user.id, credits: updated.credits });
-        return { success: true, credits: updated.credits ?? minCredits };
-      }
-      return { success: true, credits: user.credits };
+    if (allCredits[lookupId]) {
+      return { success: true, credits: allCredits[lookupId].credits };
     }
     
-    // User doesn't exist, create them with minimum credits
-    const clerkId = `email_${Buffer.from(email).toString('base64').replace(/[^a-zA-Z0-9]/g, '').substring(0, 16)}_${Date.now()}`;
-    const cuid = `c${Date.now().toString(36)}${Math.random().toString(36).substring(2, 11)}`;
+    // New user - give them default credits
+    allCredits[lookupId] = {
+      credits: defaultCredits,
+      lastUpdated: new Date().toISOString(),
+    };
+    saveUserCredits(allCredits);
     
-    try {
-      const newUser = await prisma.user.create({
-        data: {
-          id: cuid,
-          clerkId: clerkId,
-          email: email,
-          credits: minCredits,
-        },
-        select: { credits: true },
-      });
-      logInfo('Created new user with credits', { email, credits: newUser.credits });
-      return { success: true, credits: newUser.credits ?? minCredits };
-    } catch (createError: any) {
-      // If creation fails due to unique constraint, user was just created by another request
-      if (createError.code === 'P2002') {
-        const existingUser = await prisma.user.findUnique({
-          where: { email },
-          select: { credits: true },
-        });
-        return { success: true, credits: existingUser?.credits ?? minCredits };
-      }
-      throw createError;
-    }
+    logInfo('Initialized user credits', { email, userId, credits: defaultCredits });
+    return { success: true, credits: defaultCredits };
   } catch (error: any) {
     logError('Failed to ensure user has credits', error, { userId, email });
-    return { success: false, credits: minCredits };
+    return { success: false, credits: defaultCredits };
   }
+}
+
+/**
+ * Initialize or update credits when user upgrades plan
+ */
+export async function initializeCreditsForPlan(
+  userId: string,
+  plan: string,
+  email?: string
+): Promise<{ success: boolean; credits: number }> {
+  const planCredits = getPlanCredits(plan);
+  const result = await setCredits(userId, planCredits, `Upgraded to ${plan} plan`, email);
+  return { success: result.success, credits: result.newBalance };
 }
 
 

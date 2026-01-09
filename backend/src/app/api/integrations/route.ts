@@ -1,10 +1,12 @@
 // API endpoint for managing user integrations (Stripe, Twilio, etc.)
 // Uses file-based storage to avoid database connection issues
+// CHANGELOG: 2025-01-07 - Add plan-based feature gating for integrations
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 import { z } from "zod";
 import { getUser } from "@/lib/auth/getUser";
 import { getCorsHeaders } from "@/lib/cors";
+import { getUserPlan, canAccessIntegrations } from "@/lib/billing/limits";
 import { 
   upsertIntegration, 
   getIntegrationsByUser, 
@@ -71,6 +73,20 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
     }
 
+    // Check if user's plan allows integrations
+    const userPlan = await getUserPlan(user.id);
+    const hasIntegrationAccess = canAccessIntegrations(userPlan);
+    
+    if (!hasIntegrationAccess) {
+      return NextResponse.json({ 
+        connected: [],
+        available: [],
+        featureGated: true,
+        message: "External App integrations are not available on the Free plan. Upgrade to Starter or higher to connect integrations.",
+        requiredPlan: "starter",
+      }, { headers: corsHeaders });
+    }
+
     // Get user's integrations from file storage
     const userIntegrations = await getIntegrationsByUser(user.id);
     
@@ -125,6 +141,16 @@ export async function POST(req: NextRequest) {
     const user = await getUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
+    }
+
+    // Check if user's plan allows integrations
+    const userPlan = await getUserPlan(user.id);
+    if (!canAccessIntegrations(userPlan)) {
+      return NextResponse.json({
+        error: "External App integrations are not available on the Free plan. Upgrade to Starter or higher to connect integrations.",
+        upgradeRequired: true,
+        requiredPlan: "starter",
+      }, { status: 403, headers: corsHeaders });
     }
 
     const body = await req.json();
