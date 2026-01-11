@@ -416,16 +416,48 @@ export async function POST(req: NextRequest) {
       });
     }
   } catch (error: any) {
-    logError('Website generation failed', error);
+    logError('Website generation failed (outer catch)', error);
+    
+    // Handle Zod validation errors
     if (error.name === 'ZodError') {
-      return NextResponse.json({ error: "Invalid input", details: error.errors }, { 
+      logError('Validation error', error, { errors: error.errors });
+      return NextResponse.json({ 
+        error: "Invalid input", 
+        details: error.errors 
+      }, { 
         status: 400,
         headers: corsHeaders,
       });
     }
+    
+    // Handle JSON parsing errors
+    if (error instanceof SyntaxError && error.message.includes('JSON')) {
+      logError('JSON parsing error', error);
+      return NextResponse.json({ 
+        error: "Invalid JSON in request body",
+        message: error.message
+      }, { 
+        status: 400,
+        headers: corsHeaders,
+      });
+    }
+    
+    // Return detailed error for debugging
+    const errorMessage = error?.message || 'Unknown error';
+    const errorStack = error?.stack || 'No stack trace';
+    
+    logError('Unhandled error in generate endpoint', error, {
+      message: errorMessage,
+      stack: errorStack,
+      name: error?.name,
+      code: error?.code,
+    });
+    
     return NextResponse.json({ 
       error: "Internal server error",
-      message: error?.message || 'Unknown error'
+      message: errorMessage,
+      // Only include stack in development
+      ...(process.env.NODE_ENV === 'development' && { stack: errorStack })
     }, { 
       status: 500,
       headers: corsHeaders,
