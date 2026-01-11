@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     
     // Ensure we have a user with email
     if (!user || !user.email || user.email === 'test@example.com' || user.email === 'user@example.com') {
-      logError('No user or email found', new Error('Missing user or email'), { userEmail, hasUser: !!user, userEmail: user?.email });
+      logError('No user or email found', new Error('Missing user or email'), { userEmail, hasUser: !!user, userEmailFromUser: user?.email });
       return NextResponse.json({ 
         error: "User email is required",
         message: "Please provide an email address or sign in first"

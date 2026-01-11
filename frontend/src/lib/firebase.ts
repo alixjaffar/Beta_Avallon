@@ -17,6 +17,7 @@ import {
   AuthError,
   type Auth
 } from "firebase/auth";
+import { getAnalytics, type Analytics } from "firebase/analytics";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -32,19 +33,26 @@ const firebaseConfig = {
 // Initialize Firebase
 let app: FirebaseApp;
 let auth: Auth;
+let analytics: Analytics | null = null;
 
 try {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
+  
+  // Initialize Analytics only in browser environment
+  if (typeof window !== 'undefined') {
+    try {
+      analytics = getAnalytics(app);
+    } catch (e) {
+      // Analytics might fail if ad blockers are present - this is okay
+      console.warn('Firebase Analytics initialization failed (might be blocked by ad blocker):', e);
+    }
+  }
 } catch (e) {
   console.error('Firebase initialization error:', e);
   // Create a minimal fallback
   throw new Error('Failed to initialize Firebase. Please check your configuration.');
 }
-
-// Analytics is completely disabled to avoid content blocker issues
-// Can be re-enabled later if needed with dynamic import:
-// const { getAnalytics } = await import('firebase/analytics');
 
 // ==================== AUTH FUNCTIONS ====================
 
@@ -309,5 +317,5 @@ function getErrorMessage(errorCode: string): string {
   }
 }
 
-// Export auth instance for advanced use cases
-export { auth, app };
+// Export auth and analytics instances for advanced use cases
+export { auth, app, analytics };
