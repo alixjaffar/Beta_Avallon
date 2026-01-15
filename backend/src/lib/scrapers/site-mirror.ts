@@ -681,81 +681,54 @@ export class SiteMirrorScraper {
       
       if (!executablePath) {
         try {
-          // Use Puppeteer's browser fetcher to get the correct Chrome path
-          const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
-          const browserFetcher = puppeteer.default.createBrowserFetcher({
-            cacheDir: cacheDir,
-          });
+          // Search for Chrome in common cache locations
+          // Chrome is installed at: /opt/render/.cache/puppeteer/chrome/linux-{version}/chrome-linux64/chrome
+          const possibleCacheDirs = [
+            process.env.PUPPETEER_CACHE_DIR,
+            '/opt/render/.cache/puppeteer',
+            path.default.join(process.cwd(), '.cache', 'puppeteer'),
+            path.default.join(process.env.HOME || '/tmp', '.cache', 'puppeteer'),
+          ].filter(Boolean) as string[];
           
-          // Check if Chrome is installed locally
-          const localRevisions = browserFetcher.localRevisions();
-          logInfo('Puppeteer local revisions', { revisions: localRevisions, cacheDir });
+          logInfo('Searching for Chrome in cache directories', { cacheDirs: possibleCacheDirs });
           
-          if (localRevisions && localRevisions.length > 0) {
-            // Get the first installed Chrome revision
-            const revisionInfo = browserFetcher.revisionInfo(localRevisions[0]);
+          for (const cacheDir of possibleCacheDirs) {
+            const chromeDir = path.default.join(cacheDir, 'chrome');
             
-            if (revisionInfo && revisionInfo.local && existsSync(revisionInfo.executablePath)) {
-              executablePath = revisionInfo.executablePath;
-              logInfo('✅ Found Chrome via Puppeteer browser fetcher', { 
-                path: executablePath,
-                revision: revisionInfo.revision 
-              });
-            } else {
-              logInfo('Chrome revision found but executable not accessible', { 
-                revision: localRevisions[0],
-                expectedPath: revisionInfo?.executablePath 
-              });
-            }
-          }
-          
-          // If not found via browser fetcher, try manual search
-          if (!executablePath) {
-            // Chrome not installed, try to find it manually
-            logInfo('Chrome not found via browser fetcher, trying manual search');
-            
-            const possibleCacheDirs = [
-              process.env.PUPPETEER_CACHE_DIR,
-              '/opt/render/.cache/puppeteer',
-              path.default.join(process.cwd(), '.cache', 'puppeteer'),
-              path.default.join(process.env.HOME || '/tmp', '.cache', 'puppeteer'),
-            ].filter(Boolean) as string[];
-            
-            for (const cacheDir of possibleCacheDirs) {
-              const chromeDir = path.default.join(cacheDir, 'chrome');
-              
-              if (existsSync(chromeDir)) {
-                try {
-                  // Find the versioned directory (e.g., linux-143.0.7499.169)
-                  const dirs = readdirSync(chromeDir);
-                  const versionDir = dirs.find(d => d.startsWith('linux-'));
+            if (existsSync(chromeDir)) {
+              try {
+                // Find the versioned directory (e.g., linux-143.0.7499.169)
+                const dirs = readdirSync(chromeDir);
+                const versionDir = dirs.find(d => d.startsWith('linux-'));
+                
+                if (versionDir) {
+                  logInfo('Found Chrome version directory', { versionDir, cacheDir });
                   
-                  if (versionDir) {
-                    // Try both possible structures
-                    const possiblePaths = [
-                      path.default.join(chromeDir, versionDir, 'chrome-linux64', 'chrome'),
-                      path.default.join(chromeDir, versionDir, 'chrome', 'chrome'),
-                      path.default.join(chromeDir, versionDir, 'chrome'),
-                    ];
-                    
-                    for (const chromePath of possiblePaths) {
-                      if (existsSync(chromePath)) {
-                        executablePath = chromePath;
-                        logInfo('✅ Found Chrome in cache', { path: executablePath, cacheDir });
-                        break;
-                      }
+                  // Try both possible structures
+                  const possiblePaths = [
+                    path.default.join(chromeDir, versionDir, 'chrome-linux64', 'chrome'),
+                    path.default.join(chromeDir, versionDir, 'chrome', 'chrome'),
+                    path.default.join(chromeDir, versionDir, 'chrome'),
+                  ];
+                  
+                  for (const chromePath of possiblePaths) {
+                    if (existsSync(chromePath)) {
+                      executablePath = chromePath;
+                      logInfo('✅ Found Chrome executable', { path: executablePath, cacheDir });
+                      break;
                     }
-                    
-                    if (executablePath) break;
                   }
-                } catch (error) {
-                  // Continue to next cache dir
+                  
+                  if (executablePath) break;
                 }
+              } catch (error) {
+                logError('Error searching for Chrome in cache dir', error, { cacheDir });
+                // Continue to next cache dir
               }
             }
           }
         } catch (error) {
-          logError('Failed to find Chrome via browser fetcher', error);
+          logError('Failed to find Chrome in cache directories', error);
         }
       }
       
