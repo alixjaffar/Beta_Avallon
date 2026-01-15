@@ -816,7 +816,7 @@ export class GeminiWebsiteGenerator {
         useGlobalEndpoint: true
       });
       
-      let content: string;
+      let content: string = '';
       
       // Try global endpoint first for Gemini 3 Pro Preview
       if (this.googleAuth) {
