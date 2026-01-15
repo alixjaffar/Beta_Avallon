@@ -3,7 +3,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
-import puppeteer from 'puppeteer';
+// Puppeteer is dynamically imported to avoid build-time issues
+import type { Browser } from 'puppeteer';
 
 // Request schema
 interface ScrapeRequest {
@@ -228,11 +229,15 @@ async function processHtml(html: string, baseUrl: string): Promise<string> {
 
 /**
  * Use Puppeteer to render JavaScript-heavy sites
+ * Dynamically imports puppeteer to avoid build-time issues
  */
 async function renderWithPuppeteer(url: string): Promise<string> {
   console.log(`[Scrape] Launching Puppeteer for: ${url}`);
 
-  const browser = await puppeteer.launch({
+  // Dynamic import to avoid build-time evaluation
+  const puppeteer = await import('puppeteer');
+  
+  const browser: Browser = await puppeteer.default.launch({
     headless: true,
     args: [
       '--no-sandbox',
