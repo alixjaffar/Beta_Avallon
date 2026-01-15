@@ -1,7 +1,38 @@
 // Integration utilities for website generation
-import { db } from "@/lib/db";
-import { decrypt } from "@/lib/crypto";
 import { logInfo, logError } from "@/lib/log";
+
+// Lazy load database to avoid crashes when DATABASE_URL is not set
+let db: any = null;
+let decrypt: any = null;
+
+async function getDb() {
+  if (!process.env.DATABASE_URL) {
+    return null;
+  }
+  if (!db) {
+    try {
+      const dbModule = await import("@/lib/db");
+      db = dbModule.db;
+    } catch (e) {
+      logError('Failed to load database module', e);
+      return null;
+    }
+  }
+  return db;
+}
+
+async function getDecrypt() {
+  if (!decrypt) {
+    try {
+      const cryptoModule = await import("@/lib/crypto");
+      decrypt = cryptoModule.decrypt;
+    } catch (e) {
+      logError('Failed to load crypto module', e);
+      return null;
+    }
+  }
+  return decrypt;
+}
 
 export interface StripeIntegration {
   secretKey: string;
@@ -29,7 +60,13 @@ export async function getUserIntegration(
   provider: string
 ): Promise<Record<string, string> | null> {
   try {
-    const integration = await db.userIntegration.findUnique({
+    const database = await getDb();
+    if (!database) {
+      // Database not available, skip integrations
+      return null;
+    }
+
+    const integration = await database.userIntegration.findUnique({
       where: {
         userId_provider: {
           userId,
@@ -49,11 +86,16 @@ export async function getUserIntegration(
       return null;
     }
 
-    const decrypted = decrypt(encryptedData);
+    const decryptFn = await getDecrypt();
+    if (!decryptFn) {
+      return null;
+    }
+
+    const decrypted = decryptFn(encryptedData);
     const credentials = JSON.parse(decrypted);
 
     // Update last used timestamp
-    await db.userIntegration.update({
+    await database.userIntegration.update({
       where: { id: integration.id },
       data: { lastUsedAt: new Date() },
     });
@@ -111,32 +153,52 @@ export async function getUserGoogleAnalyticsIntegration(userId: string): Promise
  * Check if user has a specific integration connected
  */
 export async function hasIntegration(userId: string, provider: string): Promise<boolean> {
-  const integration = await db.userIntegration.findUnique({
-    where: {
-      userId_provider: {
-        userId,
-        provider,
-      },
-    },
-    select: { status: true },
-  });
+  try {
+    const database = await getDb();
+    if (!database) {
+      return false;
+    }
 
-  return integration?.status === 'active';
+    const integration = await database.userIntegration.findUnique({
+      where: {
+        userId_provider: {
+          userId,
+          provider,
+        },
+      },
+      select: { status: true },
+    });
+
+    return integration?.status === 'active';
+  } catch (error: any) {
+    logError('Failed to check integration', error, { userId, provider });
+    return false;
+  }
 }
 
 /**
  * Get all active integrations for a user
  */
 export async function getUserActiveIntegrations(userId: string): Promise<string[]> {
-  const integrations = await db.userIntegration.findMany({
-    where: {
-      userId,
-      status: 'active',
-    },
-    select: { provider: true },
-  });
+  try {
+    const database = await getDb();
+    if (!database) {
+      return [];
+    }
 
-  return integrations.map(i => i.provider);
+    const integrations = await database.userIntegration.findMany({
+      where: {
+        userId,
+        status: 'active',
+      },
+      select: { provider: true },
+    });
+
+    return integrations.map((i: { provider: string }) => i.provider);
+  } catch (error: any) {
+    logError('Failed to get active integrations', error, { userId });
+    return [];
+  }
 }
 
 /**

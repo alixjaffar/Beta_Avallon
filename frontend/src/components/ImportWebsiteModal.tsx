@@ -136,29 +136,44 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
 
     setIsLoading(true);
     setError(null);
-    setLoadingStatus('Fetching website HTML...');
+    setLoadingStatus('🚀 Starting SiteMirror clone...');
 
     try {
       const backendUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
         ? 'http://localhost:3000'
         : 'https://beta-avallon.onrender.com';
 
-      const response = await fetch(`${backendUrl}/api/proxy?url=${encodeURIComponent(normalizedUrl)}&type=html`);
+      // Use SiteMirror scraper endpoint
+      setLoadingStatus('🔍 SiteMirror: Analyzing website structure...');
+      const response = await fetch(`${backendUrl}/api/sites/import`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url: normalizedUrl }),
+      });
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to fetch website: ${response.status}`);
+        throw new Error(errorData.error || `Failed to import website: ${response.status}`);
       }
 
-      const html = await response.text();
+      const data = await response.json();
       
-      setLoadingStatus('Converting relative URLs to absolute...');
+      if (!data.success || !data.html) {
+        throw new Error(data.error || 'Failed to import website content');
+      }
+
+      const html = data.html;
+      
+      setLoadingStatus('📦 SiteMirror: Processing assets & CSS...');
       
       // Small delay for UI feedback
       await new Promise(r => setTimeout(r, 100));
       
-      setLoadingStatus('Fetching and inlining external CSS stylesheets...');
+      setLoadingStatus('✅ SiteMirror: Finalizing import...');
 
+      // Process the HTML with importHTML to handle CSS, images, etc.
       const result = await importHTML(html, {
         sourceUrl: normalizedUrl,
         preserveExternalCSS: options.preserveExternalCSS,
@@ -557,15 +572,16 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
                 />
               </div>
 
-              <div className={`p-4 rounded-lg text-sm ${isLight ? 'bg-amber-50 text-amber-700' : 'bg-amber-500/10 text-amber-400'}`}>
+              <div className={`p-4 rounded-lg text-sm ${isLight ? 'bg-emerald-50 text-emerald-700' : 'bg-emerald-500/10 text-emerald-400'}`}>
                 <div className="flex items-start gap-2">
-                  <span className="material-symbols-outlined text-[18px] shrink-0">warning</span>
+                  <span className="material-symbols-outlined text-[18px] shrink-0">rocket_launch</span>
                   <div>
-                    <p className="font-medium mb-1">Note:</p>
+                    <p className="font-medium mb-1">✨ Powered by SiteMirror</p>
                     <ul className="list-disc list-inside space-y-1 text-xs opacity-80">
-                      <li>Some websites may block external access</li>
-                      <li>JavaScript-rendered content may not be captured</li>
-                      <li>For best results, use "Paste HTML" with the full source code</li>
+                      <li>Complete website cloning with HTML, CSS, JS, images & fonts</li>
+                      <li>Automatic URL rewriting for offline use</li>
+                      <li>CSS parsing and asset embedding</li>
+                      <li>Based on <a href="https://github.com/pakelcomedy/SiteMirror" target="_blank" rel="noopener" className="underline hover:no-underline">github.com/pakelcomedy/SiteMirror</a></li>
                     </ul>
                   </div>
                 </div>

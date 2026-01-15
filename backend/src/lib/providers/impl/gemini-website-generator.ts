@@ -1,10 +1,13 @@
 // CHANGELOG: 2025-01-15 - Gemini AI website generation (based on open-source AI Website Builder)
 // Reference: https://github.com/Ratna-Babu/Ai-Website-Builder
 // UPDATED: 2025-01-07 - Using Vertex AI with Gemini 3 Pro Preview (global endpoint)
+// UPDATED: 2026-01-15 - Integrated SiteMirror scraper for advanced website cloning
+// UPDATED: 2026-01-15 - Using ONLY Vertex AI SDK with Gemini 3 Pro Preview
 import axios from 'axios';
 import { logError, logInfo } from '@/lib/log';
 import { VertexAI } from '@google-cloud/vertexai';
 import { GoogleAuth } from 'google-auth-library';
+import { SiteMirrorScraper } from '@/lib/scrapers/site-mirror';
 
 // Ensure environment variables are loaded
 if (typeof process !== 'undefined' && process.env) {
@@ -109,7 +112,8 @@ export class GeminiWebsiteGenerator {
     // Initialize Google Auth for Gemini 3 Pro (global endpoint)
     try {
       this.googleAuth = new GoogleAuth({
-        scopes: ['https://www.googleapis.com/auth/cloud-platform']
+        scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+        keyFilename: credentialsPath
       });
       logInfo('✅ Google Auth initialized for Gemini 3 Pro Preview', {
         projectId: this.projectId,
@@ -118,16 +122,17 @@ export class GeminiWebsiteGenerator {
     } catch (error) {
       logError('Failed to initialize Google Auth', error, {
         projectId: this.projectId,
+        credentialsPath,
       });
     }
     
-    // Initialize Vertex AI SDK for fallback models
+    // Initialize Vertex AI SDK for Gemini 3 Pro Preview
     try {
       this.vertexAI = new VertexAI({
         project: this.projectId,
         location: this.region,
       });
-      logInfo('✅ Vertex AI SDK initialized for fallback models', {
+      logInfo('✅ Vertex AI SDK initialized for Gemini 3 Pro Preview', {
         projectId: this.projectId,
         region: this.region,
       });
@@ -144,16 +149,38 @@ export class GeminiWebsiteGenerator {
       hasVertexAI: !!this.vertexAI,
       projectId: this.projectId,
       region: this.region,
-      primaryModel: 'gemini-3-pro-preview',
-      fallbackModels: ['gemini-2.5-pro', 'gemini-2.5-flash']
+      model: 'gemini-3-pro-preview'
     });
   }
 
   /**
-   * ADVANCED website scraping for pixel-perfect cloning
+   * ADVANCED website scraping using SiteMirror (pixel-perfect cloning)
    * Extracts HTML, CSS, colors, fonts, images, and layout structure
+   * Based on: https://github.com/pakelcomedy/SiteMirror/
    */
   private async fetchWebsiteContent(url: string): Promise<WebsiteAnalysis | null> {
+    try {
+      const scraper = new SiteMirrorScraper(url, {
+        maxDepth: 5,
+        maxWorkers: 8,
+        delay: 500,
+        timeout: 15000,
+        ignoreRobots: false,
+        respectSitemap: true,
+      });
+      
+      return await scraper.fetchWebsiteContent(url);
+    } catch (error: any) {
+      logError('SiteMirror scraping failed, falling back to basic fetch', error, { url });
+      // Fallback to original method if SiteMirror fails
+      return this.fetchWebsiteContentFallback(url);
+    }
+  }
+
+  /**
+   * Fallback website scraping method (original implementation)
+   */
+  private async fetchWebsiteContentFallback(url: string): Promise<WebsiteAnalysis | null> {
     try {
       // Normalize URL - handle various cases
       let normalizedUrl = url.trim();
@@ -749,32 +776,27 @@ export class GeminiWebsiteGenerator {
       promptLength: prompt.length 
     });
     
-    // Using Gemini 3 Pro Preview (global endpoint) with fallback to Vertex AI models
-    // Order: Best quality → Fastest fallback
-    const models = [
-      { name: 'gemini-3-pro-preview', useGlobal: true },   // Gemini 3 Pro - BEST quality (global endpoint)
-      { name: 'gemini-2.5-pro', useGlobal: false },        // Gemini 2.5 Pro - excellent fallback
-      { name: 'gemini-2.5-flash', useGlobal: false },      // Fast model - great quality + speed
-    ];
-    let lastError: any = null;
+    // Using ONLY Vertex AI SDK with Gemini 3 Pro Preview (global endpoint)
+    const model = 'gemini-3-pro-preview';
     
-    for (const modelConfig of models) {
-      const model = modelConfig.name;
-      try {
-        // Log which model we're attempting
-        logInfo('🚀 Attempting Gemini API call', { 
-          model, 
-          isMultiPage,
-          priority: models.findIndex(m => m.name === model) + 1,
-          isPrimary: model === 'gemini-3-pro-preview',
-          useGlobalEndpoint: modelConfig.useGlobal,
-          projectId: this.projectId
-        });
-        
-        let content: string;
-        
-        if (modelConfig.useGlobal && this.googleAuth) {
-          // Use global endpoint for Gemini 3 Pro Preview
+    if (!this.vertexAI && !this.googleAuth) {
+      throw new Error('Vertex AI SDK not initialized. Please ensure GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT_ID are set.');
+    }
+    
+    try {
+      // Log which model we're attempting
+      logInfo('🚀 Attempting Gemini 3 Pro Preview API call', { 
+        model, 
+        isMultiPage,
+        projectId: this.projectId,
+        useGlobalEndpoint: true
+      });
+      
+      let content: string;
+      
+      // Try global endpoint first for Gemini 3 Pro Preview
+      if (this.googleAuth) {
+        try {
           logInfo('Using global endpoint for Gemini 3 Pro Preview', { model });
           
           const client = await this.googleAuth.getClient();
@@ -783,17 +805,57 @@ export class GeminiWebsiteGenerator {
           
           const url = `https://aiplatform.googleapis.com/v1/projects/${this.projectId}/locations/global/publishers/google/models/${model}:generateContent`;
           
+          // Build request body matching Vertex AI API structure
+          const requestBody: any = {
+            contents: [
+              {
+                role: 'user',
+                parts: [
+                  {
+                    text: prompt
+                  }
+                ]
+              }
+            ],
+            systemInstruction: {
+              role: 'system',
+              parts: [
+                {
+                  text: 'You are an expert web developer specializing in creating modern, responsive websites with HTML, CSS, and JavaScript. Always generate complete, production-ready code.'
+                }
+              ]
+            },
+            generationConfig: {
+              temperature: isCloneOperation ? 0.3 : 0.6,
+              topP: 0.95,
+              topK: isCloneOperation ? 20 : 32,
+              maxOutputTokens: maxOutputTokens,
+              candidateCount: 1,
+              stopSequences: [],
+            },
+            safetySettings: [
+              {
+                category: 'HARM_CATEGORY_HATE_SPEECH',
+                threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+              },
+              {
+                category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+                threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+              },
+              {
+                category: 'HARM_CATEGORY_HARASSMENT',
+                threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+              },
+              {
+                category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+                threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+              }
+            ]
+          };
+          
           const response = await axios.post(
             url,
-            {
-              contents: [{ role: 'user', parts: [{ text: prompt }] }],
-              generationConfig: {
-                temperature: isCloneOperation ? 0.3 : 0.6,
-                topK: isCloneOperation ? 20 : 32,
-                topP: 0.95,
-                maxOutputTokens: maxOutputTokens,
-              }
-            },
+            requestBody,
             {
               headers: {
                 'Authorization': `Bearer ${token}`,
@@ -804,48 +866,59 @@ export class GeminiWebsiteGenerator {
           );
           
           if (!response.data.candidates || response.data.candidates.length === 0) {
-            throw new Error('Gemini 3 Pro returned no candidates');
+            throw new Error('Gemini 3 Pro Preview returned no candidates');
           }
           
           const candidate = response.data.candidates[0];
           if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
-            throw new Error('Gemini 3 Pro candidate has no content parts');
+            throw new Error('Gemini 3 Pro Preview candidate has no content parts');
           }
           
           content = candidate.content.parts[0].text || '';
-        } else if (this.vertexAI) {
-          // Use Vertex AI SDK for regional models
-          const generativeModel = this.vertexAI.getGenerativeModel({
-            model: model,
-            generationConfig: {
-              temperature: isCloneOperation ? 0.3 : 0.6,
-              topK: isCloneOperation ? 20 : 32,
-              topP: 0.95,
-              maxOutputTokens: maxOutputTokens,
-            },
-          });
-          
-          const result = await generativeModel.generateContent({
-            contents: [{
-              role: 'user',
-              parts: [{ text: prompt }]
-            }]
-          });
-          
-          const response = result.response;
-          if (!response.candidates || response.candidates.length === 0) {
-            throw new Error('Vertex AI returned no candidates');
-          }
-          
-          const candidate = response.candidates[0];
-          if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
-            throw new Error('Vertex AI candidate has no content parts');
-          }
-          
-          content = candidate.content.parts[0].text || '';
-        } else {
-          throw new Error('No authentication method available');
+        } catch (globalError: any) {
+          logError('Global endpoint failed, trying Vertex AI SDK', globalError);
+          // Fall through to Vertex AI SDK attempt
+          throw globalError;
         }
+      }
+      
+      // If global endpoint failed or not available, use Vertex AI SDK
+      if (this.vertexAI && !content) {
+        logInfo('Using Vertex AI SDK for Gemini 3 Pro Preview', { model, projectId: this.projectId, region: this.region });
+        
+        const generativeModel = this.vertexAI.getGenerativeModel({
+          model: model,
+          generationConfig: {
+            temperature: isCloneOperation ? 0.3 : 0.6,
+            topK: isCloneOperation ? 20 : 32,
+            topP: 0.95,
+            maxOutputTokens: maxOutputTokens,
+          },
+        });
+        
+        const result = await generativeModel.generateContent({
+          contents: [{
+            role: 'user',
+            parts: [{ text: prompt }]
+          }]
+        });
+        
+        const response = result.response;
+        if (!response.candidates || response.candidates.length === 0) {
+          throw new Error('Vertex AI returned no candidates');
+        }
+        
+        const candidate = response.candidates[0];
+        if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
+          throw new Error('Vertex AI candidate has no content parts');
+        }
+        
+        content = candidate.content.parts[0].text || '';
+      }
+      
+      if (!content) {
+        throw new Error('No content generated from Gemini 3 Pro Preview');
+      }
         
         if (!content) {
           throw new Error('API returned empty content');
@@ -861,69 +934,35 @@ export class GeminiWebsiteGenerator {
         });
         
         // Log success with model version for verification
-        if (model === 'gemini-3-pro-preview') {
-          logInfo('🎯 SUCCESS: Using Gemini 3 Pro Preview (latest flagship model)', { model });
-        }
-        
-        return this.parseGeneratedCode(content);
-      } catch (error: any) {
-        lastError = error;
-        const errorMessage = error.message || error.response?.data?.error?.message || '';
-        
-        // If quota exceeded or resource exhausted, try next model
-        if (errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED') || errorMessage.includes('429')) {
-          logInfo(`⚠️ Model ${model} quota exceeded, trying next model in chain`, { 
-            model, 
-            error: errorMessage,
-            nextModel: models[models.findIndex(m => m.name === model) + 1]?.name || 'none'
-          });
-          continue;
-        }
-        
-        // If model not found, try next model
-        if (errorMessage.includes('NOT_FOUND') || errorMessage.includes('not found') || errorMessage.includes('404')) {
-          logInfo(`⚠️ Model ${model} not found, trying next model`, { 
-            model, 
-            error: errorMessage,
-            nextModel: models[models.findIndex(m => m.name === model) + 1]?.name || 'none'
-          });
-          continue;
-        }
-        
-        // If authentication error, don't try other models
-        if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('UNAUTHENTICATED') || errorMessage.includes('403') || errorMessage.includes('401')) {
-          throw new Error(`Gemini API authentication failed. Please check your service account credentials. Error: ${errorMessage}`);
-        }
-        
-        // For other errors, try next model
-        logInfo(`⚠️ Model ${model} failed, trying next model in fallback chain`, { 
-          model, 
-          error: errorMessage,
-          nextModel: models[models.findIndex(m => m.name === model) + 1]?.name || 'none'
-        });
-        continue;
+      logInfo('🎯 SUCCESS: Using Gemini 3 Pro Preview', { model, contentLength: content.length });
+      
+      return this.parseGeneratedCode(content);
+    } catch (error: any) {
+      const errorMessage = error.message || error.response?.data?.error?.message || '';
+      
+      logError('❌ Gemini 3 Pro Preview failed', error, {
+        model: 'gemini-3-pro-preview',
+        projectId: this.projectId,
+        region: this.region,
+        lastMessage: errorMessage
+      });
+      
+      // Provide helpful error messages
+      if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('UNAUTHENTICATED') || errorMessage.includes('401') || errorMessage.includes('403')) {
+        throw new Error(`Vertex AI authentication failed. Please ensure:\n1. GOOGLE_APPLICATION_CREDENTIALS points to a valid service account JSON file\n2. The service account has "Vertex AI User" role\n3. GOOGLE_CLOUD_PROJECT_ID is set correctly\n\nError: ${errorMessage}`);
       }
+      if (errorMessage.includes('ENOENT') || errorMessage.includes('does not exist')) {
+        throw new Error(`Service account credentials file not found. Please set GOOGLE_APPLICATION_CREDENTIALS to point to your service account JSON file.\n\nExpected path: ${process.env.GOOGLE_APPLICATION_CREDENTIALS || './credentials/vertex-ai-service-account.json'}`);
+      }
+      if (errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+        throw new Error(`Vertex AI quota exceeded. ${errorMessage}. Please check your Google Cloud billing/quota.`);
+      }
+      if (errorMessage.includes('NOT_FOUND') || errorMessage.includes('404')) {
+        throw new Error(`Gemini 3 Pro Preview model not found. Please ensure the model is available in your project ${this.projectId} and region ${this.region}. Error: ${errorMessage}`);
+      }
+      
+      throw new Error(`Gemini 3 Pro Preview failed: ${errorMessage}`);
     }
-    
-    // If we get here, all models failed
-    logError('❌ All Gemini models failed', lastError, {
-      modelsTried: models.map(m => m.name),
-      primaryModel: 'gemini-3-pro-preview',
-      lastMessage: lastError?.message || lastError?.response?.data?.error?.message,
-      note: 'Tried Gemini 3 Pro Preview first, then fallbacks'
-    });
-    
-    const errorMessage = lastError?.message || lastError?.response?.data?.error?.message || 'Unknown error';
-    
-    // Provide helpful error messages
-    if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('UNAUTHENTICATED')) {
-      throw new Error(`Gemini API authentication failed. Please ensure your service account has the "Vertex AI User" role. Error: ${errorMessage}`);
-    }
-    if (errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
-      throw new Error(`Gemini API quota exceeded. ${errorMessage}. Please check your Google Cloud billing/quota.`);
-    }
-    
-    throw new Error(`Gemini API failed with all models: ${errorMessage}`);
   }
 
   private buildWebsitePrompt(

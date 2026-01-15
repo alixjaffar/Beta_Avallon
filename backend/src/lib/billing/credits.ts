@@ -82,8 +82,8 @@ export async function getUserCredits(userId: string, email?: string): Promise<nu
       return userCredits.credits;
     }
     
-    // New user - give them free plan credits
-    return PLAN_CREDITS.free;
+    // New user - give them 15 credits (free plan)
+    return 15;
   } catch (error: any) {
     logError('Failed to get user credits', error, { userId, email });
     return PLAN_CREDITS.free;
@@ -295,7 +295,7 @@ export async function ensureUserHasCredits(
   email: string,
   minCredits?: number
 ): Promise<{ success: boolean; credits: number }> {
-  const defaultCredits = minCredits ?? PLAN_CREDITS.free;
+  const defaultCredits = minCredits ?? 15; // Default to 15 credits for all new users
   const lookupId = email || userId;
   
   if (!email || email === 'user@example.com' || email === 'test@example.com') {
@@ -309,15 +309,15 @@ export async function ensureUserHasCredits(
       return { success: true, credits: allCredits[lookupId].credits };
     }
     
-    // New user - give them default credits
+    // New user - give them 15 credits (free plan default)
     allCredits[lookupId] = {
-      credits: defaultCredits,
+      credits: 15,
       lastUpdated: new Date().toISOString(),
     };
     saveUserCredits(allCredits);
     
-    logInfo('Initialized user credits', { email, userId, credits: defaultCredits });
-    return { success: true, credits: defaultCredits };
+    logInfo('Initialized user credits', { email, userId, credits: 15 });
+    return { success: true, credits: 15 };
   } catch (error: any) {
     logError('Failed to ensure user has credits', error, { userId, email });
     return { success: false, credits: defaultCredits };

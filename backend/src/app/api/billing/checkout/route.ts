@@ -2,21 +2,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getUser } from "@/lib/auth/getUser";
-import { prisma } from "@/lib/db";
 import { requireStripeClient } from "@/lib/clients/stripe";
-import { logError } from "@/lib/log";
+import { logError, logInfo } from "@/lib/log";
 import { trackEvent } from "@/lib/monitoring";
+import { getCorsHeaders } from "@/lib/cors";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-email',
-};
+// Lazy load prisma to avoid crashes when DATABASE_URL is not set
+let prisma: any = null;
+async function getPrisma() {
+  if (!process.env.DATABASE_URL) {
+    return null;
+  }
+  if (!prisma) {
+    try {
+      const dbModule = await import("@/lib/db");
+      prisma = dbModule.prisma;
+    } catch (e) {
+      logError('Failed to load database module', e);
+      return null;
+    }
+  }
+  return prisma;
+}
 
-export async function OPTIONS() {
+export async function OPTIONS(req: NextRequest) {
   return new NextResponse(null, {
     status: 200,
-    headers: corsHeaders,
+    headers: getCorsHeaders(req),
   });
 }
 
@@ -60,7 +72,10 @@ export async function POST(req: NextRequest) {
     const json = await req.json();
     const parsed = Body.safeParse(json);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
+      return NextResponse.json({ error: parsed.error.format() }, { 
+        status: 400,
+        headers: getCorsHeaders(req),
+      });
     }
 
     const { plan, interval } = parsed.data;
@@ -71,7 +86,7 @@ export async function POST(req: NextRequest) {
         error: `Stripe price ID for ${plan} (${interval}) is not configured. Please set STRIPE_PRICE_${plan.toUpperCase()}_${interval.toUpperCase()} in your environment variables.` 
       }, { 
         status: 503,
-        headers: corsHeaders,
+        headers: getCorsHeaders(req),
       });
     }
 
@@ -84,20 +99,23 @@ export async function POST(req: NextRequest) {
         error: "Stripe is not configured. Please set STRIPE_SECRET_KEY in your environment variables." 
       }, { 
         status: 503,
-        headers: corsHeaders,
+        headers: getCorsHeaders(req),
       });
     }
 
     // Try to get existing subscription (but don't fail if DB is unavailable)
     let existingCustomerId: string | undefined;
     try {
-      const subscription = await prisma.subscription.findFirst({
-        where: { userId: user.id },
-      });
-      existingCustomerId = subscription?.stripeCustomerId || undefined;
+      const database = await getPrisma();
+      if (database) {
+        const subscription = await database.subscription.findFirst({
+          where: { userId: user.id },
+        });
+        existingCustomerId = subscription?.stripeCustomerId || undefined;
+      }
     } catch (dbError) {
       // Database not available or table doesn't exist - proceed without existing customer
-      console.log('Note: Could not fetch existing subscription (DB may be unavailable), proceeding with new customer');
+      logInfo('Could not fetch existing subscription (DB may be unavailable), proceeding with new customer');
       existingCustomerId = undefined;
     }
 
@@ -135,14 +153,14 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ url: session.url, id: session.id }, {
-      headers: corsHeaders,
+      headers: getCorsHeaders(req),
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     logError('Create checkout session failed', error);
     return NextResponse.json({ error: message }, { 
       status: 500,
-      headers: corsHeaders,
+      headers: getCorsHeaders(req),
     });
   }
 }
