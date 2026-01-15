@@ -23,7 +23,7 @@ const nextConfig = {
   turbopack: {
     root: __dirname,
   },
-  webpack: (config, { isServer, webpack }) => {
+  webpack: (config, { isServer }) => {
     config.watchOptions = {
       ...config.watchOptions,
       ignored: ['**/generated-websites/**'],
@@ -41,25 +41,6 @@ const nextConfig = {
         'cheerio': 'commonjs cheerio',
         'undici': 'commonjs undici',
       });
-      
-      // Prepend File API polyfill to server entry points
-      // This ensures it loads before undici tries to use File
-      const polyfillPath = resolve(__dirname, 'src/lib/polyfills/file-api.ts');
-      if (config.entry && typeof config.entry === 'function') {
-        const originalEntry = config.entry;
-        config.entry = async () => {
-          const entries = await originalEntry();
-          // Prepend polyfill to all server entry points
-          Object.keys(entries).forEach(key => {
-            if (Array.isArray(entries[key])) {
-              entries[key].unshift(polyfillPath);
-            } else if (typeof entries[key] === 'string') {
-              entries[key] = [polyfillPath, entries[key]];
-            }
-          });
-          return entries;
-        };
-      }
     }
     
     return config;
