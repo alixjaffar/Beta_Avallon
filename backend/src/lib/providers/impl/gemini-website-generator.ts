@@ -7,7 +7,7 @@ import axios from 'axios';
 import { logError, logInfo } from '@/lib/log';
 import { VertexAI } from '@google-cloud/vertexai';
 import { GoogleAuth } from 'google-auth-library';
-import { SiteMirrorScraper } from '@/lib/scrapers/site-mirror';
+import { SiteMirrorScraper, WebsiteAnalysis as SiteMirrorAnalysis } from '@/lib/scrapers/site-mirror';
 
 // Ensure environment variables are loaded
 if (typeof process !== 'undefined' && process.env) {
@@ -35,6 +35,8 @@ export interface GeneratedWebsite {
 }
 
 // ============= ADVANCED CLONING INTERFACES =============
+// Using WebsiteAnalysis from SiteMirror scraper (SiteMirrorAnalysis)
+// Local interface for fallback compatibility
 
 interface WebsiteAnalysis {
   html: string;
@@ -42,13 +44,13 @@ interface WebsiteAnalysis {
   description: string;
   colors: string[];
   fonts: string[];
-  images: ImageInfo[];
-  css: string;
-  layout: LayoutAnalysis;
-  navigation: NavigationItem[];
-  sections: SectionInfo[];
-  textContent: TextContent;
-  url: string;
+  images: string[] | ImageInfo[];
+  css: string | { inline: string; external: string[]; parsed: string };
+  layout: LayoutAnalysis | { structure: string; sections: string[] };
+  navigation: NavigationItem[] | Array<{ text: string; url: string }>;
+  sections: SectionInfo[] | Array<{ type: string; content: string }>;
+  textContent: TextContent | { headings: string[]; paragraphs: string[]; buttons: string[] };
+  url?: string;
 }
 
 interface ImageInfo {
@@ -60,36 +62,41 @@ interface ImageInfo {
 }
 
 interface LayoutAnalysis {
-  hasNavigation: boolean;
-  hasHeader: boolean;
-  hasFooter: boolean;
-  hasSidebar: boolean;
-  hasHero: boolean;
-  gridSystem: string;
-  containerWidth: string;
-  isResponsive: boolean;
-  hasStickyNav: boolean;
-  layoutType: string;
+  hasNavigation?: boolean;
+  hasHeader?: boolean;
+  hasFooter?: boolean;
+  hasSidebar?: boolean;
+  hasHero?: boolean;
+  gridSystem?: string;
+  containerWidth?: string;
+  isResponsive?: boolean;
+  hasStickyNav?: boolean;
+  layoutType?: string;
+  structure?: string;
+  sections?: string[];
 }
 
 interface NavigationItem {
-  href: string;
+  href?: string;
   text: string;
+  url?: string;
 }
 
 interface SectionInfo {
   type: string;
-  classOrId: string;
-  heading: string;
-  itemCount: number;
-  hasBackground: boolean;
+  classOrId?: string;
+  heading?: string;
+  itemCount?: number;
+  hasBackground?: boolean;
+  content?: string;
 }
 
 interface TextContent {
   headings: string[];
   paragraphs: string[];
-  buttonText: string[];
-  listItems: string[];
+  buttonText?: string[];
+  buttons?: string[];
+  listItems?: string[];
 }
 
 export class GeminiWebsiteGenerator {
@@ -169,7 +176,24 @@ export class GeminiWebsiteGenerator {
         respectSitemap: true,
       });
       
-      return await scraper.fetchWebsiteContent(url);
+      const result = await scraper.fetchWebsiteContent(url);
+      if (!result) return null;
+      
+      // Convert SiteMirrorAnalysis to local WebsiteAnalysis format
+      return {
+        html: result.html,
+        title: result.title,
+        description: result.description,
+        colors: result.colors,
+        fonts: result.fonts,
+        images: result.images,
+        css: result.css,
+        layout: result.layout,
+        navigation: result.navigation,
+        sections: result.sections,
+        textContent: result.textContent,
+        url: url,
+      };
     } catch (error: any) {
       logError('SiteMirror scraping failed, falling back to basic fetch', error, { url });
       // Fallback to original method if SiteMirror fails
