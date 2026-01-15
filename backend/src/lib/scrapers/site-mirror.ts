@@ -686,23 +686,8 @@ export class SiteMirrorScraper {
       
       if (!executablePath) {
         try {
-          // Use @puppeteer/browsers to get Chrome path (most reliable)
-          try {
-            const { computeExecutablePath } = await import('@puppeteer/browsers');
-            const browserPath = computeExecutablePath({
-              browser: 'chrome',
-              cacheDir: cacheDir,
-            });
-            
-            if (browserPath && existsSync(browserPath)) {
-              executablePath = browserPath;
-              logInfo('✅ Found Chrome via @puppeteer/browsers', { path: executablePath });
-            }
-          } catch (browsersError) {
-            logInfo('@puppeteer/browsers not available, using file system search');
-          }
-          
-          // Fallback: Search file system directly with absolute paths
+          // Search file system directly with absolute paths
+          // Chrome is installed at: /opt/render/.cache/puppeteer/chrome/linux-{version}/chrome-linux64/chrome
           if (!executablePath) {
             const possibleCacheDirs = [
               cacheDir,
