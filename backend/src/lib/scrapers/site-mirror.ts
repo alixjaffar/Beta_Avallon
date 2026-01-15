@@ -681,14 +681,21 @@ export class SiteMirrorScraper {
         process.env.PUPPETEER_CACHE_DIR = cacheDir;
       }
       
-      // Find Chrome executable path
+      // Find Chrome executable path - MUST WORK FOR SITEMIRROR
       let executablePath: string | undefined = process.env.PUPPETEER_EXECUTABLE_PATH;
       
       if (!executablePath) {
         try {
-          // Search file system directly with absolute paths
-          // Chrome is installed at: /opt/render/.cache/puppeteer/chrome/linux-{version}/chrome-linux64/chrome
-          if (!executablePath) {
+          // Direct path check first (most reliable)
+          // Chrome is installed at: /opt/render/.cache/puppeteer/chrome/linux-143.0.7499.169/chrome-linux64/chrome
+          const directPath = '/opt/render/.cache/puppeteer/chrome/linux-143.0.7499.169/chrome-linux64/chrome';
+          if (existsSync(directPath)) {
+            executablePath = directPath;
+            logInfo('✅ Found Chrome at direct path', { path: executablePath });
+          } else {
+            logInfo('Direct path not found, searching...', { directPath });
+            
+            // Search file system with comprehensive checks
             const possibleCacheDirs = [
               cacheDir,
               '/opt/render/.cache/puppeteer',
@@ -699,23 +706,29 @@ export class SiteMirrorScraper {
             // Remove duplicates
             const uniqueCacheDirs = [...new Set(possibleCacheDirs)];
             
-            logInfo('Searching for Chrome in cache directories', { cacheDirs: uniqueCacheDirs });
+            logInfo('🔍 Searching for Chrome in cache directories', { cacheDirs: uniqueCacheDirs });
             
             for (const searchDir of uniqueCacheDirs) {
               try {
+                logInfo('Checking cache directory', { searchDir, exists: existsSync(searchDir) });
+                
                 if (!existsSync(searchDir)) {
+                  logInfo('Cache directory does not exist', { searchDir });
                   continue;
                 }
                 
                 const chromeDir = path.default.join(searchDir, 'chrome');
+                logInfo('Checking Chrome directory', { chromeDir, exists: existsSync(chromeDir) });
                 
                 if (existsSync(chromeDir)) {
                   // Find the versioned directory (e.g., linux-143.0.7499.169)
                   const dirs = readdirSync(chromeDir);
+                  logInfo('Found directories in Chrome cache', { chromeDir, dirs });
+                  
                   const versionDir = dirs.find(d => d.startsWith('linux-'));
                   
                   if (versionDir) {
-                    logInfo('Found Chrome version directory', { versionDir, cacheDir: searchDir });
+                    logInfo('✅ Found Chrome version directory', { versionDir, cacheDir: searchDir });
                     
                     // Try all possible structures (use absolute paths)
                     const possiblePaths = [
@@ -725,18 +738,24 @@ export class SiteMirrorScraper {
                       path.default.resolve(chromeDir, versionDir, 'headless_shell', 'headless_shell'),
                     ];
                     
+                    logInfo('Trying Chrome paths', { possiblePaths });
+                    
                     for (const chromePath of possiblePaths) {
+                      logInfo('Checking Chrome path', { chromePath, exists: existsSync(chromePath) });
+                      
                       if (existsSync(chromePath)) {
                         // Check if it's executable
                         try {
                           const stats = statSync(chromePath);
                           if (stats.isFile()) {
                             executablePath = chromePath;
-                            logInfo('✅ Found Chrome executable', { path: executablePath, cacheDir: searchDir });
+                            logInfo('✅✅✅ FOUND CHROME EXECUTABLE', { path: executablePath, cacheDir: searchDir, size: stats.size });
                             break;
+                          } else {
+                            logInfo('Path exists but is not a file', { chromePath, isFile: stats.isFile(), isDirectory: stats.isDirectory() });
                           }
-                        } catch (statError) {
-                          logInfo('Chrome path exists but not accessible', { path: chromePath, error: statError });
+                        } catch (statError: any) {
+                          logError('Chrome path exists but stat failed', statError, { path: chromePath });
                         }
                       }
                     }
@@ -748,13 +767,25 @@ export class SiteMirrorScraper {
                 } else {
                   logInfo('Chrome directory does not exist', { chromeDir });
                 }
-              } catch (error) {
-                logError('Error searching for Chrome in cache dir', error, { cacheDir: searchDir });
+              } catch (error: any) {
+                logError('Error searching for Chrome in cache dir', error, { cacheDir: searchDir, errorMessage: error?.message });
               }
             }
           }
-        } catch (error) {
-          logError('Failed to find Chrome in cache directories', error);
+        } catch (error: any) {
+          logError('Failed to find Chrome in cache directories', error, { errorMessage: error?.message, stack: error?.stack });
+        }
+      }
+      
+      // If still not found, try to construct path from known version
+      if (!executablePath) {
+        const knownVersion = '143.0.7499.169';
+        const constructedPath = path.default.join(cacheDir, 'chrome', `linux-${knownVersion}`, 'chrome-linux64', 'chrome');
+        if (existsSync(constructedPath)) {
+          executablePath = constructedPath;
+          logInfo('✅ Found Chrome using constructed path', { path: executablePath });
+        } else {
+          logError('Chrome not found even with constructed path', null, { constructedPath, cacheDir });
         }
       }
       
@@ -771,22 +802,38 @@ export class SiteMirrorScraper {
         ],
       };
       
-      // Set executable path if found
+      // CRITICAL: Always set executable path if found - REQUIRED for SiteMirror
       if (executablePath) {
         launchOptions.executablePath = executablePath;
-        logInfo('✅ Using Chrome executable', { path: executablePath });
-      } else {
-        // Try to use Puppeteer's default (it should find Chrome if cache dir is set)
-        logInfo('Chrome path not explicitly set, using Puppeteer default');
-        logInfo('PUPPETEER_CACHE_DIR is set to', { cacheDir });
-        
-        // Log all environment variables related to Puppeteer for debugging
-        logInfo('Puppeteer environment', {
-          PUPPETEER_CACHE_DIR: process.env.PUPPETEER_CACHE_DIR,
-          PUPPETEER_EXECUTABLE_PATH: process.env.PUPPETEER_EXECUTABLE_PATH,
-          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD,
+        logInfo('✅✅✅ USING CHROME EXECUTABLE FOR SITEMIRROR', { 
+          path: executablePath,
+          exists: existsSync(executablePath),
+          cacheDir 
         });
+      } else {
+        // Last resort: Try the exact known path from build logs
+        const lastResortPath = '/opt/render/.cache/puppeteer/chrome/linux-143.0.7499.169/chrome-linux64/chrome';
+        if (existsSync(lastResortPath)) {
+          executablePath = lastResortPath;
+          launchOptions.executablePath = executablePath;
+          logInfo('✅✅✅ USING LAST RESORT CHROME PATH', { path: executablePath });
+        } else {
+          // This should not happen - Chrome must be found for SiteMirror
+          logError('CRITICAL: Chrome not found - SiteMirror requires Puppeteer', null, {
+            cacheDir,
+            lastResortPath,
+            searchedDirs: ['/opt/render/.cache/puppeteer'],
+          });
+          // Don't throw - let it fail gracefully and fallback to HTTP
+        }
       }
+      
+      // Log final launch options
+      logInfo('Launching Puppeteer with options', {
+        hasExecutablePath: !!launchOptions.executablePath,
+        executablePath: launchOptions.executablePath,
+        cacheDir,
+      });
       
       const browser = await puppeteer.default.launch(launchOptions);
 
