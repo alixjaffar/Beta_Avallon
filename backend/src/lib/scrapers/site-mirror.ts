@@ -830,74 +830,53 @@ export class SiteMirrorScraper {
               logError('Failed to create cache directory', mkdirError, { downloadCacheDir });
             }
             
-            // Use Puppeteer's browser fetcher to download Chrome
-            logInfo('Downloading Chrome via Puppeteer browser fetcher...', { downloadCacheDir });
+            // Use execSync to download Chrome (most reliable method)
+            logInfo('Downloading Chrome via Puppeteer CLI...', { downloadCacheDir });
             try {
-              // Import @puppeteer/browsers for browser management
-              const browsersModule = await import('@puppeteer/browsers');
-              const { install } = browsersModule;
+              const { execSync } = await import('child_process');
               
-              // Install Chrome to project-local directory
-              const result = await install({
-                browser: 'chrome',
-                cacheDir: downloadCacheDir,
+              // Install Chrome using Puppeteer CLI
+              execSync(`PUPPETEER_CACHE_DIR="${downloadCacheDir}" npx puppeteer browsers install chrome`, {
+                env: { ...process.env, PUPPETEER_CACHE_DIR: downloadCacheDir },
+                stdio: 'pipe',
+                timeout: 120000, // 2 minutes
+                cwd: process.cwd(),
               });
               
-              logInfo('✅ Chrome downloaded successfully via browser fetcher', { result });
+              logInfo('✅ Chrome downloaded successfully via Puppeteer CLI');
               
-              // Get the executable path from the installation result
-              if (result && result.executablePath) {
-                executablePath = result.executablePath;
-                logInfo('✅ Found Chrome executable from download', { path: executablePath });
-              } else {
-                // Try to find it using the standard path structure
-                const chromeDir = path.default.join(downloadCacheDir, 'chrome');
-                if (existsSync(chromeDir)) {
-                  const dirs = readdirSync(chromeDir);
-                  const versionDir = dirs.find(d => d.startsWith('linux-'));
-                  if (versionDir) {
-                    const downloadedPath = path.default.join(chromeDir, versionDir, 'chrome-linux64', 'chrome');
-                    if (existsSync(downloadedPath)) {
-                      executablePath = downloadedPath;
-                      logInfo('✅ Found Chrome after download (searched)', { path: executablePath });
-                    }
+              // Find Chrome after download
+              const chromeDir = path.default.join(downloadCacheDir, 'chrome');
+              if (existsSync(chromeDir)) {
+                const dirs = readdirSync(chromeDir);
+                const versionDir = dirs.find(d => d.startsWith('linux-'));
+                if (versionDir) {
+                  const downloadedPath = path.default.join(chromeDir, versionDir, 'chrome-linux64', 'chrome');
+                  if (existsSync(downloadedPath)) {
+                    executablePath = downloadedPath;
+                    logInfo('✅ Found Chrome after download', { path: executablePath });
+                  } else {
+                    logError('Chrome directory found but executable not at expected path', null, {
+                      chromeDir,
+                      versionDir,
+                      expectedPath: downloadedPath,
+                    });
                   }
+                } else {
+                  logError('Chrome directory exists but no version directory found', null, {
+                    chromeDir,
+                    dirs,
+                  });
                 }
+              } else {
+                logError('Chrome directory not created after download', null, { downloadCacheDir, chromeDir });
               }
             } catch (downloadError: any) {
-              logError('Failed to download Chrome via browser fetcher', downloadError, { 
+              logError('Failed to download Chrome via Puppeteer CLI', downloadError, { 
                 errorMessage: downloadError?.message,
                 stack: downloadError?.stack,
                 downloadCacheDir 
               });
-              
-              // Fallback: Try using execSync as last resort
-              try {
-                const { execSync } = await import('child_process');
-                logInfo('Trying execSync fallback for Chrome download...');
-                execSync(`PUPPETEER_CACHE_DIR="${downloadCacheDir}" npx puppeteer browsers install chrome`, {
-                  env: { ...process.env, PUPPETEER_CACHE_DIR: downloadCacheDir },
-                  stdio: 'pipe',
-                  timeout: 120000,
-                });
-                logInfo('✅ Chrome downloaded via execSync fallback');
-                
-                // Find it after download
-                const chromeDir = path.default.join(downloadCacheDir, 'chrome');
-                if (existsSync(chromeDir)) {
-                  const dirs = readdirSync(chromeDir);
-                  const versionDir = dirs.find(d => d.startsWith('linux-'));
-                  if (versionDir) {
-                    const downloadedPath = path.default.join(chromeDir, versionDir, 'chrome-linux64', 'chrome');
-                    if (existsSync(downloadedPath)) {
-                      executablePath = downloadedPath;
-                      logInfo('✅ Found Chrome after execSync download', { path: executablePath });
-                    }
-                  }
-                }
-              } catch (execError: any) {
-                logError('ExecSync fallback also failed', execError, { errorMessage: execError?.message });
-              }
             }
           } catch (runtimeError: any) {
             logError('Runtime Chrome download setup failed', runtimeError, { 
