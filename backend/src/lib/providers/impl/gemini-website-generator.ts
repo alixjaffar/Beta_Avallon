@@ -164,7 +164,7 @@ export class GeminiWebsiteGenerator {
           // Try to parse JSON
           try {
             credentialsJson = JSON.parse(decodedString);
-          } catch (parseError1) {
+          } catch (parseError1: any) {
             // If parsing fails, try cleaning up common issues
             const cleaned = decodedString
               .trim()
@@ -176,13 +176,13 @@ export class GeminiWebsiteGenerator {
             
             try {
               credentialsJson = JSON.parse(cleaned);
-            } catch (parseError2) {
+            } catch (parseError2: any) {
               // Last attempt: try to extract JSON from the string
               const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
               if (jsonMatch) {
                 credentialsJson = JSON.parse(jsonMatch[0]);
               } else {
-                throw new Error(`Invalid JSON format. First error: ${parseError1?.message}, Second error: ${parseError2?.message}`);
+                throw new Error(`Invalid JSON format. First error: ${parseError1?.message || 'Unknown'}, Second error: ${parseError2?.message || 'Unknown'}`);
               }
             }
           }
