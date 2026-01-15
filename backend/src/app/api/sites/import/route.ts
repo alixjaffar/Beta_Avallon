@@ -1,10 +1,9 @@
 // API endpoint for importing websites using SiteMirror scraper
-// CHANGELOG: 2026-01-15 - Created endpoint with SiteMirror for advanced website cloning
+// CHANGELOG: 2026-01-15 - Integrated SiteMirror for advanced website cloning
 // Based on: https://github.com/pakelcomedy/SiteMirror/
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getCorsHeaders } from '@/lib/cors';
-// SiteMirrorScraper is dynamically imported to avoid build-time issues
 import { logInfo, logError } from '@/lib/log';
 
 export async function OPTIONS(req: NextRequest) {

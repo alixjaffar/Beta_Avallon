@@ -1,14 +1,14 @@
 // CHANGELOG: 2025-01-15 - Gemini AI website generation (based on open-source AI Website Builder)
 // Reference: https://github.com/Ratna-Babu/Ai-Website-Builder
 // UPDATED: 2025-01-07 - Using Vertex AI with Gemini 3 Pro Preview (global endpoint)
-// UPDATED: 2026-01-15 - Integrated SiteMirror scraper for advanced website cloning
 // UPDATED: 2026-01-15 - Using ONLY Vertex AI SDK with Gemini 3 Pro Preview
+// UPDATED: 2026-01-15 - Integrated SiteMirror scraper for advanced website cloning
+// Based on: https://github.com/pakelcomedy/SiteMirror/
 import axios from 'axios';
 import { existsSync } from 'fs';
 import { logError, logInfo } from '@/lib/log';
 import { VertexAI } from '@google-cloud/vertexai';
 import { GoogleAuth } from 'google-auth-library';
-import { SiteMirrorScraper, WebsiteAnalysis as SiteMirrorAnalysis } from '@/lib/scrapers/site-mirror';
 
 // Ensure environment variables are loaded
 if (typeof process !== 'undefined' && process.env) {
@@ -36,8 +36,7 @@ export interface GeneratedWebsite {
 }
 
 // ============= ADVANCED CLONING INTERFACES =============
-// Using WebsiteAnalysis from SiteMirror scraper (SiteMirrorAnalysis)
-// Local interface for fallback compatibility
+// Local interface for website analysis
 
 interface WebsiteAnalysis {
   html: string;
@@ -256,10 +255,10 @@ export class GeminiWebsiteGenerator {
           logInfo('✅ Using hardcoded credentials fallback', {
             projectId: authOptions.credentials.project_id,
             clientEmail: authOptions.credentials.client_email,
-          });
-        }
+        });
       }
-      
+    }
+    
       this.googleAuth = new GoogleAuth(authOptions);
       logInfo('✅ Google Auth initialized for Gemini 3 Pro Preview', {
         projectId: this.projectId,
@@ -317,6 +316,7 @@ export class GeminiWebsiteGenerator {
     try {
       // Use SiteMirror with Puppeteer for JavaScript rendering
       // Following SiteMirror's approach: https://github.com/pakelcomedy/SiteMirror/
+      const { SiteMirrorScraper } = await import('@/lib/scrapers/site-mirror');
       const scraper = new SiteMirrorScraper(url, {
         maxDepth: 5,
         maxWorkers: 8,
@@ -330,7 +330,7 @@ export class GeminiWebsiteGenerator {
       const result = await scraper.fetchWebsiteContent(url);
       if (!result) return null;
       
-      // Convert SiteMirrorAnalysis to local WebsiteAnalysis format
+      // Convert SiteMirror WebsiteAnalysis to local WebsiteAnalysis format
       return {
         html: result.html,
         title: result.title,
@@ -338,7 +338,7 @@ export class GeminiWebsiteGenerator {
         colors: result.colors,
         fonts: result.fonts,
         images: result.images,
-        css: result.css,
+        css: typeof result.css === 'string' ? result.css : result.css.parsed,
         layout: result.layout,
         navigation: result.navigation,
         sections: result.sections,
@@ -346,529 +346,10 @@ export class GeminiWebsiteGenerator {
         url: url,
       };
     } catch (error: any) {
-      logError('SiteMirror scraping failed, falling back to basic fetch', error, { url });
-      // Fallback to original method if SiteMirror fails
-      return this.fetchWebsiteContentFallback(url);
-    }
-  }
-
-  /**
-   * Fallback website scraping method (original implementation)
-   */
-  private async fetchWebsiteContentFallback(url: string): Promise<WebsiteAnalysis | null> {
-    try {
-      // Normalize URL - handle various cases
-      let normalizedUrl = url.trim();
-      
-      // Remove any leading/trailing quotes or spaces
-      normalizedUrl = normalizedUrl.replace(/^["'\s]+|["'\s]+$/g, '');
-      
-      // Handle case-insensitive protocol check
-      const lowerUrl = normalizedUrl.toLowerCase();
-      if (lowerUrl.startsWith('https://')) {
-        normalizedUrl = 'https://' + normalizedUrl.substring(8);
-      } else if (lowerUrl.startsWith('http://')) {
-        normalizedUrl = 'http://' + normalizedUrl.substring(7);
-      } else if (!lowerUrl.startsWith('http://') && !lowerUrl.startsWith('https://')) {
-        normalizedUrl = 'https://' + normalizedUrl;
-      }
-
-      logInfo('🔍 Starting ADVANCED website analysis for cloning', { url: normalizedUrl, originalUrl: url });
-
-      // Fetch main HTML
-      const response = await axios.get(normalizedUrl, {
-        timeout: 15000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-          'Accept-Encoding': 'gzip, deflate, br',
-        },
-        maxRedirects: 5,
-      });
-
-      const html = response.data;
-      
-      // Extract title
-      const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
-      const title = titleMatch ? titleMatch[1].trim() : '';
-
-      // Extract meta description
-      const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)["']/i) ||
-                        html.match(/<meta[^>]*content=["']([^"']*)["'][^>]*name=["']description["']/i);
-      const description = descMatch ? descMatch[1].trim() : '';
-
-      // ============= EXTRACT ALL COLORS =============
-      const colors = this.extractColors(html);
-      
-      // ============= EXTRACT ALL FONTS =============
-      const fonts = this.extractFonts(html);
-      
-      // ============= EXTRACT ALL IMAGES =============
-      const images = this.extractImages(html, normalizedUrl);
-      
-      // ============= EXTRACT CSS (inline + external) =============
-      const css = await this.extractAllCSS(html, normalizedUrl);
-      
-      // ============= ANALYZE LAYOUT STRUCTURE =============
-      const layout = this.analyzeLayout(html);
-      
-      // ============= EXTRACT NAVIGATION =============
-      const navigation = this.extractNavigation(html);
-      
-      // ============= EXTRACT SECTIONS =============
-      const sections = this.extractSections(html);
-      
-      // ============= EXTRACT TEXT CONTENT =============
-      const textContent = this.extractTextContent(html);
-
-      // Keep full HTML for reference (up to 100KB for clone operations)
-      let cleanedHtml = html
-        .replace(/<!--[\s\S]*?-->/g, '') // Remove HTML comments only
-        .replace(/\s+/g, ' ')
-        .trim();
-
-      // Keep more HTML for cloning (100KB)
-      if (cleanedHtml.length > 100000) {
-        cleanedHtml = cleanedHtml.substring(0, 100000) + '\n<!-- truncated -->';
-      }
-
-      const analysis: WebsiteAnalysis = {
-        html: cleanedHtml,
-        title,
-        description,
-        colors,
-        fonts,
-        images,
-        css,
-        layout,
-        navigation,
-        sections,
-        textContent,
-        url: normalizedUrl,
-      };
-
-      logInfo('✅ Website analysis complete', { 
-        url: normalizedUrl, 
-        htmlLength: cleanedHtml.length,
-        colorsFound: colors.length,
-        fontsFound: fonts.length,
-        imagesFound: images.length,
-        cssLength: css.length,
-        sectionsFound: sections.length,
-        title,
-      });
-
-      return analysis;
-    } catch (error: any) {
-      logInfo('Failed to fetch website, will use AI knowledge only', { 
-        url, 
-        error: error.message,
-        status: error.response?.status
-      });
+      logError('SiteMirror scraping failed, falling back to AI knowledge only', error, { url });
+      // Return null to use AI knowledge only
       return null;
     }
-  }
-
-  /**
-   * Extract all color values from HTML and inline styles
-   */
-  private extractColors(html: string): string[] {
-    const colors = new Set<string>();
-    
-    // Match hex colors
-    const hexPattern = /#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})\b/g;
-    let match;
-    while ((match = hexPattern.exec(html)) !== null) {
-      colors.add(match[0].toLowerCase());
-    }
-    
-    // Match rgb/rgba colors
-    const rgbPattern = /rgba?\s*\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*[\d.]+\s*)?\)/gi;
-    while ((match = rgbPattern.exec(html)) !== null) {
-      colors.add(match[0].toLowerCase().replace(/\s/g, ''));
-    }
-    
-    // Match hsl/hsla colors
-    const hslPattern = /hsla?\s*\(\s*\d+\s*,\s*\d+%?\s*,\s*\d+%?\s*(?:,\s*[\d.]+\s*)?\)/gi;
-    while ((match = hslPattern.exec(html)) !== null) {
-      colors.add(match[0].toLowerCase().replace(/\s/g, ''));
-    }
-    
-    // Match CSS color names in style contexts
-    const namedColors = ['white', 'black', 'red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'gray', 'grey', 'navy', 'teal', 'coral', 'salmon', 'indigo', 'violet'];
-    namedColors.forEach(color => {
-      if (html.toLowerCase().includes(`color:${color}`) || 
-          html.toLowerCase().includes(`color: ${color}`) ||
-          html.toLowerCase().includes(`background:${color}`) ||
-          html.toLowerCase().includes(`background: ${color}`) ||
-          html.toLowerCase().includes(`-${color}`)) {
-        colors.add(color);
-      }
-    });
-    
-    return Array.from(colors).slice(0, 30); // Limit to 30 most used
-  }
-
-  /**
-   * Extract all font families from HTML
-   */
-  private extractFonts(html: string): string[] {
-    const fonts = new Set<string>();
-    
-    // Match Google Fonts links
-    const googleFontsPattern = /fonts\.googleapis\.com\/css2?\?family=([^"'&]+)/gi;
-    let match;
-    while ((match = googleFontsPattern.exec(html)) !== null) {
-      const fontFamilies = decodeURIComponent(match[1]).split('|');
-      fontFamilies.forEach(font => {
-        fonts.add(font.split(':')[0].replace(/\+/g, ' '));
-      });
-    }
-    
-    // Match font-family declarations
-    const fontFamilyPattern = /font-family\s*:\s*([^;}"']+)/gi;
-    while ((match = fontFamilyPattern.exec(html)) !== null) {
-      const fontList = match[1].split(',');
-      fontList.forEach(font => {
-        const cleanFont = font.trim().replace(/["']/g, '').trim();
-        if (cleanFont && !cleanFont.match(/^(sans-serif|serif|monospace|cursive|fantasy|system-ui|inherit|initial|unset)$/i)) {
-          fonts.add(cleanFont);
-        }
-      });
-    }
-    
-    return Array.from(fonts).slice(0, 10);
-  }
-
-  /**
-   * Extract all images with their URLs
-   */
-  private extractImages(html: string, baseUrl: string): ImageInfo[] {
-    const images: ImageInfo[] = [];
-    const seenUrls = new Set<string>();
-    
-    // Match img tags
-    const imgPattern = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
-    let match;
-    while ((match = imgPattern.exec(html)) !== null) {
-      const src = match[0];
-      const url = match[1];
-      
-      // Get alt text
-      const altMatch = src.match(/alt=["']([^"']*)["']/i);
-      const alt = altMatch ? altMatch[1] : '';
-      
-      // Get dimensions
-      const widthMatch = src.match(/width=["']?(\d+)/i);
-      const heightMatch = src.match(/height=["']?(\d+)/i);
-      
-      // Resolve relative URLs
-      const resolvedUrl = this.resolveUrl(url, baseUrl);
-      
-      if (!seenUrls.has(resolvedUrl)) {
-        seenUrls.add(resolvedUrl);
-        images.push({
-          url: resolvedUrl,
-          alt,
-          width: widthMatch ? parseInt(widthMatch[1]) : undefined,
-          height: heightMatch ? parseInt(heightMatch[1]) : undefined,
-          context: this.getImageContext(html, match.index || 0),
-        });
-      }
-    }
-    
-    // Match background images in styles
-    const bgPattern = /background(?:-image)?\s*:\s*url\s*\(\s*["']?([^"')]+)["']?\s*\)/gi;
-    while ((match = bgPattern.exec(html)) !== null) {
-      const url = match[1];
-      const resolvedUrl = this.resolveUrl(url, baseUrl);
-      
-      if (!seenUrls.has(resolvedUrl)) {
-        seenUrls.add(resolvedUrl);
-        images.push({
-          url: resolvedUrl,
-          alt: 'background',
-          context: 'background-image',
-        });
-      }
-    }
-    
-    return images.slice(0, 30); // Limit to 30 images
-  }
-
-  /**
-   * Get context around an image (what section it's in)
-   */
-  private getImageContext(html: string, position: number): string {
-    const start = Math.max(0, position - 200);
-    const end = Math.min(html.length, position + 200);
-    const context = html.substring(start, end);
-    
-    // Try to identify section type
-    if (context.match(/hero|banner|header/i)) return 'hero';
-    if (context.match(/team|about|profile/i)) return 'team/about';
-    if (context.match(/testimonial|review/i)) return 'testimonial';
-    if (context.match(/service|feature|product/i)) return 'service/feature';
-    if (context.match(/gallery|portfolio/i)) return 'gallery';
-    if (context.match(/logo|brand/i)) return 'logo';
-    if (context.match(/footer/i)) return 'footer';
-    return 'general';
-  }
-
-  /**
-   * Resolve relative URLs to absolute
-   */
-  private resolveUrl(url: string, baseUrl: string): string {
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      return url;
-    }
-    if (url.startsWith('//')) {
-      return 'https:' + url;
-    }
-    if (url.startsWith('/')) {
-      const urlObj = new URL(baseUrl);
-      return urlObj.origin + url;
-    }
-    if (url.startsWith('data:')) {
-      return url;
-    }
-    // Relative URL
-    const urlObj = new URL(baseUrl);
-    return urlObj.origin + '/' + url;
-  }
-
-  /**
-   * Extract all CSS (inline styles + external stylesheets)
-   */
-  private async extractAllCSS(html: string, baseUrl: string): Promise<string> {
-    let allCss = '';
-    
-    // Extract inline styles
-    const stylePattern = /<style[^>]*>([\s\S]*?)<\/style>/gi;
-    let match;
-    while ((match = stylePattern.exec(html)) !== null) {
-      allCss += match[1] + '\n';
-    }
-    
-    // Extract external stylesheet URLs
-    const linkPattern = /<link[^>]+rel=["']stylesheet["'][^>]+href=["']([^"']+)["']/gi;
-    const cssUrls: string[] = [];
-    while ((match = linkPattern.exec(html)) !== null) {
-      const href = match[1];
-      // Skip common CDNs (we'll use our own versions)
-      if (!href.includes('fonts.googleapis.com') && 
-          !href.includes('font-awesome') && 
-          !href.includes('bootstrap') &&
-          !href.includes('tailwind')) {
-        cssUrls.push(this.resolveUrl(href, baseUrl));
-      }
-    }
-    
-    // Fetch external stylesheets (limit to 3 for performance)
-    for (const cssUrl of cssUrls.slice(0, 3)) {
-      try {
-        const response = await axios.get(cssUrl, {
-          timeout: 5000,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0.0.0',
-          },
-        });
-        allCss += `\n/* From: ${cssUrl} */\n${response.data}\n`;
-      } catch (e) {
-        logInfo('Could not fetch external CSS', { url: cssUrl });
-      }
-    }
-    
-    // Truncate if too long
-    if (allCss.length > 50000) {
-      allCss = allCss.substring(0, 50000) + '\n/* CSS truncated */';
-    }
-    
-    return allCss;
-  }
-
-  /**
-   * Analyze layout structure
-   */
-  private analyzeLayout(html: string): LayoutAnalysis {
-    const layout: LayoutAnalysis = {
-      hasNavigation: /<nav|class=["'][^"']*nav/i.test(html),
-      hasHeader: /<header|class=["'][^"']*header/i.test(html),
-      hasFooter: /<footer|class=["'][^"']*footer/i.test(html),
-      hasSidebar: /sidebar|aside/i.test(html),
-      hasHero: /hero|banner|jumbotron/i.test(html),
-      gridSystem: this.detectGridSystem(html),
-      containerWidth: this.detectContainerWidth(html),
-      isResponsive: /media\s*query|@media|responsive|mobile|tablet/i.test(html),
-      hasStickyNav: /sticky|fixed.*nav|nav.*fixed/i.test(html),
-      layoutType: this.detectLayoutType(html),
-    };
-    
-    return layout;
-  }
-
-  /**
-   * Detect the grid/layout system used
-   */
-  private detectGridSystem(html: string): string {
-    if (/tailwind/i.test(html)) return 'tailwind';
-    if (/bootstrap/i.test(html) || /col-md-|col-lg-|col-sm-/i.test(html)) return 'bootstrap';
-    if (/grid|display:\s*grid/i.test(html)) return 'css-grid';
-    if (/flex|display:\s*flex/i.test(html)) return 'flexbox';
-    return 'custom';
-  }
-
-  /**
-   * Detect container width
-   */
-  private detectContainerWidth(html: string): string {
-    const maxWidthMatch = html.match(/max-width\s*:\s*(\d+(?:px|rem|em|%)?)/i);
-    if (maxWidthMatch) return maxWidthMatch[1];
-    
-    if (/max-w-7xl/i.test(html)) return '1280px';
-    if (/max-w-6xl/i.test(html)) return '1152px';
-    if (/max-w-5xl/i.test(html)) return '1024px';
-    if (/container/i.test(html)) return '1200px';
-    
-    return '1200px';
-  }
-
-  /**
-   * Detect overall layout type
-   */
-  private detectLayoutType(html: string): string {
-    if (/landing|single-page|one-page/i.test(html)) return 'landing-page';
-    if (/blog|article|post/i.test(html)) return 'blog';
-    if (/product|shop|cart|checkout/i.test(html)) return 'ecommerce';
-    if (/portfolio|gallery|showcase/i.test(html)) return 'portfolio';
-    if (/dashboard|admin|panel/i.test(html)) return 'dashboard';
-    return 'corporate';
-  }
-
-  /**
-   * Extract navigation structure
-   */
-  private extractNavigation(html: string): NavigationItem[] {
-    const navItems: NavigationItem[] = [];
-    
-    // Find nav element
-    const navMatch = html.match(/<nav[^>]*>([\s\S]*?)<\/nav>/i);
-    if (navMatch) {
-      const navHtml = navMatch[1];
-      
-      // Extract links
-      const linkPattern = /<a[^>]+href=["']([^"']+)["'][^>]*>([^<]*(?:<[^>]+>[^<]*)*)<\/a>/gi;
-      let match;
-      while ((match = linkPattern.exec(navHtml)) !== null) {
-        const href = match[1];
-        // Clean text content
-        const text = match[2].replace(/<[^>]+>/g, '').trim();
-        if (text && text.length < 50) {
-          navItems.push({ href, text });
-        }
-      }
-    }
-    
-    return navItems.slice(0, 10);
-  }
-
-  /**
-   * Extract main sections of the page
-   */
-  private extractSections(html: string): SectionInfo[] {
-    const sections: SectionInfo[] = [];
-    
-    // Match section/div elements with identifying classes
-    const sectionPattern = /<(?:section|div)[^>]*(?:class|id)=["']([^"']+)["'][^>]*>([\s\S]*?)(?=<(?:section|div)[^>]*(?:class|id)=["']|<\/body|<footer)/gi;
-    let match;
-    let index = 0;
-    
-    while ((match = sectionPattern.exec(html)) !== null && index < 15) {
-      const classOrId = match[1].toLowerCase();
-      const content = match[2];
-      
-      // Identify section type
-      let type = 'content';
-      if (/hero|banner|intro/i.test(classOrId)) type = 'hero';
-      else if (/feature|service|benefit/i.test(classOrId)) type = 'features';
-      else if (/about|story|who/i.test(classOrId)) type = 'about';
-      else if (/testimonial|review|client/i.test(classOrId)) type = 'testimonials';
-      else if (/team|people|staff/i.test(classOrId)) type = 'team';
-      else if (/pricing|plan|package/i.test(classOrId)) type = 'pricing';
-      else if (/contact|cta|action/i.test(classOrId)) type = 'cta';
-      else if (/faq|question|answer/i.test(classOrId)) type = 'faq';
-      else if (/gallery|portfolio|work/i.test(classOrId)) type = 'gallery';
-      else if (/stat|number|counter/i.test(classOrId)) type = 'stats';
-      
-      // Extract heading
-      const headingMatch = content.match(/<h[1-6][^>]*>([^<]*(?:<[^>]+>[^<]*)*)<\/h[1-6]>/i);
-      const heading = headingMatch ? headingMatch[1].replace(/<[^>]+>/g, '').trim() : '';
-      
-      // Count items (cards, list items, etc.)
-      const itemCount = (content.match(/<(?:li|article|div[^>]+card)/gi) || []).length;
-      
-      sections.push({
-        type,
-        classOrId,
-        heading,
-        itemCount,
-        hasBackground: /background|bg-/i.test(content),
-      });
-      
-      index++;
-    }
-    
-    return sections;
-  }
-
-  /**
-   * Extract key text content
-   */
-  private extractTextContent(html: string): TextContent {
-    const content: TextContent = {
-      headings: [],
-      paragraphs: [],
-      buttonText: [],
-      listItems: [],
-    };
-    
-    // Extract headings
-    const headingPattern = /<h[1-6][^>]*>([^<]*(?:<[^>]+>[^<]*)*)<\/h[1-6]>/gi;
-    let match;
-    while ((match = headingPattern.exec(html)) !== null) {
-      const text = match[1].replace(/<[^>]+>/g, '').trim();
-      if (text && text.length < 200) {
-        content.headings.push(text);
-      }
-    }
-    
-    // Extract first few paragraphs
-    const pPattern = /<p[^>]*>([^<]*(?:<[^>]+>[^<]*)*)<\/p>/gi;
-    let pCount = 0;
-    while ((match = pPattern.exec(html)) !== null && pCount < 10) {
-      const text = match[1].replace(/<[^>]+>/g, '').trim();
-      if (text && text.length > 20 && text.length < 500) {
-        content.paragraphs.push(text);
-        pCount++;
-      }
-    }
-    
-    // Extract button text
-    const buttonPattern = /<(?:button|a)[^>]*class=["'][^"']*(?:btn|button|cta)[^"']*["'][^>]*>([^<]*(?:<[^>]+>[^<]*)*)<\/(?:button|a)>/gi;
-    while ((match = buttonPattern.exec(html)) !== null) {
-      const text = match[1].replace(/<[^>]+>/g, '').trim();
-      if (text && text.length < 50 && content.buttonText) {
-        content.buttonText.push(text);
-      }
-    }
-    
-    return {
-      headings: content.headings.slice(0, 15),
-      paragraphs: content.paragraphs.slice(0, 10),
-      buttonText: [...new Set(content.buttonText || [])].slice(0, 10),
-      listItems: (content.listItems || []).slice(0, 20),
-    };
   }
 
   private fixFontAwesomeIntegrity(html: string): string {
@@ -958,11 +439,11 @@ export class GeminiWebsiteGenerator {
       throw new Error('Vertex AI SDK not initialized. Please ensure GOOGLE_APPLICATION_CREDENTIALS_JSON (or GOOGLE_APPLICATION_CREDENTIALS) and GOOGLE_CLOUD_PROJECT_ID are set.');
     }
     
-    try {
-      // Log which model we're attempting
+      try {
+        // Log which model we're attempting
       logInfo('🚀 Attempting Gemini 3 Pro Preview API call', { 
-        model, 
-        isMultiPage,
+          model, 
+          isMultiPage,
         projectId: this.projectId,
         useGlobalEndpoint: true
       });
@@ -1013,11 +494,11 @@ export class GeminiWebsiteGenerator {
                 }
               ]
             },
-            generationConfig: {
-              temperature: isCloneOperation ? 0.3 : 0.6,
-              topP: 0.95,
+              generationConfig: {
+                temperature: isCloneOperation ? 0.3 : 0.6,
+                topP: 0.95,
               topK: isCloneOperation ? 20 : 32,
-              maxOutputTokens: maxOutputTokens,
+                maxOutputTokens: maxOutputTokens,
               candidateCount: 1,
               stopSequences: [],
             },
@@ -1074,39 +555,39 @@ export class GeminiWebsiteGenerator {
       if (this.vertexAI && !content) {
         logInfo('Using Vertex AI SDK for Gemini 3 Pro Preview', { model, projectId: this.projectId, region: this.region });
         
-        const generativeModel = this.vertexAI.getGenerativeModel({
-          model: model,
-          generationConfig: {
-            temperature: isCloneOperation ? 0.3 : 0.6,
-            topK: isCloneOperation ? 20 : 32,
-            topP: 0.95,
-            maxOutputTokens: maxOutputTokens,
-          },
-        });
-        
-        const result = await generativeModel.generateContent({
-          contents: [{
-            role: 'user',
-            parts: [{ text: prompt }]
-          }]
-        });
-        
-        const response = result.response;
-        if (!response.candidates || response.candidates.length === 0) {
-          throw new Error('Vertex AI returned no candidates');
-        }
-        
-        const candidate = response.candidates[0];
-        if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
-          throw new Error('Vertex AI candidate has no content parts');
-        }
-        
-        content = candidate.content.parts[0].text || '';
+          const generativeModel = this.vertexAI.getGenerativeModel({
+            model: model,
+            generationConfig: {
+              temperature: isCloneOperation ? 0.3 : 0.6,
+              topK: isCloneOperation ? 20 : 32,
+              topP: 0.95,
+              maxOutputTokens: maxOutputTokens,
+            },
+          });
+          
+          const result = await generativeModel.generateContent({
+            contents: [{
+              role: 'user',
+              parts: [{ text: prompt }]
+            }]
+          });
+          
+          const response = result.response;
+          if (!response.candidates || response.candidates.length === 0) {
+            throw new Error('Vertex AI returned no candidates');
+          }
+          
+          const candidate = response.candidates[0];
+          if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
+            throw new Error('Vertex AI candidate has no content parts');
+          }
+          
+          content = candidate.content.parts[0].text || '';
       }
       
       if (!content) {
         throw new Error('No content generated from Gemini 3 Pro Preview');
-      }
+        }
         
         if (!content) {
           throw new Error('API returned empty content');
@@ -1123,11 +604,11 @@ export class GeminiWebsiteGenerator {
         
         // Log success with model version for verification
       logInfo('🎯 SUCCESS: Using Gemini 3 Pro Preview', { model, contentLength: content.length });
-      
-      return this.parseGeneratedCode(content);
-    } catch (error: any) {
-      const errorMessage = error.message || error.response?.data?.error?.message || '';
-      
+        
+        return this.parseGeneratedCode(content);
+      } catch (error: any) {
+        const errorMessage = error.message || error.response?.data?.error?.message || '';
+        
       logError('❌ Gemini 3 Pro Preview failed', error, {
         model: 'gemini-3-pro-preview',
         projectId: this.projectId,
