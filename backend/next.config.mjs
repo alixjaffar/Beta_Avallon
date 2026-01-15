@@ -9,14 +9,37 @@ const nextConfig = {
   experimental: { 
     serverActions: { bodySizeLimit: '2mb' },
   },
+  // Mark problematic packages as external to prevent bundling issues
+  serverExternalPackages: [
+    'puppeteer',
+    'puppeteer-core',
+    '@puppeteer/browsers',
+    '@google-cloud/vertexai',
+    'google-auth-library',
+    'cheerio',
+  ],
   turbopack: {
     root: __dirname,
   },
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.watchOptions = {
       ...config.watchOptions,
       ignored: ['**/generated-websites/**'],
     };
+    
+    // Externalize problematic packages to prevent File API reference errors during build
+    if (isServer) {
+      config.externals = config.externals || [];
+      config.externals.push({
+        'puppeteer': 'commonjs puppeteer',
+        'puppeteer-core': 'commonjs puppeteer-core',
+        '@puppeteer/browsers': 'commonjs @puppeteer/browsers',
+        '@google-cloud/vertexai': 'commonjs @google-cloud/vertexai',
+        'google-auth-library': 'commonjs google-auth-library',
+        'cheerio': 'commonjs cheerio',
+      });
+    }
+    
     return config;
   },
   outputFileTracingRoot: process.cwd(),
