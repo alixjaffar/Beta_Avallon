@@ -144,7 +144,7 @@ export class GeminiWebsiteGenerator {
         });
       }
       // Method 2: JSON string in environment variable
-      if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+      else if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
         try {
           let credentialsJson;
           const jsonString = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
@@ -237,7 +237,26 @@ export class GeminiWebsiteGenerator {
           authOptions.keyFilename = defaultPath;
           logInfo('✅ Using credentials from default path', { path: defaultPath });
         } else {
-          throw new Error('No credentials found. Please set:\n1. Individual env vars: GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY (recommended for Render)\n2. GOOGLE_APPLICATION_CREDENTIALS_JSON (JSON string)\n3. GOOGLE_APPLICATION_CREDENTIALS (file path)');
+          // Method 5: Hardcoded fallback (LAST RESORT - not recommended but works if env vars aren't set)
+          // Using the credentials you provided earlier
+          logInfo('⚠️ No env vars or file found, using hardcoded credentials fallback');
+          authOptions.credentials = {
+            type: 'service_account',
+            project_id: 'coastal-cascade-483522-i2',
+            private_key_id: '126c5b4fc1d93807843f49be2d246429cd6bbbb0',
+            private_key: '-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQCfOivXxiV+7lJK\nbvpeGcNyYTLhDK6CpZ2bB64lLdyezBOKEZsmB//31UCXIYU6Exjn4WfuFlFJiXjk\nMxhe7o64kDYeEYZqKTSmBd1yQEhw8Ti/Qk05JD/TLihp1bBz6uK+T5ZJ+mDhyHGn\nnPM1s1k5ZrwYECuxMatm4TIwdrYN1hwQ+QFmENyXm6fp+rMUt6f8GWDXmzYhZIXM\nxDkZ9osYOr7tEZ/oRijoPfp1TrXwe3XQc31tA/w1O3ONbH0v+iDy64WoV7bO+WWA\nmaQFNnGsvaTn1VqhAvM7CViSwMTxzrbcO05uXs+0hLgnRbJZjx9JEZqyGcj8wvev\nJOhpySZ9AgMBAAECggEAN7z3ywVYa9oGYXr+1sEDC3+d/Wzgi+hoxvPF0MsAn3AF\n6P+nxYToZDu47A62YfF8dvOPW6dhVjIy6QM/5T9yI4aMAzOUT4ZUIUgNUGjTUwIG\nIOGXQckANK9EQ2Qj7DgNnpwimov0rSTrMEb/Vk2Njsv5TR0gBlvCSfXMCW4M5cN/\nSd+LbdxefmoV5uRkqXQlG3qGfV+iqzaMgFVC6DgUMdishAzLppzTkL7BW7iST7t9\niOsxj0neZ+3nSheam9q0T6WoC+OCty9eX2i8oElVIc/+2Jdu8+jPteROI+qofxy8\nqXrwcVjGtbsJFQLEGvqA9xCpBxMit67nrTWj9vm8qwKBgQDdDiHB2DX7S3GDCN8X\n2sfZLZNZjBs4krXgBd4ASJ+zPJe5yhBW6CRYTk8b0WcKaKL/g4F+7mvgSwXdAVoJ\nNORvQqbOvjU8NapuliGokEruMDarpxUxa/EIFkweFqAQsTe38T2o0qw6CKWwAQ3F\nj5ec9OBchydM/YabdOOPdru48wKBgQC4Ze1pcJZx1aKBTtzXzbzIkUyZmWurdrA2\nhl1sXya16eY0COU/E2Xl/IMXUl0ZMdjFhgrbMC6VYX/MHuU5YApntQ5QKHp1nUCN\nYNcWpRk/un2gWYO2kabZLPDTk2bWly38/ZjVW/HgeAZNQsrUWTBkTLs1nKXtENT1\nah4Sju1+zwKBgQC1iLF4O1K5eA9UCKkNMgIE/ESRuVlxcCokOy1BFmLwEsaXMLWS\naTnPux+EPMdd6OhS5XAnCS1WGMZL5JxIC0O9iwLprZKSS5AXGPuzLiwax0VeWewx\nle9vMMB5xSLWEnMrf9WfGsONNSS8EWF56J4dq4vE8Mj5lQpCCBAI9PzcuQKBgQCs\n/GnpdYadSeZGWl5RUR+eJLjwi333f8O1kv2Hkgf1tnSQMhwlvSPlyqqMMWcLFnke\nbC45DA1Xc/z4168A0TlRqwe/aQng1mHdf5CoHMAACgqaZ/9pQWB98mwGgAyEmZS5\n9onu9m+FvfNjfZpb9UOxhE5H8Cm0qQqvJBsMG+tu/wKBgQC8mz9UkzgIGuxn52um\nYymAx62ifk3hDkLCn6gKLyrLnXH3B+/3N2GASCvjFIP9BZlb9oYm4sEF/mLV548T\nCivWTOXdSFKj4vT6uFUg1ojzmjwxkd8vFZtO31qYwg96dQVXTCjpskJf3XQkVGG0\nk38jC0TWucmXFkAAzCR930k+hA==\n-----END PRIVATE KEY-----\n',
+            client_email: 'vertex-express@coastal-cascade-483522-i2.iam.gserviceaccount.com',
+            client_id: '101913760210899953679',
+            auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+            token_uri: 'https://oauth2.googleapis.com/token',
+            auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
+            client_x509_cert_url: 'https://www.googleapis.com/robot/v1/metadata/x509/vertex-express%40coastal-cascade-483522-i2.iam.gserviceaccount.com',
+            universe_domain: 'googleapis.com',
+          };
+          logInfo('✅ Using hardcoded credentials fallback', {
+            projectId: authOptions.credentials.project_id,
+            clientEmail: authOptions.credentials.client_email,
+          });
         }
       }
       

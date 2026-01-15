@@ -8,7 +8,6 @@ const nextConfig = {
   distDir: '.next',
   experimental: { 
     serverActions: { bodySizeLimit: '2mb' },
-    instrumentationHook: true, // Enable instrumentation to load polyfills early
   },
   // Mark problematic packages as external to prevent bundling issues
   serverExternalPackages: [
