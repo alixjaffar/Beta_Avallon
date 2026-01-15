@@ -707,7 +707,7 @@ export class GeminiWebsiteGenerator {
     const buttonPattern = /<(?:button|a)[^>]*class=["'][^"']*(?:btn|button|cta)[^"']*["'][^>]*>([^<]*(?:<[^>]+>[^<]*)*)<\/(?:button|a)>/gi;
     while ((match = buttonPattern.exec(html)) !== null) {
       const text = match[1].replace(/<[^>]+>/g, '').trim();
-      if (text && text.length < 50) {
+      if (text && text.length < 50 && content.buttonText) {
         content.buttonText.push(text);
       }
     }
@@ -715,8 +715,8 @@ export class GeminiWebsiteGenerator {
     return {
       headings: content.headings.slice(0, 15),
       paragraphs: content.paragraphs.slice(0, 10),
-      buttonText: [...new Set(content.buttonText)].slice(0, 10),
-      listItems: content.listItems.slice(0, 20),
+      buttonText: [...new Set(content.buttonText || [])].slice(0, 10),
+      listItems: (content.listItems || []).slice(0, 20),
     };
   }
 
