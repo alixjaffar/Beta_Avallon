@@ -1536,29 +1536,50 @@ Make it INDISTINGUISHABLE from the original.`;
       ? analysis.fonts.join(', ')
       : 'Use modern Google Fonts';
     
-    // Build image mapping
-    const imageMapping = analysis.images.slice(0, 15).map((img, i) => 
-      `  ${i + 1}. [${img.context}] ${img.url.substring(0, 80)}${img.url.length > 80 ? '...' : ''}`
-    ).join('\n');
+    // Build image mapping (handle both string[] and ImageInfo[] formats)
+    const imageMapping = analysis.images.slice(0, 15).map((img, i) => {
+      if (typeof img === 'string') {
+        return `  ${i + 1}. ${img.substring(0, 80)}${img.length > 80 ? '...' : ''}`;
+      }
+      return `  ${i + 1}. [${img.context || 'image'}] ${img.url.substring(0, 80)}${img.url.length > 80 ? '...' : ''}`;
+    }).join('\n');
     
-    // Build navigation structure
+    // Build navigation structure (handle both NavigationItem[] and {text, url}[] formats)
     const navStructure = analysis.navigation.length > 0
-      ? analysis.navigation.map(n => `  - "${n.text}" → ${n.href}`).join('\n')
+      ? analysis.navigation.map(n => `  - "${n.text}" → ${n.href || n.url || '#'}`).join('\n')
       : '  - Extract from HTML';
     
-    // Build section order
+    // Build section order (handle both SectionInfo[] and {type, content}[] formats)
     const sectionOrder = analysis.sections.length > 0
-      ? analysis.sections.map((s, i) => 
-          `  ${i + 1}. ${s.type.toUpperCase()}${s.heading ? ` - "${s.heading}"` : ''}${s.itemCount > 0 ? ` (${s.itemCount} items)` : ''}${s.hasBackground ? ' [has background]' : ''}`
-        ).join('\n')
+      ? analysis.sections.map((s, i) => {
+          const heading = s.heading || (s.content ? s.content.substring(0, 30) : '');
+          return `  ${i + 1}. ${s.type.toUpperCase()}${heading ? ` - "${heading}"` : ''}${s.itemCount && s.itemCount > 0 ? ` (${s.itemCount} items)` : ''}${s.hasBackground ? ' [has background]' : ''}`;
+        }).join('\n')
       : '  - Analyze HTML for sections';
     
-    // Build content examples
-    const headingExamples = analysis.textContent.headings.slice(0, 8).map(h => `  - "${h}"`).join('\n');
-    const buttonExamples = analysis.textContent.buttonText.slice(0, 6).map(b => `  - "${b}"`).join('\n');
-    const paragraphExamples = analysis.textContent.paragraphs.slice(0, 3).map(p => 
+    // Build content examples (handle both TextContent formats)
+    const textContent = analysis.textContent as any;
+    const headingExamples = (textContent.headings || []).slice(0, 8).map((h: string) => `  - "${h}"`).join('\n');
+    const buttonTexts = textContent.buttonText || textContent.buttons || [];
+    const buttonExamples = buttonTexts.slice(0, 6).map((b: string) => `  - "${b}"`).join('\n');
+    const paragraphExamples = (textContent.paragraphs || []).slice(0, 3).map((p: string) => 
       `  - "${p.substring(0, 150)}${p.length > 150 ? '...' : ''}"`
     ).join('\n');
+
+    // Extract layout properties (handle both LayoutAnalysis and {structure, sections} formats)
+    const layout = analysis.layout as any;
+    const layoutType = layout.layoutType || layout.structure || 'standard';
+    const gridSystem = layout.gridSystem || 'CSS Grid/Flexbox';
+    const containerWidth = layout.containerWidth || 'max-width: 1200px';
+    const hasStickyNav = layout.hasStickyNav ?? false;
+    const hasHero = layout.hasHero ?? false;
+    const hasSidebar = layout.hasSidebar ?? false;
+    const isResponsive = layout.isResponsive ?? true;
+    
+    // Extract CSS (handle both string and object formats)
+    const cssContent = typeof analysis.css === 'string' 
+      ? analysis.css 
+      : (analysis.css as any)?.parsed || (analysis.css as any)?.inline || '';
 
     return `🎯 MISSION: Create a PIXEL-PERFECT clone of ${websiteUrl}
 
@@ -1567,13 +1588,13 @@ You are the world's best website cloner. Your output must be INDISTINGUISHABLE f
 USER REQUEST: "${originalPrompt}"
 
 ═══════════════════════════════════════════════════════════════════
-📊 COMPLETE WEBSITE ANALYSIS (Extracted from ${analysis.url})
+📊 COMPLETE WEBSITE ANALYSIS (Extracted from ${analysis.url || websiteUrl})
 ═══════════════════════════════════════════════════════════════════
 
 📌 BASIC INFO:
 • Title: "${analysis.title}"
 • Description: "${analysis.description}"
-• Layout Type: ${analysis.layout.layoutType}
+• Layout Type: ${layoutType}
 
 🎨 COLOR PALETTE (USE THESE EXACT COLORS):
 ${colorPalette}
@@ -1583,12 +1604,12 @@ ${fontFamilies}
 → Import from Google Fonts: https://fonts.googleapis.com/css2?family=${encodeURIComponent(analysis.fonts[0] || 'Inter')}:wght@300;400;500;600;700;800&display=swap
 
 📐 LAYOUT STRUCTURE:
-• Grid System: ${analysis.layout.gridSystem}
-• Container Width: ${analysis.layout.containerWidth}
-• Has Sticky Navigation: ${analysis.layout.hasStickyNav ? 'YES' : 'NO'}
-• Has Hero Section: ${analysis.layout.hasHero ? 'YES' : 'NO'}
-• Has Sidebar: ${analysis.layout.hasSidebar ? 'YES' : 'NO'}
-• Is Responsive: ${analysis.layout.isResponsive ? 'YES' : 'NO'}
+• Grid System: ${gridSystem}
+• Container Width: ${containerWidth}
+• Has Sticky Navigation: ${hasStickyNav ? 'YES' : 'NO'}
+• Has Hero Section: ${hasHero ? 'YES' : 'NO'}
+• Has Sidebar: ${hasSidebar ? 'YES' : 'NO'}
+• Is Responsive: ${isResponsive ? 'YES' : 'NO'}
 
 🧭 NAVIGATION STRUCTURE:
 ${navStructure}
@@ -1614,8 +1635,8 @@ ${imageMapping || '  - Use https://images.unsplash.com/photo-[relevant]?w=800&h=
 📜 ORIGINAL CSS (EXTRACTED - USE THIS AS REFERENCE):
 ═══════════════════════════════════════════════════════════════════
 \`\`\`css
-${analysis.css.substring(0, 30000)}
-${analysis.css.length > 30000 ? '\n/* CSS truncated for brevity */' : ''}
+${cssContent.substring(0, 30000)}
+${cssContent.length > 30000 ? '\n/* CSS truncated for brevity */' : ''}
 \`\`\`
 
 ═══════════════════════════════════════════════════════════════════
