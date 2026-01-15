@@ -4,43 +4,30 @@
 // export default clerkMiddleware();
 
 import { NextRequest, NextResponse } from "next/server";
-
-const ALLOWED_ORIGINS = [
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:3000',
-  'http://127.0.0.1:5173',
-  'http://127.0.0.1:5174',
-  'http://127.0.0.1:3000',
-];
+import { getCorsHeaders } from "./lib/cors";
 
 export default function middleware(request: NextRequest) {
   // Handle CORS preflight requests
   if (request.method === 'OPTIONS') {
-    const origin = request.headers.get('origin');
-    const isAllowedOrigin = origin && ALLOWED_ORIGINS.includes(origin);
+    const corsHeaders = getCorsHeaders(request);
     
     return new NextResponse(null, {
       status: 200,
       headers: {
-        'Access-Control-Allow-Origin': isAllowedOrigin ? origin : ALLOWED_ORIGINS[0],
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-email',
-        'Access-Control-Allow-Credentials': 'true',
-        'Access-Control-Max-Age': '86400',
+        ...corsHeaders,
+        'Access-Control-Max-Age': '86400', // Cache preflight for 24 hours
       },
     });
   }
 
   // For other requests, add CORS headers to the response
   const response = NextResponse.next();
-  const origin = request.headers.get('origin');
-  const isAllowedOrigin = origin && ALLOWED_ORIGINS.includes(origin);
+  const corsHeaders = getCorsHeaders(request);
   
-  if (isAllowedOrigin) {
-    response.headers.set('Access-Control-Allow-Origin', origin);
-    response.headers.set('Access-Control-Allow-Credentials', 'true');
-  }
+  // Set CORS headers on the response
+  Object.entries(corsHeaders).forEach(([key, value]) => {
+    response.headers.set(key, value);
+  });
   
   return response;
 }

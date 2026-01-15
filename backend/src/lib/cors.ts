@@ -44,11 +44,16 @@ export function getCorsHeaders(req?: NextRequest | null): Record<string, string>
     }
   }
   
+  // Normalize origin (remove trailing slash, lowercase)
+  if (origin) {
+    origin = origin.toLowerCase().replace(/\/$/, '');
+  }
+  
   // Add APP_URL from environment if configured
   const appUrl = process.env.APP_URL;
   const allowedOrigins = appUrl 
-    ? [...ALLOWED_ORIGINS, appUrl]
-    : ALLOWED_ORIGINS;
+    ? [...ALLOWED_ORIGINS, appUrl].map(o => o.toLowerCase().replace(/\/$/, ''))
+    : ALLOWED_ORIGINS.map(o => o.toLowerCase().replace(/\/$/, ''));
   
   // Check if origin is in allowed list or matches Vercel app pattern (for generated websites)
   const isAllowedOrigin = origin && (
@@ -66,10 +71,17 @@ export function getCorsHeaders(req?: NextRequest | null): Record<string, string>
     VERCEL_APP_PATTERN.test(origin)
   );
   
-  // Use the origin if allowed, otherwise use development default
-  const allowedOrigin = isAllowedOrigin 
-    ? origin 
-    : (process.env.NODE_ENV === 'development' ? 'http://localhost:5173' : (origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0]));
+  // Use the origin if allowed, otherwise fallback
+  let allowedOrigin: string;
+  if (isAllowedOrigin && origin) {
+    allowedOrigin = origin;
+  } else if (process.env.NODE_ENV === 'development') {
+    allowedOrigin = 'http://localhost:5173';
+  } else {
+    // In production, if we have an origin that's close, try to match it
+    // Otherwise default to first allowed origin
+    allowedOrigin = allowedOrigins[0] || 'http://localhost:5173';
+  }
   
   return {
     'Access-Control-Allow-Origin': allowedOrigin || 'http://localhost:5173',
