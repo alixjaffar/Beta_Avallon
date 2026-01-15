@@ -669,10 +669,60 @@ export class SiteMirrorScraper {
     try {
       // Dynamic import to avoid build-time issues
       const puppeteer = await import('puppeteer');
+      const { existsSync } = await import('fs');
+      const { readdirSync } = await import('fs');
+      const path = await import('path');
       
       logInfo('🌐 SiteMirror: Using Puppeteer for JavaScript rendering', { url });
       
-      const browser = await puppeteer.default.launch({
+      // Find Chrome executable path
+      // Render installs Chrome to /opt/render/.cache/puppeteer/chrome/linux-{version}/chrome-linux64/chrome
+      let executablePath: string | undefined = process.env.PUPPETEER_EXECUTABLE_PATH;
+      
+      if (!executablePath) {
+        // Try multiple possible cache locations
+        const possibleCacheDirs = [
+          process.env.PUPPETEER_CACHE_DIR,
+          '/opt/render/.cache/puppeteer',
+          path.default.join(process.cwd(), '.cache', 'puppeteer'),
+          path.default.join(process.env.HOME || '/tmp', '.cache', 'puppeteer'),
+        ].filter(Boolean) as string[];
+        
+        for (const cacheDir of possibleCacheDirs) {
+          const chromeDir = path.default.join(cacheDir, 'chrome');
+          
+          if (existsSync(chromeDir)) {
+            try {
+              // Find the versioned directory (e.g., linux-143.0.7499.169)
+              const dirs = readdirSync(chromeDir);
+              const versionDir = dirs.find(d => d.startsWith('linux-'));
+              
+              if (versionDir) {
+                // Try both possible structures
+                const possiblePaths = [
+                  path.default.join(chromeDir, versionDir, 'chrome-linux64', 'chrome'),
+                  path.default.join(chromeDir, versionDir, 'chrome', 'chrome'),
+                  path.default.join(chromeDir, versionDir, 'chrome'),
+                ];
+                
+                for (const chromePath of possiblePaths) {
+                  if (existsSync(chromePath)) {
+                    executablePath = chromePath;
+                    logInfo('✅ Found Chrome in cache', { path: executablePath, cacheDir });
+                    break;
+                  }
+                }
+                
+                if (executablePath) break;
+              }
+            } catch (error) {
+              // Continue to next cache dir
+            }
+          }
+        }
+      }
+      
+      const launchOptions: any = {
         headless: true,
         args: [
           '--no-sandbox',
@@ -683,7 +733,18 @@ export class SiteMirrorScraper {
           '--disable-features=IsolateOrigins,site-per-process',
           '--user-agent=' + this.userAgent,
         ],
-      });
+      };
+      
+      // Set executable path if found
+      if (executablePath) {
+        launchOptions.executablePath = executablePath;
+        logInfo('Using Chrome executable', { path: executablePath });
+      } else {
+        logInfo('Chrome not found in cache, will attempt to use system Chrome');
+        logInfo('If this fails, will fallback to HTTP fetch');
+      }
+      
+      const browser = await puppeteer.default.launch(launchOptions);
 
       try {
         const page = await browser.newPage();
@@ -745,6 +806,15 @@ export class SiteMirrorScraper {
       if (this.options.forceRender) {
         // Use Puppeteer for JavaScript rendering (like SiteMirror's Selenium mode)
         html = await this.fetchWithPuppeteer(targetUrl);
+        
+        // Fallback to HTTP if Puppeteer fails (Chrome not available, etc.)
+        if (!html) {
+          logInfo('🔄 SiteMirror: Puppeteer failed, falling back to HTTP fetch', { url: targetUrl });
+          const response = await this.fetchWithRetry(targetUrl);
+          if (response) {
+            html = response.data;
+          }
+        }
       } else {
         // Try regular fetch first (like SiteMirror's Requests mode)
         const response = await this.fetchWithRetry(targetUrl);
