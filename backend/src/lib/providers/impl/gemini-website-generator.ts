@@ -124,12 +124,78 @@ export class GeminiWebsiteGenerator {
       // Method 1: JSON string in environment variable (best for Render/cloud)
       if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
         try {
-          const credentialsJson = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+          let credentialsJson;
+          const jsonString = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+          
+          // Try base64 decode first (in case it was base64 encoded)
+          let decodedString = jsonString;
+          try {
+            if (Buffer.from(jsonString, 'base64').toString('base64') === jsonString) {
+              // It's valid base64, try decoding
+              decodedString = Buffer.from(jsonString, 'base64').toString('utf-8');
+              logInfo('Decoded base64-encoded credentials JSON');
+            }
+          } catch {
+            // Not base64, use as-is
+          }
+          
+          // Try to parse JSON
+          try {
+            credentialsJson = JSON.parse(decodedString);
+          } catch (parseError1) {
+            // If parsing fails, try cleaning up common issues
+            const cleaned = decodedString
+              .trim()
+              .replace(/^["']|["']$/g, '') // Remove surrounding quotes
+              .replace(/\\"/g, '"') // Unescape quotes
+              .replace(/\\n/g, '\n') // Unescape newlines
+              .replace(/\\r/g, '\r') // Unescape carriage returns
+              .replace(/\\t/g, '\t'); // Unescape tabs
+            
+            try {
+              credentialsJson = JSON.parse(cleaned);
+            } catch (parseError2) {
+              // Last attempt: try to extract JSON from the string
+              const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                credentialsJson = JSON.parse(jsonMatch[0]);
+              } else {
+                throw new Error(`Invalid JSON format. First error: ${parseError1?.message}, Second error: ${parseError2?.message}`);
+              }
+            }
+          }
+          
+          // Validate required fields
+          if (!credentialsJson.type || credentialsJson.type !== 'service_account') {
+            throw new Error(`Invalid credentials: type must be 'service_account', got '${credentialsJson.type}'`);
+          }
+          if (!credentialsJson.project_id) {
+            throw new Error('Invalid credentials: missing project_id');
+          }
+          if (!credentialsJson.private_key) {
+            throw new Error('Invalid credentials: missing private_key');
+          }
+          if (!credentialsJson.client_email) {
+            throw new Error('Invalid credentials: missing client_email');
+          }
+          
+          // Ensure private_key has proper newlines
+          if (credentialsJson.private_key && !credentialsJson.private_key.includes('\n')) {
+            credentialsJson.private_key = credentialsJson.private_key.replace(/\\n/g, '\n');
+          }
+          
           authOptions.credentials = credentialsJson;
-          logInfo('✅ Using credentials from GOOGLE_APPLICATION_CREDENTIALS_JSON env var');
-        } catch (parseError) {
-          logError('Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON', parseError);
-          throw parseError;
+          logInfo('✅ Using credentials from GOOGLE_APPLICATION_CREDENTIALS_JSON env var', {
+            projectId: credentialsJson.project_id,
+            clientEmail: credentialsJson.client_email,
+            hasPrivateKey: !!credentialsJson.private_key,
+          });
+        } catch (parseError: any) {
+          logError('Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON', parseError, {
+            jsonLength: process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON?.length,
+            jsonPreview: process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON?.substring(0, 200),
+          });
+          throw new Error(`Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON: ${parseError?.message || 'Invalid JSON format'}. Please ensure the entire JSON is set as a single string value.`);
         }
       }
       // Method 2: File path
@@ -175,12 +241,16 @@ export class GeminiWebsiteGenerator {
         projectId: this.projectId,
         method: authOptions.credentials ? 'env-var' : 'file',
       });
-    } catch (error) {
+    } catch (error: any) {
+      const errorMessage = error?.message || 'Unknown error';
       logError('Failed to initialize Google Auth', error, {
         projectId: this.projectId,
         hasJsonEnv: !!process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON,
         hasFileEnv: !!process.env.GOOGLE_APPLICATION_CREDENTIALS,
+        errorMessage,
       });
+      // Don't throw here - let it continue and fail when actually used
+      // This allows the app to start even if credentials are missing
     }
     
     // Initialize Vertex AI SDK for Gemini 3 Pro Preview
@@ -207,7 +277,10 @@ export class GeminiWebsiteGenerator {
       hasVertexAI: !!this.vertexAI,
       projectId: this.projectId,
       region: this.region,
-      model: 'gemini-3-pro-preview'
+      model: 'gemini-3-pro-preview',
+      hasJsonEnv: !!process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON,
+      hasFileEnv: !!process.env.GOOGLE_APPLICATION_CREDENTIALS,
+      jsonEnvLength: process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON?.length || 0,
     });
   }
 
@@ -874,8 +947,21 @@ export class GeminiWebsiteGenerator {
         try {
           logInfo('Using global endpoint for Gemini 3 Pro Preview', { model });
           
+          // Validate that we have credentials before trying to get token
+          if (!this.googleAuth) {
+            throw new Error('GoogleAuth not initialized. Check GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable.');
+          }
+          
           const client = await this.googleAuth.getClient();
+          if (!client) {
+            throw new Error('Failed to get Google Auth client. Check your service account credentials.');
+          }
+          
           const tokenResponse = await client.getAccessToken();
+          if (!tokenResponse || !tokenResponse.token) {
+            throw new Error('Failed to get access token. Check your service account has proper permissions.');
+          }
+          
           const token = tokenResponse.token;
           
           const url = `https://aiplatform.googleapis.com/v1/projects/${this.projectId}/locations/global/publishers/google/models/${model}:generateContent`;
