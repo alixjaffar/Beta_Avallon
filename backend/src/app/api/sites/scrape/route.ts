@@ -3,8 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
-// Puppeteer is dynamically imported to avoid build-time issues
-import type { Browser } from 'puppeteer';
+// Puppeteer is fully dynamically imported - no type imports to avoid build issues
 
 // Request schema
 interface ScrapeRequest {
@@ -237,7 +236,7 @@ async function renderWithPuppeteer(url: string): Promise<string> {
   // Dynamic import to avoid build-time evaluation
   const puppeteer = await import('puppeteer');
   
-  const browser: Browser = await puppeteer.default.launch({
+  const browser = await puppeteer.default.launch({
     headless: true,
     args: [
       '--no-sandbox',
