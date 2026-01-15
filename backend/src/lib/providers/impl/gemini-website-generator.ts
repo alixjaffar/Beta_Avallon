@@ -1546,14 +1546,18 @@ Make it INDISTINGUISHABLE from the original.`;
     
     // Build navigation structure (handle both NavigationItem[] and {text, url}[] formats)
     const navStructure = analysis.navigation.length > 0
-      ? analysis.navigation.map(n => `  - "${n.text}" → ${n.href || n.url || '#'}`).join('\n')
+      ? analysis.navigation.map(n => {
+          const navItem = n as any;
+          return `  - "${navItem.text}" → ${navItem.href || navItem.url || '#'}`;
+        }).join('\n')
       : '  - Extract from HTML';
     
     // Build section order (handle both SectionInfo[] and {type, content}[] formats)
     const sectionOrder = analysis.sections.length > 0
       ? analysis.sections.map((s, i) => {
-          const heading = s.heading || (s.content ? s.content.substring(0, 30) : '');
-          return `  ${i + 1}. ${s.type.toUpperCase()}${heading ? ` - "${heading}"` : ''}${s.itemCount && s.itemCount > 0 ? ` (${s.itemCount} items)` : ''}${s.hasBackground ? ' [has background]' : ''}`;
+          const section = s as any;
+          const heading = section.heading || (section.content ? section.content.substring(0, 30) : '');
+          return `  ${i + 1}. ${section.type.toUpperCase()}${heading ? ` - "${heading}"` : ''}${section.itemCount && section.itemCount > 0 ? ` (${section.itemCount} items)` : ''}${section.hasBackground ? ' [has background]' : ''}`;
         }).join('\n')
       : '  - Analyze HTML for sections';
     

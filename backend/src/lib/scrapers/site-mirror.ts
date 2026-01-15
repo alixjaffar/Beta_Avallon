@@ -15,7 +15,8 @@
 // ============================================================================
 
 import axios, { AxiosRequestConfig } from 'axios';
-import { load, CheerioAPI, Element } from 'cheerio';
+import { load, CheerioAPI } from 'cheerio';
+import type { Element } from 'domhandler';
 import { logInfo, logError } from '@/lib/log';
 
 // ============================================================================
