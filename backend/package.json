@@ -8,9 +8,9 @@
   },
   "scripts": {
     "dev": "./node_modules/.bin/next dev -p 3000",
-    "prebuild": "npx puppeteer browsers install chrome || echo 'Chrome installation skipped (may already be installed)'",
-    "build": "npm run build:frontend && npm install && prisma generate && next build",
+    "build": "npm run build:frontend && npm install && npm run install:chrome && prisma generate && next build",
     "build:frontend": "cd ../frontend && npm install && npm run build",
+    "install:chrome": "npx puppeteer browsers install chrome || echo 'Chrome installation skipped (may already be installed)'",
     "start": "next start -p 3000",
     "postbuild": "prisma generate",
     "test": "vitest",

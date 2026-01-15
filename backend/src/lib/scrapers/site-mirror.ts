@@ -675,50 +675,87 @@ export class SiteMirrorScraper {
       
       logInfo('🌐 SiteMirror: Using Puppeteer for JavaScript rendering', { url });
       
-      // Find Chrome executable path
-      // Render installs Chrome to /opt/render/.cache/puppeteer/chrome/linux-{version}/chrome-linux64/chrome
+      // Find Chrome executable path using Puppeteer's browser fetcher
+      // This is the most reliable way to find Chrome
       let executablePath: string | undefined = process.env.PUPPETEER_EXECUTABLE_PATH;
       
       if (!executablePath) {
-        // Try multiple possible cache locations
-        const possibleCacheDirs = [
-          process.env.PUPPETEER_CACHE_DIR,
-          '/opt/render/.cache/puppeteer',
-          path.default.join(process.cwd(), '.cache', 'puppeteer'),
-          path.default.join(process.env.HOME || '/tmp', '.cache', 'puppeteer'),
-        ].filter(Boolean) as string[];
-        
-        for (const cacheDir of possibleCacheDirs) {
-          const chromeDir = path.default.join(cacheDir, 'chrome');
+        try {
+          // Use Puppeteer's browser fetcher to get the correct Chrome path
+          const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
+          const browserFetcher = puppeteer.default.createBrowserFetcher({
+            cacheDir: cacheDir,
+          });
           
-          if (existsSync(chromeDir)) {
-            try {
-              // Find the versioned directory (e.g., linux-143.0.7499.169)
-              const dirs = readdirSync(chromeDir);
-              const versionDir = dirs.find(d => d.startsWith('linux-'));
-              
-              if (versionDir) {
-                // Try both possible structures
-                const possiblePaths = [
-                  path.default.join(chromeDir, versionDir, 'chrome-linux64', 'chrome'),
-                  path.default.join(chromeDir, versionDir, 'chrome', 'chrome'),
-                  path.default.join(chromeDir, versionDir, 'chrome'),
-                ];
-                
-                for (const chromePath of possiblePaths) {
-                  if (existsSync(chromePath)) {
-                    executablePath = chromePath;
-                    logInfo('✅ Found Chrome in cache', { path: executablePath, cacheDir });
-                    break;
-                  }
-                }
-                
-                if (executablePath) break;
-              }
-            } catch (error) {
-              // Continue to next cache dir
+          // Check if Chrome is installed locally
+          const localRevisions = browserFetcher.localRevisions();
+          logInfo('Puppeteer local revisions', { revisions: localRevisions, cacheDir });
+          
+          if (localRevisions && localRevisions.length > 0) {
+            // Get the first installed Chrome revision
+            const revisionInfo = browserFetcher.revisionInfo(localRevisions[0]);
+            
+            if (revisionInfo && revisionInfo.local && existsSync(revisionInfo.executablePath)) {
+              executablePath = revisionInfo.executablePath;
+              logInfo('✅ Found Chrome via Puppeteer browser fetcher', { 
+                path: executablePath,
+                revision: revisionInfo.revision 
+              });
+            } else {
+              logInfo('Chrome revision found but executable not accessible', { 
+                revision: localRevisions[0],
+                expectedPath: revisionInfo?.executablePath 
+              });
             }
           }
+          
+          // If not found via browser fetcher, try manual search
+          if (!executablePath) {
+            // Chrome not installed, try to find it manually
+            logInfo('Chrome not found via browser fetcher, trying manual search');
+            
+            const possibleCacheDirs = [
+              process.env.PUPPETEER_CACHE_DIR,
+              '/opt/render/.cache/puppeteer',
+              path.default.join(process.cwd(), '.cache', 'puppeteer'),
+              path.default.join(process.env.HOME || '/tmp', '.cache', 'puppeteer'),
+            ].filter(Boolean) as string[];
+            
+            for (const cacheDir of possibleCacheDirs) {
+              const chromeDir = path.default.join(cacheDir, 'chrome');
+              
+              if (existsSync(chromeDir)) {
+                try {
+                  // Find the versioned directory (e.g., linux-143.0.7499.169)
+                  const dirs = readdirSync(chromeDir);
+                  const versionDir = dirs.find(d => d.startsWith('linux-'));
+                  
+                  if (versionDir) {
+                    // Try both possible structures
+                    const possiblePaths = [
+                      path.default.join(chromeDir, versionDir, 'chrome-linux64', 'chrome'),
+                      path.default.join(chromeDir, versionDir, 'chrome', 'chrome'),
+                      path.default.join(chromeDir, versionDir, 'chrome'),
+                    ];
+                    
+                    for (const chromePath of possiblePaths) {
+                      if (existsSync(chromePath)) {
+                        executablePath = chromePath;
+                        logInfo('✅ Found Chrome in cache', { path: executablePath, cacheDir });
+                        break;
+                      }
+                    }
+                    
+                    if (executablePath) break;
+                  }
+                } catch (error) {
+                  // Continue to next cache dir
+                }
+              }
+            }
+          }
+        } catch (error) {
+          logError('Failed to find Chrome via browser fetcher', error);
         }
       }
       
@@ -740,7 +777,7 @@ export class SiteMirrorScraper {
         launchOptions.executablePath = executablePath;
         logInfo('Using Chrome executable', { path: executablePath });
       } else {
-        logInfo('Chrome not found in cache, will attempt to use system Chrome');
+        logInfo('Chrome not found, will attempt to use system Chrome');
         logInfo('If this fails, will fallback to HTTP fetch');
       }
       
