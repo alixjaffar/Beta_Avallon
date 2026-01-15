@@ -925,8 +925,10 @@ export class SiteMirrorScraper {
           // This should not happen - Chrome must be found for SiteMirror
           logError('CRITICAL: Chrome not found - SiteMirror requires Puppeteer', null, {
             cacheDir,
-            lastResortPath,
-            searchedDirs: ['/opt/render/.cache/puppeteer'],
+            projectLastResort,
+            renderLastResort,
+            projectCacheDir,
+            searchedDirs: [projectCacheDir, renderCacheDir],
           });
           // Don't throw - let it fail gracefully and fallback to HTTP
         }
