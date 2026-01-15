@@ -3,9 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 import { z } from "zod";
-import { DeepSeekWebsiteGenerator } from "@/lib/providers/impl/deepseek-website-generator";
-import { GeminiWebsiteGenerator } from "@/lib/providers/impl/gemini-website-generator";
-import { DeepSiteEnhancedGenerator } from "@/lib/providers/impl/deepsite-enhanced-generator";
+// AI generators are dynamically imported to avoid build-time issues with Google Cloud libs
 import { getSiteById, updateSite } from "@/data/sites";
 import { getUser } from "@/lib/auth/getUser";
 import { hasEnoughCredits, deductCredits, CREDIT_COSTS, ensureUserHasCredits } from "@/lib/billing/credits";
@@ -339,6 +337,8 @@ The website now reflects your specific needs while maintaining high-quality desi
         reason: nameChangeMatch ? 'No text matches found' : 'Complex modification request'
       });
       
+      // Dynamic import to avoid build-time issues with Google Cloud libs
+      const { DeepSiteEnhancedGenerator } = await import("@/lib/providers/impl/deepsite-enhanced-generator");
       const generator = new DeepSiteEnhancedGenerator();
       
       // Build comprehensive description that emphasizes preservation

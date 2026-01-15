@@ -1,6 +1,6 @@
 // CHANGELOG: 2025-01-15 - Real-time progress tracking for website generation
 import { NextRequest } from "next/server";
-import { GeminiWebsiteGenerator } from "@/lib/providers/impl/gemini-website-generator";
+// GeminiWebsiteGenerator is dynamically imported to avoid build-time issues
 
 export async function POST(req: NextRequest) {
   const { name, description, mode } = await req.json();
@@ -21,6 +21,8 @@ export async function POST(req: NextRequest) {
       try {
         sendProgress('initializing', 'Starting website generation...', 0);
 
+        // Dynamic import to avoid build-time issues with Google Cloud libs
+        const { GeminiWebsiteGenerator } = await import("@/lib/providers/impl/gemini-website-generator");
         const generator = new GeminiWebsiteGenerator();
         
         sendProgress('generating_code', 'Generating website code with Kirin...', 20);

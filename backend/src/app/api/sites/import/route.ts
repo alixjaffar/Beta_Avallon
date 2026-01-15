@@ -4,7 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getCorsHeaders } from '@/lib/cors';
-import { SiteMirrorScraper } from '@/lib/scrapers/site-mirror';
+// SiteMirrorScraper is dynamically imported to avoid build-time issues
 import { logInfo, logError } from '@/lib/log';
 
 export async function OPTIONS(req: NextRequest) {
@@ -59,6 +59,9 @@ export async function POST(req: NextRequest) {
     }
     
     logInfo('Starting SiteMirror import', { url });
+    
+    // Dynamic import to avoid build-time issues
+    const { SiteMirrorScraper } = await import('@/lib/scrapers/site-mirror');
     
     // Initialize SiteMirror scraper
     const scraper = new SiteMirrorScraper(url, {

@@ -2,8 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 import { getUser } from "@/lib/auth/getUser";
-// Using Gemini only - based on open-source AI Website Builder
-import { GeminiWebsiteGenerator } from "@/lib/providers/impl/gemini-website-generator";
+// GeminiWebsiteGenerator is dynamically imported to avoid build-time issues with Google Cloud libs
 import { N8nProvider } from "@/lib/providers/impl/n8n";
 import { createSite } from "@/data/sites";
 import { createAgent } from "@/data/agents";
@@ -59,6 +58,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Step 1: Generate website using Gemini AI (based on open-source AI Website Builder)
+    // Dynamic import to avoid build-time issues with Google Cloud libs
+    const { GeminiWebsiteGenerator } = await import("@/lib/providers/impl/gemini-website-generator");
     const generator = new GeminiWebsiteGenerator();
     let websiteResult;
     

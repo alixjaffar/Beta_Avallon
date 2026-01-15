@@ -5,8 +5,7 @@
 // CHANGELOG: 2026-01-07 - Fixed CORS handling to use shared getCorsHeaders utility
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
-import { DeepSeekWebsiteGenerator } from "@/lib/providers/impl/deepseek-website-generator";
-import { DeepSiteEnhancedGenerator } from "@/lib/providers/impl/deepsite-enhanced-generator";
+// AI generators are dynamically imported to avoid build-time issues with Google Cloud libs
 import { createSite } from "@/data/sites";
 import { getUser } from "@/lib/auth/getUser";
 import { z } from "zod";
@@ -132,6 +131,8 @@ export async function POST(req: NextRequest) {
 
     // Use Gemini 3.0 Pro for high-quality website generation
     try {
+      // Dynamic import to avoid build-time issues with Google Cloud libs
+      const { DeepSiteEnhancedGenerator } = await import("@/lib/providers/impl/deepsite-enhanced-generator");
       // Use Gemini 3.0 Pro (DeepSite-enhanced) for best results
       const generator = new DeepSiteEnhancedGenerator();
       
