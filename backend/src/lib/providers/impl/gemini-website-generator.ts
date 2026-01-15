@@ -113,15 +113,37 @@ export class GeminiWebsiteGenerator {
     
     // Initialize Google Auth for Gemini 3 Pro (global endpoint)
     // Support multiple credential methods:
-    // 1. GOOGLE_APPLICATION_CREDENTIALS_JSON (JSON string in env var) - BEST for Render
-    // 2. GOOGLE_APPLICATION_CREDENTIALS (file path)
-    // 3. Individual env vars (for manual setup)
+    // 1. Individual env vars (EASIEST for Render - recommended)
+    // 2. GOOGLE_APPLICATION_CREDENTIALS_JSON (JSON string in env var)
+    // 3. GOOGLE_APPLICATION_CREDENTIALS (file path)
     try {
       const authOptions: any = {
         scopes: ['https://www.googleapis.com/auth/cloud-platform'],
       };
       
-      // Method 1: JSON string in environment variable (best for Render/cloud)
+      // Method 1: Individual environment variables (EASIEST for Render)
+      // Set these in Render: GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY, etc.
+      if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+        const privateKey = process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
+        authOptions.credentials = {
+          type: 'service_account',
+          project_id: process.env.GOOGLE_CLOUD_PROJECT_ID || this.projectId,
+          private_key_id: process.env.GOOGLE_PRIVATE_KEY_ID || '',
+          private_key: privateKey,
+          client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+          client_id: process.env.GOOGLE_CLIENT_ID || '',
+          auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+          token_uri: 'https://oauth2.googleapis.com/token',
+          auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
+          client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL)}`,
+          universe_domain: 'googleapis.com',
+        };
+        logInfo('✅ Using credentials from individual env vars (recommended for Render)', {
+          projectId: authOptions.credentials.project_id,
+          clientEmail: authOptions.credentials.client_email,
+        });
+      }
+      // Method 2: JSON string in environment variable
       if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
         try {
           let credentialsJson;
@@ -198,7 +220,7 @@ export class GeminiWebsiteGenerator {
           throw new Error(`Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON: ${parseError?.message || 'Invalid JSON format'}. Please ensure the entire JSON is set as a single string value.`);
         }
       }
-      // Method 2: File path
+      // Method 3: File path
       else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
         if (existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
           authOptions.keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS;
@@ -208,31 +230,14 @@ export class GeminiWebsiteGenerator {
           throw new Error(`Credentials file not found: ${process.env.GOOGLE_APPLICATION_CREDENTIALS}`);
         }
       }
-      // Method 3: Try default path (for local development)
+      // Method 4: Try default path (for local development)
       else {
         const defaultPath = './credentials/vertex-ai-service-account.json';
         if (existsSync(defaultPath)) {
           authOptions.keyFilename = defaultPath;
           logInfo('✅ Using credentials from default path', { path: defaultPath });
         } else {
-          // Last resort: try to construct from individual env vars
-          if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
-            authOptions.credentials = {
-              type: 'service_account',
-              project_id: this.projectId,
-              private_key_id: process.env.GOOGLE_PRIVATE_KEY_ID || '',
-              private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-              client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-              client_id: process.env.GOOGLE_CLIENT_ID || '',
-              auth_uri: 'https://accounts.google.com/o/oauth2/auth',
-              token_uri: 'https://oauth2.googleapis.com/token',
-              auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
-              client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL)}`,
-            };
-            logInfo('✅ Using credentials from individual env vars');
-          } else {
-            throw new Error('No credentials found. Please set GOOGLE_APPLICATION_CREDENTIALS_JSON (recommended) or GOOGLE_APPLICATION_CREDENTIALS');
-          }
+          throw new Error('No credentials found. Please set:\n1. Individual env vars: GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY (recommended for Render)\n2. GOOGLE_APPLICATION_CREDENTIALS_JSON (JSON string)\n3. GOOGLE_APPLICATION_CREDENTIALS (file path)');
         }
       }
       
