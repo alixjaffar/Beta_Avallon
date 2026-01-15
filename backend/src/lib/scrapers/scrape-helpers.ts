@@ -38,9 +38,8 @@ export async function fetchCSS(cssUrl: string): Promise<string> {
  */
 export async function processHtml(html: string, baseUrl: string): Promise<string> {
   // Dynamic import to avoid build-time evaluation
-  const cheerioModule = await import('cheerio');
-  // Handle both default and namespace exports
-  const cheerio = cheerioModule.default || cheerioModule;
+  // Cheerio uses namespace export, so we import the whole module
+  const cheerio = await import('cheerio');
   const $ = cheerio.load(html);
 
   // Collect all external CSS URLs before removing link tags
