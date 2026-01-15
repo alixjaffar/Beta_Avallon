@@ -61,20 +61,51 @@ export async function POST(req: NextRequest) {
     logInfo('Starting SiteMirror import', { url });
     
     // Dynamic import to avoid build-time issues
-    const { SiteMirrorScraper } = await import('@/lib/scrapers/site-mirror');
+    let SiteMirrorScraper;
+    try {
+      const scraperModule = await import('@/lib/scrapers/site-mirror');
+      SiteMirrorScraper = scraperModule.SiteMirrorScraper;
+      if (!SiteMirrorScraper) {
+        throw new Error('SiteMirrorScraper not found in module');
+      }
+    } catch (importError: any) {
+      logError('Failed to import SiteMirrorScraper', importError);
+      return NextResponse.json(
+        { error: `Failed to load scraper: ${importError?.message || 'Unknown error'}` },
+        { status: 500, headers: corsHeaders }
+      );
+    }
     
     // Initialize SiteMirror scraper
-    const scraper = new SiteMirrorScraper(url, {
-      maxDepth: 5,
-      maxWorkers: 8,
-      delay: 500,
-      timeout: 15000,
-      ignoreRobots: false,
-      respectSitemap: true,
-    });
+    let scraper;
+    try {
+      scraper = new SiteMirrorScraper(url, {
+        maxDepth: 5,
+        maxWorkers: 8,
+        delay: 500,
+        timeout: 15000,
+        ignoreRobots: false,
+        respectSitemap: true,
+      });
+    } catch (scraperError: any) {
+      logError('Failed to create SiteMirrorScraper', scraperError);
+      return NextResponse.json(
+        { error: `Failed to initialize scraper: ${scraperError?.message || 'Unknown error'}` },
+        { status: 500, headers: corsHeaders }
+      );
+    }
     
     // Fetch website content using SiteMirror
-    const analysis = await scraper.fetchWebsiteContent(url);
+    let analysis;
+    try {
+      analysis = await scraper.fetchWebsiteContent(url);
+    } catch (fetchError: any) {
+      logError('SiteMirror fetchWebsiteContent failed', fetchError, { url });
+      return NextResponse.json(
+        { error: `Failed to fetch website: ${fetchError?.message || 'Unknown error'}` },
+        { status: 500, headers: corsHeaders }
+      );
+    }
     
     if (!analysis) {
       return NextResponse.json(

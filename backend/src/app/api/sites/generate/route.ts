@@ -7,6 +7,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 // AI generators are dynamically imported to avoid build-time issues with Google Cloud libs
 import { createSite } from "@/data/sites";
+
+// Force dynamic rendering - prevents Next.js from analyzing this route at build time
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 import { getUser } from "@/lib/auth/getUser";
 import { z } from "zod";
 import { hasEnoughCredits, deductCredits, CREDIT_COSTS, ensureUserHasCredits } from "@/lib/billing/credits";
@@ -132,9 +136,9 @@ export async function POST(req: NextRequest) {
     // Use Gemini 3.0 Pro for high-quality website generation
     try {
       // Dynamic import to avoid build-time issues with Google Cloud libs
-      const { DeepSiteEnhancedGenerator } = await import("@/lib/providers/impl/deepsite-enhanced-generator");
-      // Use Gemini 3.0 Pro (DeepSite-enhanced) for best results
-      const generator = new DeepSiteEnhancedGenerator();
+      // Using GeminiWebsiteGenerator with Vertex AI Gemini 3 Pro Preview (as requested)
+      const { GeminiWebsiteGenerator } = await import("@/lib/providers/impl/gemini-website-generator");
+      const generator = new GeminiWebsiteGenerator();
       
       logInfo('Using AI generator', { 
         provider: 'Gemini 3.0 Pro',
@@ -248,7 +252,18 @@ export async function POST(req: NextRequest) {
       });
 
       // Generate website using Gemini AI (pass currentCode for modifications)
-      const websiteResult = await generator.generateWebsite(generationRequest, messages, currentCode);
+      let websiteResult;
+      try {
+        websiteResult = await generator.generateWebsite(generationRequest, messages, currentCode);
+      } catch (genError: any) {
+        logError('Generator.generateWebsite failed', genError, {
+          name,
+          description: generationRequest.description.substring(0, 100),
+          errorMessage: genError?.message,
+          errorStack: genError?.stack,
+        });
+        throw new Error(`Website generation failed: ${genError?.message || 'Unknown error'}`);
+      }
       
       // Validate that we got website content
       if (!websiteResult.files || Object.keys(websiteResult.files).length === 0) {
