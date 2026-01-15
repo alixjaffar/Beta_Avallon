@@ -676,10 +676,21 @@ export class SiteMirrorScraper {
       logInfo('🌐 SiteMirror: Using Puppeteer for JavaScript rendering', { url });
       
       // Set PUPPETEER_CACHE_DIR explicitly to ensure Puppeteer knows where to look
-      const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
+      // Use project-local directory first (persists in deployment), then fallback to Render cache
+      const projectCacheDir = path.default.resolve(process.cwd(), '.puppeteer-cache');
+      const renderCacheDir = '/opt/render/.cache/puppeteer';
+      const cacheDir = process.env.PUPPETEER_CACHE_DIR || projectCacheDir;
       if (!process.env.PUPPETEER_CACHE_DIR) {
         process.env.PUPPETEER_CACHE_DIR = cacheDir;
       }
+      
+      logInfo('Puppeteer cache configuration', { 
+        cacheDir, 
+        projectCacheDir, 
+        renderCacheDir,
+        projectCacheExists: existsSync(projectCacheDir),
+        renderCacheExists: existsSync(renderCacheDir),
+      });
       
       // Find Chrome executable path - MUST WORK FOR SITEMIRROR
       let executablePath: string | undefined = process.env.PUPPETEER_EXECUTABLE_PATH;
@@ -687,18 +698,25 @@ export class SiteMirrorScraper {
       if (!executablePath) {
         try {
           // Direct path check first (most reliable)
-          // Chrome is installed at: /opt/render/.cache/puppeteer/chrome/linux-143.0.7499.169/chrome-linux64/chrome
-          const directPath = '/opt/render/.cache/puppeteer/chrome/linux-143.0.7499.169/chrome-linux64/chrome';
-          if (existsSync(directPath)) {
-            executablePath = directPath;
-            logInfo('✅ Found Chrome at direct path', { path: executablePath });
+          // Check project-local directory first, then Render cache
+          const projectDirectPath = path.default.join(projectCacheDir, 'chrome', 'linux-143.0.7499.169', 'chrome-linux64', 'chrome');
+          const renderDirectPath = '/opt/render/.cache/puppeteer/chrome/linux-143.0.7499.169/chrome-linux64/chrome';
+          
+          if (existsSync(projectDirectPath)) {
+            executablePath = projectDirectPath;
+            logInfo('✅ Found Chrome at project-local direct path', { path: executablePath });
+          } else if (existsSync(renderDirectPath)) {
+            executablePath = renderDirectPath;
+            logInfo('✅ Found Chrome at Render cache direct path', { path: executablePath });
           } else {
-            logInfo('Direct path not found, searching...', { directPath });
+            logInfo('Direct paths not found, searching...', { projectDirectPath, renderDirectPath });
             
             // Search file system with comprehensive checks
+            // Check project-local directory FIRST (persists in deployment)
             const possibleCacheDirs = [
+              projectCacheDir, // Project-local (persists)
               cacheDir,
-              '/opt/render/.cache/puppeteer',
+              renderCacheDir, // Render cache (may not persist)
               path.default.resolve(process.cwd(), '.cache', 'puppeteer'),
               path.default.resolve(process.env.HOME || '/tmp', '.cache', 'puppeteer'),
             ].filter(Boolean).map(dir => path.default.resolve(dir)) as string[];
@@ -777,15 +795,116 @@ export class SiteMirrorScraper {
         }
       }
       
-      // If still not found, try to construct path from known version
+      // If still not found, try to construct path from known version (check project-local first)
       if (!executablePath) {
         const knownVersion = '143.0.7499.169';
-        const constructedPath = path.default.join(cacheDir, 'chrome', `linux-${knownVersion}`, 'chrome-linux64', 'chrome');
-        if (existsSync(constructedPath)) {
-          executablePath = constructedPath;
-          logInfo('✅ Found Chrome using constructed path', { path: executablePath });
+        const projectConstructedPath = path.default.join(projectCacheDir, 'chrome', `linux-${knownVersion}`, 'chrome-linux64', 'chrome');
+        const renderConstructedPath = path.default.join(renderCacheDir, 'chrome', `linux-${knownVersion}`, 'chrome-linux64', 'chrome');
+        
+        if (existsSync(projectConstructedPath)) {
+          executablePath = projectConstructedPath;
+          logInfo('✅ Found Chrome using project-local constructed path', { path: executablePath });
+        } else if (existsSync(renderConstructedPath)) {
+          executablePath = renderConstructedPath;
+          logInfo('✅ Found Chrome using Render cache constructed path', { path: executablePath });
         } else {
-          logError('Chrome not found even with constructed path', null, { constructedPath, cacheDir });
+          logInfo('Chrome not found in cache, attempting to download at runtime...', { 
+            projectConstructedPath, 
+            renderConstructedPath,
+            projectCacheDir,
+            cacheDir 
+          });
+          
+          // CRITICAL: Download Chrome at runtime if not found (for Render deployment)
+          // Use project-local directory (persists in deployment)
+          const downloadCacheDir = projectCacheDir;
+          
+          try {
+            const { mkdirSync } = await import('fs');
+            
+            // Ensure cache directory exists
+            try {
+              mkdirSync(downloadCacheDir, { recursive: true });
+              logInfo('Created project-local cache directory', { downloadCacheDir });
+            } catch (mkdirError) {
+              logError('Failed to create cache directory', mkdirError, { downloadCacheDir });
+            }
+            
+            // Use Puppeteer's browser fetcher to download Chrome
+            logInfo('Downloading Chrome via Puppeteer browser fetcher...', { downloadCacheDir });
+            try {
+              // Import @puppeteer/browsers for browser management
+              const browsersModule = await import('@puppeteer/browsers');
+              const { install } = browsersModule;
+              
+              // Install Chrome to project-local directory
+              const result = await install({
+                browser: 'chrome',
+                cacheDir: downloadCacheDir,
+              });
+              
+              logInfo('✅ Chrome downloaded successfully via browser fetcher', { result });
+              
+              // Get the executable path from the installation result
+              if (result && result.executablePath) {
+                executablePath = result.executablePath;
+                logInfo('✅ Found Chrome executable from download', { path: executablePath });
+              } else {
+                // Try to find it using the standard path structure
+                const chromeDir = path.default.join(downloadCacheDir, 'chrome');
+                if (existsSync(chromeDir)) {
+                  const dirs = readdirSync(chromeDir);
+                  const versionDir = dirs.find(d => d.startsWith('linux-'));
+                  if (versionDir) {
+                    const downloadedPath = path.default.join(chromeDir, versionDir, 'chrome-linux64', 'chrome');
+                    if (existsSync(downloadedPath)) {
+                      executablePath = downloadedPath;
+                      logInfo('✅ Found Chrome after download (searched)', { path: executablePath });
+                    }
+                  }
+                }
+              }
+            } catch (downloadError: any) {
+              logError('Failed to download Chrome via browser fetcher', downloadError, { 
+                errorMessage: downloadError?.message,
+                stack: downloadError?.stack,
+                downloadCacheDir 
+              });
+              
+              // Fallback: Try using execSync as last resort
+              try {
+                const { execSync } = await import('child_process');
+                logInfo('Trying execSync fallback for Chrome download...');
+                execSync(`PUPPETEER_CACHE_DIR="${downloadCacheDir}" npx puppeteer browsers install chrome`, {
+                  env: { ...process.env, PUPPETEER_CACHE_DIR: downloadCacheDir },
+                  stdio: 'pipe',
+                  timeout: 120000,
+                });
+                logInfo('✅ Chrome downloaded via execSync fallback');
+                
+                // Find it after download
+                const chromeDir = path.default.join(downloadCacheDir, 'chrome');
+                if (existsSync(chromeDir)) {
+                  const dirs = readdirSync(chromeDir);
+                  const versionDir = dirs.find(d => d.startsWith('linux-'));
+                  if (versionDir) {
+                    const downloadedPath = path.default.join(chromeDir, versionDir, 'chrome-linux64', 'chrome');
+                    if (existsSync(downloadedPath)) {
+                      executablePath = downloadedPath;
+                      logInfo('✅ Found Chrome after execSync download', { path: executablePath });
+                    }
+                  }
+                }
+              } catch (execError: any) {
+                logError('ExecSync fallback also failed', execError, { errorMessage: execError?.message });
+              }
+            }
+          } catch (runtimeError: any) {
+            logError('Runtime Chrome download setup failed', runtimeError, { 
+              errorMessage: runtimeError?.message,
+              stack: runtimeError?.stack
+            });
+          }
         }
       }
       
@@ -811,12 +930,18 @@ export class SiteMirrorScraper {
           cacheDir 
         });
       } else {
-        // Last resort: Try the exact known path from build logs
-        const lastResortPath = '/opt/render/.cache/puppeteer/chrome/linux-143.0.7499.169/chrome-linux64/chrome';
-        if (existsSync(lastResortPath)) {
-          executablePath = lastResortPath;
+        // Last resort: Try both project-local and Render cache paths
+        const projectLastResort = path.default.join(projectCacheDir, 'chrome', 'linux-143.0.7499.169', 'chrome-linux64', 'chrome');
+        const renderLastResort = '/opt/render/.cache/puppeteer/chrome/linux-143.0.7499.169/chrome-linux64/chrome';
+        
+        if (existsSync(projectLastResort)) {
+          executablePath = projectLastResort;
           launchOptions.executablePath = executablePath;
-          logInfo('✅✅✅ USING LAST RESORT CHROME PATH', { path: executablePath });
+          logInfo('✅✅✅ USING PROJECT-LOCAL LAST RESORT CHROME PATH', { path: executablePath });
+        } else if (existsSync(renderLastResort)) {
+          executablePath = renderLastResort;
+          launchOptions.executablePath = executablePath;
+          logInfo('✅✅✅ USING RENDER CACHE LAST RESORT CHROME PATH', { path: executablePath });
         } else {
           // This should not happen - Chrome must be found for SiteMirror
           logError('CRITICAL: Chrome not found - SiteMirror requires Puppeteer', null, {
