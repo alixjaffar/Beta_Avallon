@@ -4,6 +4,7 @@
 // UPDATED: 2026-01-15 - Integrated SiteMirror scraper for advanced website cloning
 // UPDATED: 2026-01-15 - Using ONLY Vertex AI SDK with Gemini 3 Pro Preview
 import axios from 'axios';
+import { existsSync } from 'fs';
 import { logError, logInfo } from '@/lib/log';
 import { VertexAI } from '@google-cloud/vertexai';
 import { GoogleAuth } from 'google-auth-library';
@@ -110,30 +111,80 @@ export class GeminiWebsiteGenerator {
     this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID || 'coastal-cascade-483522-i2';
     this.region = process.env.GOOGLE_CLOUD_REGION || 'us-central1';
     
-    // Set credentials path for service account
-    const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || './credentials/vertex-ai-service-account.json';
-    if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-      process.env.GOOGLE_APPLICATION_CREDENTIALS = credentialsPath;
-    }
-    
     // Initialize Google Auth for Gemini 3 Pro (global endpoint)
+    // Support multiple credential methods:
+    // 1. GOOGLE_APPLICATION_CREDENTIALS_JSON (JSON string in env var) - BEST for Render
+    // 2. GOOGLE_APPLICATION_CREDENTIALS (file path)
+    // 3. Individual env vars (for manual setup)
     try {
-      this.googleAuth = new GoogleAuth({
+      const authOptions: any = {
         scopes: ['https://www.googleapis.com/auth/cloud-platform'],
-        keyFilename: credentialsPath
-      });
+      };
+      
+      // Method 1: JSON string in environment variable (best for Render/cloud)
+      if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+        try {
+          const credentialsJson = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+          authOptions.credentials = credentialsJson;
+          logInfo('✅ Using credentials from GOOGLE_APPLICATION_CREDENTIALS_JSON env var');
+        } catch (parseError) {
+          logError('Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON', parseError);
+          throw parseError;
+        }
+      }
+      // Method 2: File path
+      else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+        if (existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
+          authOptions.keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+          logInfo('✅ Using credentials from file', { path: process.env.GOOGLE_APPLICATION_CREDENTIALS });
+        } else {
+          logError('Credentials file not found', undefined, { path: process.env.GOOGLE_APPLICATION_CREDENTIALS });
+          throw new Error(`Credentials file not found: ${process.env.GOOGLE_APPLICATION_CREDENTIALS}`);
+        }
+      }
+      // Method 3: Try default path (for local development)
+      else {
+        const defaultPath = './credentials/vertex-ai-service-account.json';
+        if (existsSync(defaultPath)) {
+          authOptions.keyFilename = defaultPath;
+          logInfo('✅ Using credentials from default path', { path: defaultPath });
+        } else {
+          // Last resort: try to construct from individual env vars
+          if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+            authOptions.credentials = {
+              type: 'service_account',
+              project_id: this.projectId,
+              private_key_id: process.env.GOOGLE_PRIVATE_KEY_ID || '',
+              private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+              client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+              client_id: process.env.GOOGLE_CLIENT_ID || '',
+              auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+              token_uri: 'https://oauth2.googleapis.com/token',
+              auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
+              client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL)}`,
+            };
+            logInfo('✅ Using credentials from individual env vars');
+          } else {
+            throw new Error('No credentials found. Please set GOOGLE_APPLICATION_CREDENTIALS_JSON (recommended) or GOOGLE_APPLICATION_CREDENTIALS');
+          }
+        }
+      }
+      
+      this.googleAuth = new GoogleAuth(authOptions);
       logInfo('✅ Google Auth initialized for Gemini 3 Pro Preview', {
         projectId: this.projectId,
-        credentialsPath,
+        method: authOptions.credentials ? 'env-var' : 'file',
       });
     } catch (error) {
       logError('Failed to initialize Google Auth', error, {
         projectId: this.projectId,
-        credentialsPath,
+        hasJsonEnv: !!process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON,
+        hasFileEnv: !!process.env.GOOGLE_APPLICATION_CREDENTIALS,
       });
     }
     
     // Initialize Vertex AI SDK for Gemini 3 Pro Preview
+    // Vertex AI SDK will use the same credentials via GoogleAuth
     try {
       this.vertexAI = new VertexAI({
         project: this.projectId,
@@ -804,7 +855,7 @@ export class GeminiWebsiteGenerator {
     const model = 'gemini-3-pro-preview';
     
     if (!this.vertexAI && !this.googleAuth) {
-      throw new Error('Vertex AI SDK not initialized. Please ensure GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT_ID are set.');
+      throw new Error('Vertex AI SDK not initialized. Please ensure GOOGLE_APPLICATION_CREDENTIALS_JSON (or GOOGLE_APPLICATION_CREDENTIALS) and GOOGLE_CLOUD_PROJECT_ID are set.');
     }
     
     try {
@@ -973,10 +1024,10 @@ export class GeminiWebsiteGenerator {
       
       // Provide helpful error messages
       if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('UNAUTHENTICATED') || errorMessage.includes('401') || errorMessage.includes('403')) {
-        throw new Error(`Vertex AI authentication failed. Please ensure:\n1. GOOGLE_APPLICATION_CREDENTIALS points to a valid service account JSON file\n2. The service account has "Vertex AI User" role\n3. GOOGLE_CLOUD_PROJECT_ID is set correctly\n\nError: ${errorMessage}`);
+        throw new Error(`Vertex AI authentication failed. Please ensure:\n1. GOOGLE_APPLICATION_CREDENTIALS_JSON (recommended) or GOOGLE_APPLICATION_CREDENTIALS is set\n2. The service account has "Vertex AI User" role\n3. GOOGLE_CLOUD_PROJECT_ID is set correctly\n\nError: ${errorMessage}`);
       }
-      if (errorMessage.includes('ENOENT') || errorMessage.includes('does not exist')) {
-        throw new Error(`Service account credentials file not found. Please set GOOGLE_APPLICATION_CREDENTIALS to point to your service account JSON file.\n\nExpected path: ${process.env.GOOGLE_APPLICATION_CREDENTIALS || './credentials/vertex-ai-service-account.json'}`);
+      if (errorMessage.includes('ENOENT') || errorMessage.includes('does not exist') || errorMessage.includes('No credentials found')) {
+        throw new Error(`Service account credentials not found. Please set one of:\n1. GOOGLE_APPLICATION_CREDENTIALS_JSON (recommended for cloud) - JSON string of service account\n2. GOOGLE_APPLICATION_CREDENTIALS - path to service account JSON file\n\nError: ${errorMessage}`);
       }
       if (errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
         throw new Error(`Vertex AI quota exceeded. ${errorMessage}. Please check your Google Cloud billing/quota.`);
