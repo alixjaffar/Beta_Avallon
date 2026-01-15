@@ -76,15 +76,17 @@ export async function POST(req: NextRequest) {
       );
     }
     
-    // Initialize SiteMirror scraper
+    // Initialize SiteMirror scraper with Puppeteer (forceRender: true)
+    // Following SiteMirror's approach: https://github.com/pakelcomedy/SiteMirror/
     let scraper;
     try {
       scraper = new SiteMirrorScraper(url, {
         maxDepth: 5,
         maxWorkers: 8,
         delay: 500,
-        timeout: 15000,
+        timeout: 30000, // Longer timeout for Puppeteer
         ignoreRobots: false,
+        forceRender: true, // ALWAYS use Puppeteer for JavaScript rendering (like SiteMirror's Selenium)
         respectSitemap: true,
       });
     } catch (scraperError: any) {

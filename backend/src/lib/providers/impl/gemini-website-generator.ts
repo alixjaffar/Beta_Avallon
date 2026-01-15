@@ -315,12 +315,15 @@ export class GeminiWebsiteGenerator {
    */
   private async fetchWebsiteContent(url: string): Promise<WebsiteAnalysis | null> {
     try {
+      // Use SiteMirror with Puppeteer for JavaScript rendering
+      // Following SiteMirror's approach: https://github.com/pakelcomedy/SiteMirror/
       const scraper = new SiteMirrorScraper(url, {
         maxDepth: 5,
         maxWorkers: 8,
         delay: 500,
-        timeout: 15000,
+        timeout: 30000, // Longer timeout for Puppeteer
         ignoreRobots: false,
+        forceRender: true, // ALWAYS use Puppeteer (like SiteMirror's Selenium mode)
         respectSitemap: true,
       });
       

@@ -103,9 +103,9 @@ export class SiteMirrorScraper {
       maxDepth: options.maxDepth ?? 10,
       maxWorkers: options.maxWorkers ?? 8,
       delay: options.delay ?? 500,
-      timeout: options.timeout ?? 15000,
+      timeout: options.timeout ?? 30000, // Longer timeout for Puppeteer
       ignoreRobots: options.ignoreRobots ?? true, // Default ignore for cloning
-      forceRender: options.forceRender ?? false,
+      forceRender: options.forceRender ?? true, // Default to Puppeteer (like SiteMirror's Selenium mode)
       respectSitemap: options.respectSitemap ?? true,
       maxRetries: options.maxRetries ?? 3,
       downloadAssets: options.downloadAssets ?? true,
@@ -661,6 +661,76 @@ export class SiteMirrorScraper {
   // MAIN FETCH METHOD (implements SiteMirror's complete crawl workflow)
   // ==========================================================================
 
+  /**
+   * Fetch HTML using Puppeteer (for JavaScript-rendered sites)
+   * Following SiteMirror's Selenium approach but using Puppeteer
+   */
+  private async fetchWithPuppeteer(url: string): Promise<string | null> {
+    try {
+      // Dynamic import to avoid build-time issues
+      const puppeteer = await import('puppeteer');
+      
+      logInfo('🌐 SiteMirror: Using Puppeteer for JavaScript rendering', { url });
+      
+      const browser = await puppeteer.default.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-web-security',
+          '--disable-features=IsolateOrigins,site-per-process',
+          '--user-agent=' + this.userAgent,
+        ],
+      });
+
+      try {
+        const page = await browser.newPage();
+        
+        // Set viewport (like SiteMirror's Selenium)
+        await page.setViewport({ width: 1920, height: 1080 });
+        
+        // Block unnecessary resources to speed up (like SiteMirror)
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+          const resourceType = req.resourceType();
+          // Allow essential resources
+          if (['document', 'stylesheet', 'script', 'image', 'font', 'media'].includes(resourceType)) {
+            req.continue();
+          } else {
+            // Block ads, analytics, etc.
+            req.abort();
+          }
+        });
+
+        // Navigate and wait for content (like SiteMirror's selenium_wait)
+        await page.goto(url, {
+          waitUntil: 'networkidle2',
+          timeout: this.options.timeout,
+        });
+
+        // Wait a bit more for any lazy-loaded content (like SiteMirror)
+        await this.sleep(2000);
+
+        // Get the fully rendered HTML
+        const html = await page.content();
+        
+        logInfo('✅ SiteMirror: Puppeteer rendered page', { 
+          url, 
+          htmlLength: html.length 
+        });
+
+        return html;
+      } finally {
+        await browser.close();
+      }
+    } catch (error: any) {
+      logError('SiteMirror: Puppeteer fetch failed', error, { url });
+      return null;
+    }
+  }
+
   async fetchWebsiteContent(url?: string): Promise<WebsiteAnalysis | null> {
     const targetUrl = url || this.baseUrl;
     
@@ -668,20 +738,40 @@ export class SiteMirrorScraper {
 
     try {
       // Step 1: Fetch main page HTML
-      const response = await this.fetchWithRetry(targetUrl);
-      if (!response) {
+      // Use Puppeteer if forceRender is true OR if we detect it might need JS
+      // Following SiteMirror's dual-engine approach (Requests vs Selenium)
+      let html: string | null = null;
+      
+      if (this.options.forceRender) {
+        // Use Puppeteer for JavaScript rendering (like SiteMirror's Selenium mode)
+        html = await this.fetchWithPuppeteer(targetUrl);
+      } else {
+        // Try regular fetch first (like SiteMirror's Requests mode)
+        const response = await this.fetchWithRetry(targetUrl);
+        if (response) {
+          html = response.data;
+        }
+      }
+      
+      // Fallback: If regular fetch failed and we haven't tried Puppeteer, try it
+      if (!html && !this.options.forceRender) {
+        logInfo('🔄 SiteMirror: Regular fetch failed, trying Puppeteer', { url: targetUrl });
+        html = await this.fetchWithPuppeteer(targetUrl);
+      }
+      
+      if (!html) {
         logError('SiteMirror: Failed to fetch main page', null, { url: targetUrl });
         return null;
       }
 
       logInfo('📄 SiteMirror: Main page fetched', { 
         url: targetUrl, 
-        size: response.data.length,
-        contentType: response.contentType 
+        size: html.length,
+        method: this.options.forceRender ? 'Puppeteer' : 'HTTP'
       });
 
       // Step 2: Parse HTML with Cheerio
-      const $ = load(response.data);
+      const $ = load(html);
 
       // Step 3: Extract basic metadata
       const title = $('title').text().trim() || 
