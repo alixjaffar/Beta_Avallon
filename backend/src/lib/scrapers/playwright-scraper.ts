@@ -197,8 +197,8 @@ export class PlaywrightScraper {
       const results: Array<{ url: string; path: string; text: string }> = [];
       const seen = new Set<string>();
       
-      // Get all anchor tags
-      const anchors = document.querySelectorAll('a[href]');
+      // Get all anchor tags (convert NodeList to Array for iteration)
+      const anchors = Array.from(document.querySelectorAll('a[href]'));
       
       for (const anchor of anchors) {
         const href = anchor.getAttribute('href');
