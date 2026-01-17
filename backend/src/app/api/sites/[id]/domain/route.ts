@@ -67,7 +67,7 @@ export async function POST(
     }
 
     // Update site with custom domain (store as comma-separated string)
-    const existingDomains = site.customDomain ? site.customDomain.split(',').map(d => d.trim()) : [];
+    const existingDomains = site.customDomain ? site.customDomain.split(',').map((d: string) => d.trim()) : [];
     if (!existingDomains.includes(domain)) {
       existingDomains.push(domain);
     }
@@ -125,7 +125,7 @@ export async function GET(
       return NextResponse.json({ error: "Site not found" }, { status: 404, headers: corsHeaders });
     }
 
-    const customDomains = site.customDomain ? site.customDomain.split(',').map(d => d.trim()).filter(Boolean) : [];
+    const customDomains = site.customDomain ? site.customDomain.split(',').map((d: string) => d.trim()).filter(Boolean) : [];
     
     return NextResponse.json({
       customDomains,
@@ -171,7 +171,7 @@ export async function DELETE(
     }
 
     // Update site to remove domain
-    const existingDomains = site.customDomain ? site.customDomain.split(',').map(d => d.trim()) : [];
+    const existingDomains = site.customDomain ? site.customDomain.split(',').map((d: string) => d.trim()) : [];
     const updatedDomains = existingDomains.filter((d: string) => d !== domain);
     await updateSite(siteId, user.id, { customDomain: updatedDomains.length > 0 ? updatedDomains.join(',') : null });
 
