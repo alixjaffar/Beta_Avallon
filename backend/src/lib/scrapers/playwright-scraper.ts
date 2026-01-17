@@ -386,7 +386,7 @@ export class PlaywrightScraper {
       // Try to find and click a link that navigates to this page
       const linkClicked = await page.evaluate((targetPath: string) => {
         const normalizedTarget = targetPath.toLowerCase().replace(/^\/+|\/+$/g, '');
-        const links = document.querySelectorAll('a[href]');
+        const links = Array.from(document.querySelectorAll('a[href]'));
         
         for (const link of links) {
           const href = link.getAttribute('href') || '';
@@ -586,7 +586,7 @@ export class PlaywrightScraper {
       // Method 1: Find and click a link that matches the path
       const linkClicked = await page.evaluate((path: string) => {
         const normalizedPath = path.startsWith('/') ? path : '/' + path;
-        const links = document.querySelectorAll('a[href]');
+        const links = Array.from(document.querySelectorAll('a[href]'));
         
         for (const link of links) {
           const href = link.getAttribute('href') || '';
