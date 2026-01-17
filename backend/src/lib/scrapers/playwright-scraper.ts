@@ -660,8 +660,8 @@ export class PlaywrightScraper {
     const extractedCSS = await page.evaluate(() => {
       const styles: string[] = [];
       
-      // Get all stylesheet rules
-      for (const sheet of document.styleSheets) {
+      // Get all stylesheet rules (convert StyleSheetList to Array)
+      for (const sheet of Array.from(document.styleSheets)) {
         try {
           if (sheet.cssRules) {
             for (const rule of sheet.cssRules) {
