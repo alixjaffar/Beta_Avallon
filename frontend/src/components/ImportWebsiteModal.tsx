@@ -17,11 +17,11 @@ interface ImportWebsiteModalProps {
 }
 
 /**
- * SiteMirror API - THE ONLY WAY TO IMPORT WEBSITES
- * Based on: https://github.com/pakelcomedy/SiteMirror/
- * Uses Puppeteer for PERFECT JavaScript rendering (like --force_render)
+ * Playwright API - Production-grade website scraper
+ * Uses Playwright + custom crawler for maximum control and reliability
+ * Handles SPAs, JS-heavy sites, auth, and complex layouts
  */
-async function siteMirrorImport(url: string): Promise<{
+async function playwrightImport(url: string, options?: { crawl?: boolean; maxPages?: number }): Promise<{
   success: boolean;
   html: string;
   title: string;
@@ -31,7 +31,9 @@ async function siteMirrorImport(url: string): Promise<{
     fonts: string[];
     images: string[];
     css: { inline: string; external: string[]; parsed: string };
+    navigation?: Array<{ text: string; url: string; path: string }>;
   };
+  internalPages?: Array<{ url: string; title: string; path: string; suggestedFilename: string }>;
   error?: string;
 }> {
   const backendUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
@@ -41,12 +43,39 @@ async function siteMirrorImport(url: string): Promise<{
   const response = await fetch(`${backendUrl}/api/sites/import`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({ url, crawl: options?.crawl, maxPages: options?.maxPages }),
   });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.error || `Failed to import: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Scrape a specific internal page using Playwright
+ */
+async function scrapeInternalPage(baseUrl: string, pagePath: string): Promise<{
+  success: boolean;
+  html: string;
+  title: string;
+  path: string;
+  suggestedFilename: string;
+}> {
+  const backendUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+    ? 'http://localhost:3000'
+    : 'https://beta-avallon.onrender.com';
+
+  const response = await fetch(
+    `${backendUrl}/api/sites/import?baseUrl=${encodeURIComponent(baseUrl)}&path=${encodeURIComponent(pagePath)}`,
+    { method: 'GET' }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to scrape page: ${response.status}`);
   }
 
   return response.json();
@@ -140,7 +169,7 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
   };
 
   /**
-   * URL IMPORT - USES GOCLONE EXCLUSIVELY
+   * URL IMPORT - USES PLAYWRIGHT SCRAPER
    */
   const handleUrlImport = async () => {
     if (!urlInput.trim()) {
@@ -163,21 +192,21 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
 
     setIsLoading(true);
     setError(null);
-    setLoadingStatus('🚀 SiteMirror: Starting website clone...');
+    setLoadingStatus('🎭 Playwright: Starting website import...');
 
     try {
-      setLoadingStatus('🔧 SiteMirror: Launching Puppeteer (--force_render)...');
+      setLoadingStatus('🎭 Playwright: Launching headless browser...');
       
-      // USE SITEMIRROR API - THE ONLY WAY
-      const data = await siteMirrorImport(normalizedUrl);
+      // USE PLAYWRIGHT API
+      const data = await playwrightImport(normalizedUrl);
       
       if (!data.success || !data.html) {
-        throw new Error(data.error || 'Failed to clone website');
+        throw new Error(data.error || 'Failed to import website');
       }
 
-      setLoadingStatus('✅ SiteMirror: Clone complete!');
+      setLoadingStatus('✅ Playwright: Import complete!');
 
-      // SiteMirror returns FULLY PROCESSED HTML - ready to use!
+      // Playwright returns FULLY PROCESSED HTML - ready to use!
       const result: ImportResult = {
         html: data.html,
         css: data.metadata?.css?.external || [],
@@ -192,25 +221,40 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
 
       setImportResult(result);
       
+      // Check if we have internal pages from the scraper
+      const internalPages = data.internalPages || [];
+      const navPages = data.metadata?.navigation || [];
+      
+      // Combine detected pages from scraper and navigation
+      const allPages: DetectedPage[] = [
+        ...internalPages.map(p => ({
+          url: p.url,
+          title: p.title,
+          path: p.path,
+          suggestedFilename: p.suggestedFilename,
+        })),
+        ...navPages.filter(n => !internalPages.some(p => p.url === n.url)).map(n => ({
+          url: n.url,
+          title: n.text,
+          path: n.path,
+          suggestedFilename: n.path.replace(/^\//, '').replace(/\//g, '-') + '.html' || 'page.html',
+        })),
+      ];
+      
       // Detect internal pages if multi-page import is enabled
-      if (options.importMultiplePages && onMultiPageImport) {
-        setLoadingStatus('Detecting internal pages...');
-        const pages = detectInternalPages(data.html, normalizedUrl);
-        
-        if (pages.length > 0) {
-          setFirstPageHtml(data.html);
-          setSourceUrl(normalizedUrl);
-          setDetectedPages(pages);
-          setSelectedPages(new Set(pages.slice(0, 5).map(p => p.url)));
-          setStep('selectPages');
-          setIsLoading(false);
-          setLoadingStatus('');
-          return;
-        }
+      if (options.importMultiplePages && onMultiPageImport && allPages.length > 0) {
+        setFirstPageHtml(data.html);
+        setSourceUrl(normalizedUrl);
+        setDetectedPages(allPages);
+        setSelectedPages(new Set(allPages.slice(0, 5).map(p => p.url)));
+        setStep('selectPages');
+        setIsLoading(false);
+        setLoadingStatus('');
+        return;
       }
 
       // Single page import
-      console.log('%c✓ SiteMirror import complete!', 'color: #22c55e; font-weight: bold;');
+      console.log('%c✓ Playwright import complete!', 'color: #22c55e; font-weight: bold;');
       onImport(data.html, pageName);
       handleClose();
       
@@ -223,7 +267,7 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
   };
   
   /**
-   * MULTI-PAGE IMPORT - USES GOCLONE FOR EACH PAGE
+   * MULTI-PAGE IMPORT - USES PLAYWRIGHT FOR EACH PAGE
    */
   const handleMultiPageImport = async () => {
     if (!onMultiPageImport) {
@@ -245,17 +289,18 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
       url: sourceUrl,
     }];
     
-    // Import each selected page using SiteMirror
+    // Import each selected page using Playwright
     let skippedCount = 0;
     for (let i = 0; i < selectedUrls.length; i++) {
       const pageUrl = selectedUrls[i];
       const page = detectedPages.find(p => p.url === pageUrl);
       
-      setLoadingStatus(`🚀 SiteMirror: Importing page ${i + 2} of ${totalPages}... (${page?.title || 'Unknown'})`);
+      setLoadingStatus(`🎭 Playwright: Importing page ${i + 2} of ${totalPages}... (${page?.title || 'Unknown'})`);
       
       try {
-        // USE SITEMIRROR FOR EACH PAGE
-        const data = await siteMirrorImport(pageUrl);
+        // Use the internal page scraper for better SPA support
+        const pagePath = page?.path || new URL(pageUrl).pathname;
+        const data = await scrapeInternalPage(sourceUrl, pagePath);
         
         if (data.success && data.html && data.html.length > 100) {
           pages.push({
@@ -280,7 +325,7 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
     if (skippedCount > 0) {
       console.log(`%c⚠️ ${skippedCount} pages skipped (404 or JavaScript-only routes)`, 'color: #f59e0b; font-weight: bold;');
     }
-    console.log(`%c✓ SiteMirror import complete! ${pages.length} pages imported.`, 'color: #22c55e; font-weight: bold;');
+    console.log(`%c✓ Playwright import complete! ${pages.length} pages imported.`, 'color: #22c55e; font-weight: bold;');
     
     onMultiPageImport(pages);
     handleClose();

@@ -1193,8 +1193,32 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     }
   };
 
+  // Auto-save website content to backend
+  const autoSaveContent = async (content: Record<string, string>) => {
+    try {
+      const response = await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          websiteContent: content,
+          status: 'deployed',
+        }),
+      });
+      
+      if (response.ok) {
+        const updatedSite = await response.json();
+        onUpdate({ ...site, websiteContent: content, status: 'deployed', ...updatedSite });
+        setHasUnsavedChanges(false);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Auto-save failed:', error);
+      return false;
+    }
+  };
+
   // Handle importing website HTML
-  const handleImportWebsite = (html: string, pageName: string = 'index.html') => {
+  const handleImportWebsite = async (html: string, pageName: string = 'index.html') => {
     // The HTML has already been fully processed by ImportWebsiteModal
     // (with CSS inlined, URLs converted, etc.)
     
@@ -1206,27 +1230,29 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     
     setCurrentWebsiteContent(updatedContent);
     setCurrentPage(pageName);
-    setHasUnsavedChanges(true);
+    
+    // Auto-save to backend
+    const saved = await autoSaveContent(updatedContent);
     
     // Add a message to chat
     const importMessage: ChatMessage = {
       id: Date.now().toString(),
       role: 'assistant',
-      content: `✅ Successfully imported website to "${pageName}"!\n\nAll external CSS stylesheets have been fetched and embedded inline. Images, fonts, and other resources have been converted to absolute URLs.\n\nYou can now:\n• Use the Visual Editor to make changes\n• Use AI Assist to modify sections\n• Click "Save Changes" to persist your work`,
+      content: `✅ Successfully imported website to "${pageName}"!${saved ? ' (Auto-saved)' : ''}\n\nAll external CSS stylesheets have been fetched and embedded inline. Images, fonts, and other resources have been converted to absolute URLs.\n\nYou can now:\n• Use the Visual Editor to make changes\n• Use AI Assist to modify sections\n• Click "Publish" to deploy your website\n• Click "Download" to get files for self-hosting`,
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, importMessage]);
     
     toast({
-      title: "Website Imported Successfully!",
-      description: `All styles and resources have been preserved. Click Save to keep changes.`,
+      title: "Website Imported & Saved!",
+      description: saved ? `Ready to publish or download for self-hosting.` : `Click Save to persist changes.`,
     });
     
     setShowImportModal(false);
   };
   
   // Handle multi-page import
-  const handleMultiPageImport = (pages: Array<{ filename: string; html: string; title: string; url?: string }>) => {
+  const handleMultiPageImport = async (pages: Array<{ filename: string; html: string; title: string; url?: string }>) => {
     // Build the new content with all pages
     const updatedContent: Record<string, string> = { ...currentWebsiteContent };
     
@@ -1239,24 +1265,151 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     // Set current page to the first imported page (usually index.html)
     const firstPage = pages[0]?.filename || 'index.html';
     setCurrentPage(firstPage);
-    setHasUnsavedChanges(true);
+    
+    // Auto-save to backend
+    const saved = await autoSaveContent(updatedContent);
     
     // Add a message to chat
     const pageNames = pages.map(p => p.filename).join(', ');
     const importMessage: ChatMessage = {
       id: Date.now().toString(),
       role: 'assistant',
-      content: `✅ Successfully imported ${pages.length} pages!\n\n**Pages imported:**\n${pages.map(p => `• ${p.filename} (${p.title})`).join('\n')}\n\nAll CSS stylesheets have been fetched and embedded inline. Images, fonts, and other resources have been converted to absolute URLs.\n\nYou can switch between pages using the page selector at the top. Click "Save Changes" to persist all pages.`,
+      content: `✅ Successfully imported ${pages.length} pages!${saved ? ' (Auto-saved)' : ''}\n\n**Pages imported:**\n${pages.map(p => `• ${p.filename} (${p.title})`).join('\n')}\n\nAll CSS stylesheets have been fetched and embedded inline. Images, fonts, and other resources have been converted to absolute URLs.\n\nYou can switch between pages using the page selector at the top. Click "Publish" to deploy or "Download" for self-hosting.`,
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, importMessage]);
     
     toast({
-      title: `${pages.length} Pages Imported!`,
-      description: `Imported: ${pageNames}. Click Save to keep changes.`,
+      title: `${pages.length} Pages Imported & Saved!`,
+      description: saved ? `Ready to publish or download.` : `Imported: ${pageNames}. Click Save.`,
     });
     
     setShowImportModal(false);
+  };
+  
+  // Custom domain state
+  const [showDomainModal, setShowDomainModal] = useState(false);
+  const [customDomain, setCustomDomain] = useState('');
+  const [domainLoading, setDomainLoading] = useState(false);
+  const [dnsRecords, setDnsRecords] = useState<Array<{ type: string; name: string; value: string }>>([]);
+  
+  // Add custom domain
+  const handleAddDomain = async () => {
+    if (!customDomain.trim()) return;
+    
+    setDomainLoading(true);
+    try {
+      const response = await fetchWithAuth(`${baseUrl}/api/sites/${site.id}/domain`, {
+        method: 'POST',
+        body: JSON.stringify({ domain: customDomain.trim() }),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setDnsRecords(data.dnsRecords || []);
+        toast({
+          title: "Domain Added!",
+          description: "Now add the DNS records shown below to connect your domain.",
+        });
+      } else {
+        toast({
+          title: "Failed to Add Domain",
+          description: data.error || "Please try again.",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add domain.",
+        variant: "destructive",
+      });
+    } finally {
+      setDomainLoading(false);
+    }
+  };
+
+  // Download website as ZIP for self-hosting
+  const handleDownloadZip = async () => {
+    if (Object.keys(currentWebsiteContent).length === 0) {
+      toast({
+        title: "No Content",
+        description: "There's no website content to download.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      // Dynamically import JSZip
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+      
+      // Add all HTML files
+      for (const [filename, content] of Object.entries(currentWebsiteContent)) {
+        zip.file(filename, content);
+      }
+      
+      // Add a simple README
+      zip.file('README.md', `# ${site.name}
+
+Website exported from Avallon.
+
+## Self-Hosting Instructions
+
+### Option 1: Simple HTTP Server
+\`\`\`bash
+# Python 3
+python -m http.server 8000
+
+# Node.js
+npx serve .
+
+# PHP
+php -S localhost:8000
+\`\`\`
+
+### Option 2: Nginx
+Copy all files to your nginx html directory (usually \`/var/www/html\`).
+
+### Option 3: Apache
+Copy all files to your Apache document root (usually \`/var/www/html\` or \`htdocs\`).
+
+### Option 4: Vercel/Netlify
+Just drag and drop this folder to deploy.
+
+## Files
+${Object.keys(currentWebsiteContent).map(f => `- ${f}`).join('\n')}
+
+Generated by Avallon - ${new Date().toISOString()}
+`);
+      
+      // Generate ZIP
+      const blob = await zip.generateAsync({ type: 'blob' });
+      
+      // Download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${site.slug || site.name || 'website'}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Downloaded!",
+        description: "Your website has been downloaded as a ZIP file. Extract and host anywhere!",
+      });
+    } catch (error: any) {
+      console.error('Download failed:', error);
+      toast({
+        title: "Download Failed",
+        description: error.message || "Failed to create ZIP file.",
+        variant: "destructive",
+      });
+    }
   };
 
   // Handle paste in chat - detect HTML and offer to import
@@ -1660,6 +1813,28 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
           >
             <span className="material-symbols-outlined text-[18px]">visibility</span>
             <span className="hidden sm:inline">Preview</span>
+          </button>
+          
+          {/* Download for Self-Hosting */}
+          <button 
+            onClick={handleDownloadZip}
+            disabled={Object.keys(currentWebsiteContent).length === 0}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}
+            title="Download as ZIP for self-hosting"
+          >
+            <span className="material-symbols-outlined text-[18px]">download</span>
+            <span className="hidden sm:inline">Download</span>
+          </button>
+          
+          {/* Custom Domain */}
+          <button 
+            onClick={() => setShowDomainModal(true)}
+            disabled={!site.vercelProjectId}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-purple-600 hover:bg-purple-500 text-white'}`}
+            title={site.vercelProjectId ? "Add custom domain" : "Publish first to add domain"}
+          >
+            <span className="material-symbols-outlined text-[18px]">language</span>
+            <span className="hidden sm:inline">Domain</span>
           </button>
           
           <button 
@@ -2594,6 +2769,109 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         onMultiPageImport={handleMultiPageImport}
         isLight={isLight}
       />
+      
+      {/* Custom Domain Modal */}
+      {showDomainModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className={`w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden ${isLight ? 'bg-white' : 'bg-[#1a1f2e] border border-panel-border'}`}>
+            <div className={`flex items-center justify-between px-6 py-4 border-b ${isLight ? 'border-slate-200' : 'border-panel-border'}`}>
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-purple-400">language</span>
+                <h2 className={`text-lg font-bold ${isLight ? 'text-slate-800' : 'text-white'}`}>Custom Domain</h2>
+              </div>
+              <button 
+                onClick={() => { setShowDomainModal(false); setDnsRecords([]); setCustomDomain(''); }}
+                className={`size-8 flex items-center justify-center rounded-lg transition-colors ${isLight ? 'hover:bg-slate-100 text-slate-500' : 'hover:bg-panel-border text-gray-400 hover:text-white'}`}
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              {/* Current URL */}
+              {site.previewUrl && (
+                <div className={`p-3 rounded-lg ${isLight ? 'bg-slate-100' : 'bg-surface-dark'}`}>
+                  <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>Current URL</p>
+                  <a href={site.previewUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline text-sm">
+                    {site.previewUrl}
+                  </a>
+                </div>
+              )}
+              
+              {/* Add Domain Input */}
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
+                  Add Your Domain
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={customDomain}
+                    onChange={(e) => setCustomDomain(e.target.value)}
+                    placeholder="example.com or www.example.com"
+                    className={`flex-1 px-4 py-2 rounded-lg border text-sm ${isLight ? 'bg-white border-slate-300 text-slate-800' : 'bg-surface-dark border-panel-border text-white'}`}
+                  />
+                  <button
+                    onClick={handleAddDomain}
+                    disabled={domainLoading || !customDomain.trim()}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {domainLoading ? (
+                      <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
+                    ) : (
+                      'Add'
+                    )}
+                  </button>
+                </div>
+              </div>
+              
+              {/* DNS Records */}
+              {dnsRecords.length > 0 && (
+                <div className={`p-4 rounded-lg border ${isLight ? 'bg-green-50 border-green-200' : 'bg-green-900/20 border-green-800'}`}>
+                  <h3 className={`font-semibold mb-3 flex items-center gap-2 ${isLight ? 'text-green-800' : 'text-green-400'}`}>
+                    <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                    Add these DNS records:
+                  </h3>
+                  <div className="space-y-2">
+                    {dnsRecords.map((record, i) => (
+                      <div key={i} className={`p-3 rounded-lg font-mono text-sm ${isLight ? 'bg-white' : 'bg-surface-dark'}`}>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <span className={`text-xs ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>Type</span>
+                            <p className={isLight ? 'text-slate-800' : 'text-white'}>{record.type}</p>
+                          </div>
+                          <div>
+                            <span className={`text-xs ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>Name</span>
+                            <p className={isLight ? 'text-slate-800' : 'text-white'}>{record.name}</p>
+                          </div>
+                          <div>
+                            <span className={`text-xs ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>Value</span>
+                            <p className={`truncate ${isLight ? 'text-slate-800' : 'text-white'}`} title={record.value}>{record.value}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className={`mt-3 text-xs ${isLight ? 'text-green-700' : 'text-green-400'}`}>
+                    DNS changes can take up to 24-48 hours to propagate.
+                  </p>
+                </div>
+              )}
+              
+              {/* Instructions */}
+              <div className={`text-sm ${isLight ? 'text-slate-600' : 'text-gray-400'}`}>
+                <p className="font-medium mb-2">How to connect your domain:</p>
+                <ol className="list-decimal list-inside space-y-1 text-xs">
+                  <li>Enter your domain above and click "Add"</li>
+                  <li>Go to your domain registrar (GoDaddy, Namecheap, etc.)</li>
+                  <li>Add the DNS records shown</li>
+                  <li>Wait for DNS to propagate (usually 5-30 minutes)</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
