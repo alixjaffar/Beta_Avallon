@@ -381,7 +381,10 @@ export class PlaywrightScraper {
         waitUntil: 'networkidle',
         timeout: this.options.timeout,
       });
-      await this.sleep(3000); // Wait for SPA to fully initialize
+      await this.sleep(4000); // Wait longer for SPA to fully initialize
+      
+      // Get initial content hash to detect if page changed after navigation
+      const initialContent = await page.evaluate(() => document.body.innerHTML.length);
       
       // Try to find and click a link that navigates to this page
       const linkClicked = await page.evaluate((targetPath: string) => {
@@ -390,14 +393,17 @@ export class PlaywrightScraper {
         
         for (const link of links) {
           const href = link.getAttribute('href') || '';
-          const normalizedHref = href.toLowerCase().replace(/^\/+|\/+$/g, '').replace(/^https?:\/\/[^/]+\/?/, '');
+          const hrefLower = href.toLowerCase();
+          const normalizedHref = hrefLower.replace(/^\/+|\/+$/g, '').replace(/^https?:\/\/[^/]+\/?/, '');
           
-          // Match by path
+          // Match by path (multiple patterns)
           if (normalizedHref === normalizedTarget || 
               normalizedHref === normalizedTarget + '/' ||
               href.endsWith(targetPath) ||
-              href.endsWith(targetPath + '/')) {
-            console.log('Clicking navigation link:', href);
+              href.endsWith(targetPath + '/') ||
+              hrefLower.includes(normalizedTarget) ||
+              (normalizedTarget.includes('apply') && hrefLower.includes('apply'))) {
+            console.log('Clicking navigation link:', href, 'for path:', targetPath);
             (link as HTMLElement).click();
             return { clicked: true, href };
           }
@@ -406,17 +412,57 @@ export class PlaywrightScraper {
       }, normalizedPath);
       
       if (linkClicked.clicked) {
-        logInfo('🎭 Playwright: Clicked SPA navigation link', { link: linkClicked.href });
-        await this.sleep(3000); // Wait for SPA navigation
+        logInfo('🎭 Playwright: Clicked SPA navigation link', { link: linkClicked.href, targetPath: normalizedPath });
+        
+        // Wait for SPA navigation with multiple strategies
+        await this.sleep(2000);
+        
+        // Wait for URL to change or content to update
+        try {
+          await page.waitForFunction(
+            (initialLen: number) => {
+              const currentLen = document.body.innerHTML.length;
+              const currentPath = window.location.pathname;
+              return currentLen !== initialLen || currentPath !== '/';
+            },
+            { timeout: 8000 },
+            initialContent
+          );
+        } catch {
+          // Timeout is okay, continue
+        }
+        
+        await this.sleep(2000); // Additional wait for content to render
         await page.waitForLoadState('networkidle').catch(() => {});
       } else {
-        // STRATEGY 2: Try direct URL navigation (works for server-rendered pages)
-        logInfo('🎭 Playwright: No nav link found, trying direct navigation', { targetUrl });
-        await page.goto(targetUrl, {
-          waitUntil: 'networkidle',
-          timeout: this.options.timeout,
-        });
-        await this.sleep(3000);
+        // STRATEGY 2: Use History API first (better for SPAs)
+        logInfo('🎭 Playwright: No nav link found, trying History API navigation', { targetPath: normalizedPath });
+        
+        const historyNavigated = await page.evaluate((path: string) => {
+          window.history.pushState({}, '', path);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+          window.dispatchEvent(new Event('locationchange'));
+          // Also try hashchange for hash routers
+          if (path.includes('#')) {
+            window.location.hash = path;
+          }
+          return window.location.pathname === path;
+        }, normalizedPath);
+        
+        await this.sleep(3000); // Wait for SPA router to handle navigation
+        
+        // Check if content changed
+        const afterHistoryContent = await page.evaluate(() => document.body.innerHTML.length);
+        
+        // If History API didn't work, try direct navigation
+        if (!historyNavigated || afterHistoryContent === initialContent) {
+          logInfo('🎭 Playwright: History API failed, trying direct navigation', { targetUrl });
+          await page.goto(targetUrl, {
+            waitUntil: 'networkidle',
+            timeout: this.options.timeout,
+          });
+          await this.sleep(3000);
+        }
       }
       
       // Wait for content to render
@@ -432,28 +478,30 @@ export class PlaywrightScraper {
         const h1 = document.querySelector('h1')?.textContent?.toLowerCase() || '';
         const title = document.title.toLowerCase();
         const bodyText = document.body.innerText.toLowerCase().slice(0, 500);
-        return { h1, title, bodyText, bodyLength: document.body.innerHTML.length };
+        const currentPath = window.location.pathname;
+        return { h1, title, bodyText, bodyLength: document.body.innerHTML.length, currentPath };
       });
       
-      // If it looks like a 404, try one more strategy: use History API
+      logInfo('🎭 Playwright: Page info after navigation', { 
+        path: normalizedPath, 
+        currentPath: pageInfo.currentPath,
+        bodyLength: pageInfo.bodyLength,
+        has404: pageInfo.h1.includes('404') || pageInfo.title.includes('404'),
+      });
+      
+      // If it looks like a 404 or content is too small, try direct navigation one more time
       if ((pageInfo.h1.includes('404') || pageInfo.title.includes('404') || 
            pageInfo.h1.includes('not found') || pageInfo.bodyText.includes('page not found')) &&
           pageInfo.bodyLength < 5000) {
-        logInfo('🎭 Playwright: Got 404, trying History API navigation');
+        logInfo('🎭 Playwright: Content looks like 404, trying direct navigation as final fallback');
         
-        // Go back to homepage
-        await page.goto(this.baseUrl, { waitUntil: 'networkidle', timeout: this.options.timeout });
-        await this.sleep(2000);
+        await page.goto(targetUrl, {
+          waitUntil: 'networkidle',
+          timeout: this.options.timeout,
+        });
         
-        // Use History API
-        await page.evaluate((path: string) => {
-          window.history.pushState({}, '', path);
-          window.dispatchEvent(new PopStateEvent('popstate'));
-          // Also dispatch a custom event that some routers listen to
-          window.dispatchEvent(new Event('locationchange'));
-        }, normalizedPath);
-        
-        await this.sleep(3000);
+        await this.sleep(4000); // Longer wait for content
+        await this.autoScroll(page);
       }
       
       const html = await page.content();
