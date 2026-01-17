@@ -492,15 +492,67 @@ export class PlaywrightScraper {
   private async initBrowser(): Promise<void> {
     if (this.browser) return;
     
-    this.browser = await chromium.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-      ],
-    });
+    try {
+      this.browser = await chromium.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+        ],
+      });
+    } catch (error: any) {
+      // If browser not found, try to find it manually or fall back to downloading
+      if (error.message?.includes('Executable doesn\'t exist') || error.message?.includes('chromium')) {
+        logInfo('🎭 Playwright: Chromium not found, attempting to locate or install', { error: error.message });
+        
+        // Try to find Chromium in common cache locations
+        const possiblePaths = [
+          '/opt/render/.cache/ms-playwright/chromium-1200/chrome-linux64/chrome',
+          process.env.PLAYWRIGHT_BROWSERS_PATH ? `${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium-1200/chrome-linux64/chrome` : null,
+          `${process.cwd()}/.cache/ms-playwright/chromium-1200/chrome-linux64/chrome`,
+        ].filter(Boolean) as string[];
+        
+        let foundPath: string | null = null;
+        const { existsSync } = await import('fs');
+        
+        for (const path of possiblePaths) {
+          if (existsSync(path)) {
+            foundPath = path;
+            logInfo('🎭 Playwright: Found Chromium at', { path });
+            break;
+          }
+        }
+        
+        if (foundPath) {
+          this.browser = await chromium.launch({
+            headless: true,
+            executablePath: foundPath,
+            args: [
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+              '--disable-dev-shm-usage',
+              '--disable-gpu',
+            ],
+          });
+        } else {
+          // Last resort: try launching without explicit path (Playwright will attempt to download)
+          logInfo('🎭 Playwright: Attempting launch without explicit path (may download at runtime)');
+          this.browser = await chromium.launch({
+            headless: true,
+            args: [
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+              '--disable-dev-shm-usage',
+              '--disable-gpu',
+            ],
+          });
+        }
+      } else {
+        throw error;
+      }
+    }
     
     this.context = await this.browser.newContext({
       userAgent: this.options.userAgent,
