@@ -209,7 +209,7 @@ export class SiteMirrorScraper {
           
           // Method 1: Try clicking a link that matches the path
           const linkClicked = await page.evaluate((path: string) => {
-            const links = document.querySelectorAll('a[href]');
+            const links = Array.from(document.querySelectorAll('a[href]'));
             for (const link of links) {
               const href = link.getAttribute('href');
               if (href === path || href === path.replace(/^\//, '') || 
@@ -277,10 +277,10 @@ export class SiteMirrorScraper {
           const styles: string[] = [];
           
           // Get all stylesheet rules
-          for (const sheet of document.styleSheets) {
+          for (const sheet of Array.from(document.styleSheets)) {
             try {
               if (sheet.cssRules) {
-                for (const rule of sheet.cssRules) {
+                for (const rule of Array.from(sheet.cssRules)) {
                   styles.push(rule.cssText);
                 }
               }
@@ -290,7 +290,7 @@ export class SiteMirrorScraper {
           }
           
           // Get inline styles
-          document.querySelectorAll('style').forEach(style => {
+          Array.from(document.querySelectorAll('style')).forEach(style => {
             if (style.textContent) styles.push(style.textContent);
           });
           
