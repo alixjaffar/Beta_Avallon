@@ -664,7 +664,7 @@ export class PlaywrightScraper {
       for (const sheet of Array.from(document.styleSheets)) {
         try {
           if (sheet.cssRules) {
-            for (const rule of sheet.cssRules) {
+            for (const rule of Array.from(sheet.cssRules)) {
               styles.push(rule.cssText);
             }
           }
