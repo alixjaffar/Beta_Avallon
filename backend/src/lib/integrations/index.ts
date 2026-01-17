@@ -160,16 +160,16 @@ export async function hasIntegration(userId: string, provider: string): Promise<
     }
 
     const integration = await database.userIntegration.findUnique({
-      where: {
-        userId_provider: {
-          userId,
-          provider,
-        },
+    where: {
+      userId_provider: {
+        userId,
+        provider,
       },
-      select: { status: true },
-    });
+    },
+    select: { status: true },
+  });
 
-    return integration?.status === 'active';
+  return integration?.status === 'active';
   } catch (error: any) {
     logError('Failed to check integration', error, { userId, provider });
     return false;
@@ -187,12 +187,12 @@ export async function getUserActiveIntegrations(userId: string): Promise<string[
     }
 
     const integrations = await database.userIntegration.findMany({
-      where: {
-        userId,
-        status: 'active',
-      },
-      select: { provider: true },
-    });
+    where: {
+      userId,
+      status: 'active',
+    },
+    select: { provider: true },
+  });
 
     return integrations.map((i: { provider: string }) => i.provider);
   } catch (error: any) {

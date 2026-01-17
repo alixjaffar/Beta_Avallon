@@ -217,7 +217,7 @@ export class GeminiWebsiteGenerator {
             jsonPreview: process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON?.substring(0, 200),
           });
           throw new Error(`Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON: ${parseError?.message || 'Invalid JSON format'}. Please ensure the entire JSON is set as a single string value.`);
-        }
+    }
       }
       // Method 3: File path
       else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
@@ -328,7 +328,7 @@ export class GeminiWebsiteGenerator {
       
       const result = await scraper.fetchWebsiteContent(url);
       if (!result) return null;
-      
+
       // Convert SiteMirror WebsiteAnalysis to local WebsiteAnalysis format
       return {
         html: result.html,
@@ -445,10 +445,10 @@ export class GeminiWebsiteGenerator {
           isMultiPage,
         projectId: this.projectId,
         useGlobalEndpoint: true
-      });
-      
+        });
+        
       let content: string = '';
-      
+        
       // Try global endpoint first for Gemini 3 Pro Preview
       if (this.googleAuth) {
         try {
@@ -621,10 +621,10 @@ export class GeminiWebsiteGenerator {
       }
       if (errorMessage.includes('ENOENT') || errorMessage.includes('does not exist') || errorMessage.includes('No credentials found')) {
         throw new Error(`Service account credentials not found. Please set one of:\n1. GOOGLE_APPLICATION_CREDENTIALS_JSON (recommended for cloud) - JSON string of service account\n2. GOOGLE_APPLICATION_CREDENTIALS - path to service account JSON file\n\nError: ${errorMessage}`);
-      }
-      if (errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+    }
+    if (errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
         throw new Error(`Vertex AI quota exceeded. ${errorMessage}. Please check your Google Cloud billing/quota.`);
-      }
+    }
       if (errorMessage.includes('NOT_FOUND') || errorMessage.includes('404')) {
         throw new Error(`Gemini 3 Pro Preview model not found. Please ensure the model is available in your project ${this.projectId} and region ${this.region}. Error: ${errorMessage}`);
       }

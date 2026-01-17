@@ -109,9 +109,9 @@ export async function POST(req: NextRequest) {
       const database = await getPrisma();
       if (database) {
         const subscription = await database.subscription.findFirst({
-          where: { userId: user.id },
-        });
-        existingCustomerId = subscription?.stripeCustomerId || undefined;
+        where: { userId: user.id },
+      });
+      existingCustomerId = subscription?.stripeCustomerId || undefined;
       }
     } catch (dbError) {
       // Database not available or table doesn't exist - proceed without existing customer

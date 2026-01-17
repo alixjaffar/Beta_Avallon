@@ -66,13 +66,13 @@ export async function POST(
       }, { status: 500, headers: corsHeaders });
     }
 
-    // Update site with custom domain
-    const customDomains = site.customDomains || [];
-    if (!customDomains.includes(domain)) {
-      customDomains.push(domain);
+    // Update site with custom domain (store as comma-separated string)
+    const existingDomains = site.customDomain ? site.customDomain.split(',').map(d => d.trim()) : [];
+    if (!existingDomains.includes(domain)) {
+      existingDomains.push(domain);
     }
     
-    await updateSite(siteId, user.id, { customDomains });
+    await updateSite(siteId, user.id, { customDomain: existingDomains.join(',') });
 
     logInfo('Custom domain added successfully', { siteId, domain });
 
@@ -125,8 +125,10 @@ export async function GET(
       return NextResponse.json({ error: "Site not found" }, { status: 404, headers: corsHeaders });
     }
 
+    const customDomains = site.customDomain ? site.customDomain.split(',').map(d => d.trim()).filter(Boolean) : [];
+    
     return NextResponse.json({
-      customDomains: site.customDomains || [],
+      customDomains,
       previewUrl: site.previewUrl,
       vercelProjectId: site.vercelProjectId,
     }, { headers: corsHeaders });
@@ -169,8 +171,9 @@ export async function DELETE(
     }
 
     // Update site to remove domain
-    const customDomains = (site.customDomains || []).filter((d: string) => d !== domain);
-    await updateSite(siteId, user.id, { customDomains });
+    const existingDomains = site.customDomain ? site.customDomain.split(',').map(d => d.trim()) : [];
+    const updatedDomains = existingDomains.filter((d: string) => d !== domain);
+    await updateSite(siteId, user.id, { customDomain: updatedDomains.length > 0 ? updatedDomains.join(',') : null });
 
     logInfo('Custom domain removed', { siteId, domain });
 
