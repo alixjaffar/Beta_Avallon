@@ -1,14 +1,19 @@
-// SiteMirror - Complete Website Cloning Implementation
+// SiteMirror - Advanced Website Cloning Implementation
 // Based on: https://github.com/pakelcomedy/SiteMirror/
 // TypeScript/Node.js port of the Python SiteMirror tool
+//
+// Key Features (from SiteMirror):
+// - Dual-engine fetching: HTTP for static, Puppeteer for JavaScript rendering
+// - CSS parsing and URL rewriting using cssutils approach
+// - Comprehensive link extraction (a, form, button, video, audio, inline CSS)
+// - Concurrent resource downloads with ThreadPoolExecutor-style parallelism
+// - Automatic fallback between rendering modes
+// - 404 and error page detection
 
 import axios, { AxiosRequestConfig } from 'axios';
 import { load, CheerioAPI } from 'cheerio';
-import type { Element } from 'domhandler';
 import { logInfo, logError } from '@/lib/log';
-import { existsSync, readdirSync, statSync, mkdirSync } from 'fs';
-import path from 'path';
-import { execSync } from 'child_process';
+import { URL } from 'url';
 
 export interface WebsiteAnalysis {
   html: string;
@@ -35,47 +40,59 @@ export interface WebsiteAnalysis {
   };
 }
 
-export interface ScrapeOptions {
-  maxDepth?: number;
-  maxWorkers?: number;
-  delay?: number;
-  timeout?: number;
-  ignoreRobots?: boolean;
-  forceRender?: boolean;
-  respectSitemap?: boolean;
-  maxRetries?: number;
-  downloadAssets?: boolean;
+export interface SiteMirrorOptions {
+  maxWorkers?: number;        // Like SiteMirror's --max_workers
+  delay?: number;             // Like SiteMirror's --delay
+  timeout?: number;           // Like SiteMirror's --timeout
+  forceRender?: boolean;      // Like SiteMirror's --force_render
+  seleniumWait?: number;      // Like SiteMirror's --selenium_wait
+  ignoreRobots?: boolean;     // Like SiteMirror's --ignore_robots
+  userAgent?: string;
+  maxRetries?: number;        // Like SiteMirror's --max_retries
 }
 
+/**
+ * SiteMirror Scraper - Based on https://github.com/pakelcomedy/SiteMirror/
+ * 
+ * Features:
+ * - Complete site cloning with HTML, CSS, JS, images
+ * - Dual-engine: Requests (static) + Selenium/Puppeteer (dynamic)
+ * - CSS parsing and URL rewriting
+ * - Comprehensive link extraction
+ */
 export class SiteMirrorScraper {
   private baseUrl: string;
   private domain: string;
   private protocol: string;
-  private options: Required<ScrapeOptions>;
-  private userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 SiteMirror/1.0';
+  private options: Required<SiteMirrorOptions>;
+  private userAgent: string;
+  private resourceCache: Map<string, string> = new Map();
 
-  constructor(url: string, options: ScrapeOptions = {}) {
+  constructor(url: string, options: SiteMirrorOptions = {}) {
     this.baseUrl = this.normalizeUrl(url);
     const urlObj = new URL(this.baseUrl);
     this.domain = urlObj.hostname;
     this.protocol = urlObj.protocol;
 
+    // Default options matching SiteMirror's defaults
     this.options = {
-      maxDepth: options.maxDepth ?? 5,
       maxWorkers: options.maxWorkers ?? 8,
       delay: options.delay ?? 500,
       timeout: options.timeout ?? 30000,
-      ignoreRobots: options.ignoreRobots ?? false,
-      forceRender: options.forceRender ?? true, // Default to Puppeteer (like SiteMirror's Selenium mode)
-      respectSitemap: options.respectSitemap ?? true,
+      forceRender: options.forceRender ?? true, // Use Puppeteer by default like --force_render
+      seleniumWait: options.seleniumWait ?? 5000,
+      ignoreRobots: options.ignoreRobots ?? true,
       maxRetries: options.maxRetries ?? 3,
-      downloadAssets: options.downloadAssets ?? true,
+      userAgent: options.userAgent ?? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 SiteMirror/2.0',
     };
+
+    this.userAgent = this.options.userAgent;
 
     logInfo('🔧 SiteMirror initialized', {
       baseUrl: this.baseUrl,
       domain: this.domain,
-      options: this.options,
+      forceRender: this.options.forceRender,
+      maxWorkers: this.options.maxWorkers,
     });
   }
 
@@ -84,13 +101,12 @@ export class SiteMirrorScraper {
     if (!normalized.match(/^https?:\/\//i)) {
       normalized = 'https://' + normalized;
     }
-    normalized = normalized.replace(/\/+$/, '');
-    return normalized;
+    return normalized.replace(/\/+$/, '');
   }
 
   private resolveUrl(baseUrl: string, relativeUrl: string): string | null {
     try {
-      if (/^(data:|javascript:|mailto:|tel:|#)/.test(relativeUrl)) {
+      if (/^(data:|javascript:|mailto:|tel:|#|blob:)/.test(relativeUrl)) {
         return null;
       }
       return new URL(relativeUrl, baseUrl).href;
@@ -103,7 +119,8 @@ export class SiteMirrorScraper {
     try {
       const urlObj = new URL(url);
       return urlObj.hostname === this.domain ||
-             urlObj.hostname.endsWith('.' + this.domain);
+             urlObj.hostname.endsWith('.' + this.domain) ||
+             this.domain.endsWith('.' + urlObj.hostname);
     } catch {
       return false;
     }
@@ -113,10 +130,196 @@ export class SiteMirrorScraper {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  private async fetchWithRetry(
-    url: string,
-    options: AxiosRequestConfig = {}
-  ): Promise<{ data: string; contentType: string } | null> {
+  /**
+   * DUAL-ENGINE FETCHING (like SiteMirror)
+   * - Static mode: Requests + BeautifulSoup equivalent (axios + cheerio)
+   * - Dynamic mode: Selenium equivalent (Puppeteer)
+   * 
+   * For SPAs: Navigate to homepage first, then use client-side routing
+   */
+  private async fetchWithPuppeteer(url: string): Promise<string | null> {
+    try {
+      const puppeteer = await import('puppeteer');
+      
+      logInfo('🌐 SiteMirror: Using Puppeteer (--force_render mode)', { url });
+
+      const browser = await puppeteer.default.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-web-security',
+          '--disable-features=IsolateOrigins,site-per-process',
+          '--user-agent=' + this.userAgent,
+          '--window-size=1920,1080',
+        ],
+      });
+
+      try {
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1920, height: 1080 });
+        await page.setUserAgent(this.userAgent);
+
+        // Block tracking/analytics (like SiteMirror filters)
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+          const reqUrl = req.url();
+          const resourceType = req.resourceType();
+          
+          const blockPatterns = [
+            'google-analytics', 'googletagmanager', 'gtag',
+            'facebook.net', 'fbevents', 'doubleclick',
+            'hotjar', 'clarity.ms', 'segment.com',
+            'intercom', 'crisp.chat', 'drift.com',
+          ];
+          
+          if (blockPatterns.some(p => reqUrl.includes(p))) {
+            req.abort();
+            return;
+          }
+          
+          if (['document', 'stylesheet', 'script', 'image', 'font', 'xhr', 'fetch'].includes(resourceType)) {
+            req.continue();
+          } else {
+            req.abort();
+          }
+        });
+
+        const targetUrl = new URL(url);
+        const isSubpage = targetUrl.pathname !== '/' && targetUrl.pathname !== '';
+        
+        // FOR SPA SUPPORT: First load homepage, then navigate via client-side routing
+        if (isSubpage) {
+          // Load homepage first to initialize the SPA
+          const homepageUrl = `${targetUrl.protocol}//${targetUrl.host}/`;
+          logInfo('SiteMirror: Loading SPA homepage first', { homepage: homepageUrl, target: url });
+          
+          await page.goto(homepageUrl, {
+            waitUntil: 'networkidle0',
+            timeout: this.options.timeout,
+          });
+          
+          await this.sleep(2000); // Wait for SPA to initialize
+          
+          // Now navigate to the target route using client-side navigation
+          // Try to find and click the link, or use pushState navigation
+          const targetPath = targetUrl.pathname;
+          
+          // Method 1: Try clicking a link that matches the path
+          const linkClicked = await page.evaluate((path: string) => {
+            const links = document.querySelectorAll('a[href]');
+            for (const link of links) {
+              const href = link.getAttribute('href');
+              if (href === path || href === path.replace(/^\//, '') || 
+                  href?.endsWith(path) || href?.endsWith(path.replace(/^\//, ''))) {
+                (link as HTMLElement).click();
+                return true;
+              }
+            }
+            return false;
+          }, targetPath);
+          
+          if (linkClicked) {
+            logInfo('SiteMirror: Clicked SPA navigation link', { path: targetPath });
+            await this.sleep(2000); // Wait for SPA navigation
+            await page.waitForNetworkIdle({ timeout: 5000 }).catch(() => {});
+          } else {
+            // Method 2: Use History API to navigate (works for most SPAs)
+            logInfo('SiteMirror: Using History API for SPA navigation', { path: targetPath });
+            await page.evaluate((path: string) => {
+              window.history.pushState({}, '', path);
+              window.dispatchEvent(new PopStateEvent('popstate'));
+              // Also try triggering hashchange for hash-based routers
+              if (path.startsWith('#')) {
+                window.location.hash = path;
+              }
+            }, targetPath);
+            await this.sleep(2000);
+          }
+        } else {
+          // For homepage, just navigate directly
+          await page.goto(url, {
+            waitUntil: 'networkidle0',
+            timeout: this.options.timeout,
+          });
+        }
+
+        // Wait for dynamic content (like --selenium_wait)
+        await this.sleep(this.options.seleniumWait);
+
+        // Check if we got a 404 page (for SPAs that show 404 content)
+        const pageContent = await page.evaluate(() => {
+          const h1 = document.querySelector('h1')?.textContent?.toLowerCase() || '';
+          const title = document.title.toLowerCase();
+          return { h1, title, bodyLength: document.body.innerHTML.length };
+        });
+        
+        // If it's a 404 page, try direct navigation as fallback
+        if ((pageContent.h1.includes('404') || pageContent.title.includes('404') || 
+             pageContent.h1.includes('not found')) && isSubpage) {
+          logInfo('SiteMirror: SPA returned 404, trying direct navigation', { url });
+          await page.goto(url, {
+            waitUntil: 'networkidle0',
+            timeout: this.options.timeout,
+          });
+          await this.sleep(this.options.seleniumWait);
+        }
+
+        // Scroll to trigger lazy loading (comprehensive like SiteMirror)
+        await this.autoScrollPage(page);
+        await this.sleep(1000);
+        await page.evaluate(() => window.scrollTo(0, 0));
+
+        // Extract all CSS including computed styles
+        const extractedCSS = await page.evaluate(() => {
+          const styles: string[] = [];
+          
+          // Get all stylesheet rules
+          for (const sheet of document.styleSheets) {
+            try {
+              if (sheet.cssRules) {
+                for (const rule of sheet.cssRules) {
+                  styles.push(rule.cssText);
+                }
+              }
+            } catch (e) {
+              // Cross-origin, skip
+            }
+          }
+          
+          // Get inline styles
+          document.querySelectorAll('style').forEach(style => {
+            if (style.textContent) styles.push(style.textContent);
+          });
+          
+          return styles.join('\n');
+        });
+
+        const html = await page.content();
+        const styledHtml = this.injectExtractedCSS(html, extractedCSS);
+
+        logInfo('📄 SiteMirror: Puppeteer fetch complete', {
+          url,
+          htmlLength: styledHtml.length,
+          cssExtracted: extractedCSS.length > 0,
+        });
+
+        return styledHtml;
+      } finally {
+        await browser.close();
+      }
+    } catch (error: any) {
+      logError('SiteMirror: Puppeteer failed', error, { url });
+      return null;
+    }
+  }
+
+  /**
+   * Static fetch (like SiteMirror's Requests mode)
+   */
+  private async fetchWithRequests(url: string): Promise<string | null> {
     for (let attempt = 0; attempt < this.options.maxRetries; attempt++) {
       try {
         const response = await axios.get(url, {
@@ -127,23 +330,19 @@ export class SiteMirrorScraper {
             'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate, br',
             'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
           },
           maxRedirects: 10,
           validateStatus: (status) => status < 400,
-          ...options,
+          responseType: 'text',
         });
-        const contentType = response.headers['content-type'] || '';
-        return {
-          data: typeof response.data === 'string' ? response.data : String(response.data),
-          contentType
-        };
+
+        return response.data;
       } catch (error: any) {
-        const isLastAttempt = attempt === this.options.maxRetries - 1;
-        if (isLastAttempt) {
-          logError('SiteMirror: Failed to fetch after retries', error, { url, attempts: attempt + 1 });
+        if (attempt === this.options.maxRetries - 1) {
+          logError('SiteMirror: Requests fetch failed', error, { url });
           return null;
         }
+        // Exponential backoff with jitter (like SiteMirror)
         const backoff = this.options.delay * Math.pow(2, attempt) + Math.random() * 1000;
         await this.sleep(backoff);
       }
@@ -151,428 +350,615 @@ export class SiteMirrorScraper {
     return null;
   }
 
-  private async fetchWithPuppeteer(url: string): Promise<string | null> {
-    try {
-      // Dynamic import to avoid build-time issues
-      const puppeteer = await import('puppeteer');
-      const { existsSync, statSync } = await import('fs');
-      const { readdirSync } = await import('fs');
-      const path = await import('path');
-      
-      logInfo('🌐 SiteMirror: Using Puppeteer for JavaScript rendering', { url });
-      
-      // Set PUPPETEER_CACHE_DIR explicitly to ensure Puppeteer knows where to look
-      const projectCacheDir = path.default.resolve(process.cwd(), '.puppeteer-cache');
-      const renderCacheDir = '/opt/render/.cache/puppeteer';
-      const downloadCacheDir = projectCacheDir;
-
-      // Ensure the download cache directory exists
-      if (!existsSync(downloadCacheDir)) {
-        mkdirSync(downloadCacheDir, { recursive: true });
-        logInfo('Created Puppeteer download cache directory', { downloadCacheDir });
-      }
-
-      process.env.PUPPETEER_CACHE_DIR = downloadCacheDir;
-      
-      // Find Chrome executable path - MUST WORK FOR SITEMIRROR
-      let executablePath: string | undefined = process.env.PUPPETEER_EXECUTABLE_PATH;
-      
-      if (!executablePath) {
-        const knownVersion = '143.0.7499.169';
-        const directPaths = [
-          path.default.join(projectCacheDir, 'chrome', `linux-${knownVersion}`, 'chrome-linux64', 'chrome'),
-          path.default.join(renderCacheDir, 'chrome', `linux-${knownVersion}`, 'chrome-linux64', 'chrome'),
-        ];
-
-        for (const directPath of directPaths) {
-          if (existsSync(directPath)) {
-            try {
-              const stats = statSync(directPath);
-              if (stats.isFile()) {
-                executablePath = directPath;
-                logInfo('✅ Found Chrome at direct path', { path: executablePath });
-                break;
-              }
-            } catch (statError: any) {
-              // Continue searching
-            }
-          }
-        }
+  /**
+   * Auto-scroll for lazy loading (like SiteMirror's scroll behavior)
+   */
+  private async autoScrollPage(page: any): Promise<void> {
+    await page.evaluate(async () => {
+      await new Promise<void>((resolve) => {
+        let totalHeight = 0;
+        const distance = 300;
+        const maxScrolls = 50;
+        let scrollCount = 0;
         
-        // Comprehensive file system search if not found by direct path
-        if (!executablePath) {
-          const possibleCacheDirs = [
-            downloadCacheDir,
-            renderCacheDir,
-            path.default.resolve(process.cwd(), '.cache', 'puppeteer'),
-            path.default.resolve(process.env.HOME || '/tmp', '.cache', 'puppeteer'),
-          ].filter(Boolean).map(dir => path.default.resolve(dir)) as string[];
-          
-          const uniqueCacheDirs = [...new Set(possibleCacheDirs)];
-          
-          for (const searchDir of uniqueCacheDirs) {
-            try {
-              if (!existsSync(searchDir)) continue;
-              
-              const chromeDir = path.default.join(searchDir, 'chrome');
-              
-              if (existsSync(chromeDir)) {
-                const dirs = readdirSync(chromeDir);
-                const versionDir = dirs.find(d => d.startsWith('linux-'));
-                
-                if (versionDir) {
-                  const possiblePaths = [
-                    path.default.resolve(chromeDir, versionDir, 'chrome-linux64', 'chrome'),
-                    path.default.resolve(chromeDir, versionDir, 'chrome', 'chrome'),
-                    path.default.resolve(chromeDir, versionDir, 'headless_shell', 'headless_shell'),
-                  ];
-                  
-                  for (const chromePath of possiblePaths) {
-                    if (existsSync(chromePath)) {
-                      try {
-                        const stats = statSync(chromePath);
-                        if (stats.isFile()) {
-                          executablePath = chromePath;
-                          logInfo('✅✅✅ FOUND CHROME EXECUTABLE', { path: executablePath });
-                          break;
-                        }
-                      } catch (statError: any) {
-                        // Continue
-                      }
-                    }
-                  }
-                  
-                  if (executablePath) break;
-                }
-              }
-            } catch (error: any) {
-              // Continue searching
-            }
+        const timer = setInterval(() => {
+          const scrollHeight = document.body.scrollHeight;
+          window.scrollBy(0, distance);
+          totalHeight += distance;
+          scrollCount++;
+
+          if (totalHeight >= scrollHeight || scrollCount >= maxScrolls) {
+            clearInterval(timer);
+            resolve();
           }
-        }
+        }, 100);
         
-        // Runtime download fallback
-        if (!executablePath) {
-          logInfo('Chrome not found through search, attempting runtime download...');
-          try {
-            execSync(`npx puppeteer browsers install chrome`, { 
-              stdio: 'inherit', 
-              env: { ...process.env, PUPPETEER_CACHE_DIR: downloadCacheDir } 
-            });
-            
-            const chromeDir = path.default.join(downloadCacheDir, 'chrome');
-            if (existsSync(chromeDir)) {
-              const dirs = readdirSync(chromeDir);
-              const versionDir = dirs.find(d => d.startsWith('linux-'));
-              if (versionDir) {
-                const downloadedPath = path.default.join(chromeDir, versionDir, 'chrome-linux64', 'chrome');
-                if (existsSync(downloadedPath)) {
-                  executablePath = downloadedPath;
-                  logInfo('✅ Chrome downloaded and found at runtime', { path: executablePath });
-                }
-              }
-            }
-          } catch (downloadError: any) {
-            logError('Failed to download Chrome at runtime', downloadError);
-          }
-        }
-      }
-
-      if (!executablePath) {
-        logError('CRITICAL: Chrome not found - SiteMirror requires Puppeteer', null, {
-          cacheDir: downloadCacheDir,
-          puppeteerEnv: {
-            PUPPETEER_CACHE_DIR: process.env.PUPPETEER_CACHE_DIR,
-            PUPPETEER_EXECUTABLE_PATH: process.env.PUPPETEER_EXECUTABLE_PATH,
-          }
-        });
-        throw new Error('Could not find Chrome executable for Puppeteer.');
-      }
-      
-      const launchOptions: any = {
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--disable-web-security',
-          '--disable-features=IsolateOrigins,site-per-process',
-          '--user-agent=' + this.userAgent,
-        ],
-        executablePath: executablePath,
-      };
-      
-      const browser = await puppeteer.default.launch(launchOptions);
-
-      try {
-        const page = await browser.newPage();
-        
-        // Set viewport (like SiteMirror's Selenium)
-        await page.setViewport({ width: 1920, height: 1080 });
-        
-        // Block unnecessary resources to speed up (like SiteMirror)
-        await page.setRequestInterception(true);
-        page.on('request', (req) => {
-          const resourceType = req.resourceType();
-          if (['document', 'stylesheet', 'script', 'image', 'font', 'media'].includes(resourceType)) {
-            req.continue();
-          } else {
-            req.abort();
-          }
-        });
-
-        // Navigate and wait for content (like SiteMirror's selenium_wait)
-        await page.goto(url, {
-          waitUntil: 'networkidle2',
-          timeout: this.options.timeout,
-        });
-
-        // Wait a bit more for any lazy-loaded content (like SiteMirror)
-        await this.sleep(2000);
-
-        // Get the fully rendered HTML
-        const html = await page.content();
-        logInfo('📄 SiteMirror: Main page fetched', {
-          url,
-          htmlLength: html.length,
-          method: 'Puppeteer'
-        });
-
-        return html;
-      } finally {
-        await browser.close();
-      }
-    } catch (error: any) {
-      logError('SiteMirror: Puppeteer fetch failed', error, { url, errorMessage: error?.message });
-      return null;
-    }
+        setTimeout(() => {
+          clearInterval(timer);
+          resolve();
+        }, 10000);
+      });
+    });
   }
 
+  /**
+   * Inject extracted CSS into HTML
+   */
+  private injectExtractedCSS(html: string, css: string): string {
+    if (!css || css.length === 0) return html;
+    
+    const styleTag = `<style data-sitemirror-extracted="true">\n${css}\n</style>`;
+    
+    if (html.includes('</head>')) {
+      return html.replace('</head>', `${styleTag}\n</head>`);
+    }
+    return styleTag + '\n' + html;
+  }
+
+  /**
+   * Detect 404/error pages (comprehensive detection)
+   */
+  private is404Page($: CheerioAPI, html: string): boolean {
+    const title = $('title').text().toLowerCase();
+    const h1 = $('h1').first().text().toLowerCase();
+    const body = $('body').text().toLowerCase();
+    
+    // Title checks
+    if (title.includes('404') || title.includes('not found') || 
+        title.includes('page not found') || title.includes('error page')) {
+      return true;
+    }
+    
+    // H1 checks
+    if (h1.includes('404') || h1.includes('not found') || h1 === 'error') {
+      return true;
+    }
+    
+    // Body pattern checks
+    const patterns = [
+      /\b404\b.*not\s*found/i,
+      /page\s*not\s*found/i,
+      /page\s*doesn.*exist/i,
+      /this\s*page\s*.*could\s*not\s*be\s*found/i,
+      /the\s*page\s*you.*looking\s*for/i,
+      /oops.*page.*not.*found/i,
+      /sorry.*page.*not.*exist/i,
+    ];
+    
+    for (const pattern of patterns) {
+      if (pattern.test(body.substring(0, 2000))) { // Check first 2000 chars
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Convert internal links to local page references
+   * Critical for navigation in the editor
+   */
+  private convertInternalLinksToLocal($: CheerioAPI): void {
+    const baseDomain = this.domain;
+    
+    $('a[href]').each((_, el) => {
+      const href = $(el).attr('href');
+      if (!href) return;
+      
+      if (href.startsWith('#') || href.startsWith('javascript:') || 
+          href.startsWith('mailto:') || href.startsWith('tel:')) {
+        return;
+      }
+      
+      try {
+        let urlObj: URL;
+        if (href.startsWith('http://') || href.startsWith('https://')) {
+          urlObj = new URL(href);
+        } else if (href.startsWith('//')) {
+          urlObj = new URL('https:' + href);
+        } else {
+          urlObj = new URL(href, this.baseUrl);
+        }
+        
+        // Check if internal
+        if (urlObj.hostname === baseDomain || 
+            urlObj.hostname.endsWith('.' + baseDomain) ||
+            baseDomain.endsWith('.' + urlObj.hostname)) {
+          
+          let path = urlObj.pathname.replace(/^\/+/, '').replace(/\/+$/, '');
+          
+          if (!path) {
+            $(el).attr('href', 'index.html');
+            return;
+          }
+          
+          // Skip assets
+          if (path.match(/\.(jpg|jpeg|png|gif|svg|webp|ico|pdf|doc|docx|xls|xlsx|zip|css|js|json|xml|mp3|mp4)$/i)) {
+            $(el).attr('href', urlObj.href);
+            return;
+          }
+          
+          let localFile = path.replace(/\//g, '-');
+          if (!localFile.endsWith('.html') && !localFile.endsWith('.htm')) {
+            localFile += '.html';
+          }
+          
+          $(el).attr('href', localFile);
+        }
+      } catch (e) {
+        // Invalid URL, leave as-is
+      }
+    });
+  }
+
+  /**
+   * CSS PARSING & URL REWRITING (like SiteMirror's cssutils approach)
+   * Parses CSS content and rewrites all url() references to absolute
+   */
+  private rewriteCSSUrls(css: string, cssFileUrl: string): string {
+    try {
+      const base = new URL(cssFileUrl);
+      const cssDir = base.href.substring(0, base.href.lastIndexOf('/') + 1);
+
+      // Rewrite url() references
+      css = css.replace(/url\(["']?(?!data:|https?:|\/\/)([^"')]+)["']?\)/gi, (match, url) => {
+        try {
+          const absoluteUrl = new URL(url.trim(), cssDir).href;
+          return `url("${absoluteUrl}")`;
+        } catch {
+          return match;
+        }
+      });
+
+      // Rewrite @import
+      css = css.replace(/@import\s+["'](?!https?:|\/\/)([^"']+)["']/gi, (match, url) => {
+        try {
+          const absoluteUrl = new URL(url.trim(), cssDir).href;
+          return `@import "${absoluteUrl}"`;
+        } catch {
+          return match;
+        }
+      });
+
+      // Rewrite @font-face src
+      css = css.replace(/src:\s*url\(["']?(?!data:|https?:)([^"')]+)["']?\)/gi, (match, url) => {
+        try {
+          const absoluteUrl = new URL(url.trim(), cssDir).href;
+          return `src: url("${absoluteUrl}")`;
+        } catch {
+          return match;
+        }
+      });
+
+    } catch (error) {
+      logError('SiteMirror: CSS URL rewriting failed', error);
+    }
+
+    return css;
+  }
+
+  /**
+   * Fix all resource URLs to absolute (images, scripts, etc.)
+   */
+  private fixResourceUrls($: CheerioAPI, baseUrl: string): void {
+    // Fix link href (stylesheets)
+    $('link[href]').each((_, el) => {
+      const href = $(el).attr('href');
+      if (href && !href.startsWith('data:')) {
+        const absoluteUrl = this.resolveUrl(baseUrl, href);
+        if (absoluteUrl) $(el).attr('href', absoluteUrl);
+      }
+    });
+
+    // Fix src attributes
+    $('[src]').each((_, el) => {
+      const src = $(el).attr('src');
+      if (src && !src.startsWith('data:') && !src.startsWith('blob:')) {
+        const absoluteUrl = this.resolveUrl(baseUrl, src);
+        if (absoluteUrl) $(el).attr('src', absoluteUrl);
+      }
+    });
+
+    // Fix srcset
+    $('[srcset]').each((_, el) => {
+      const srcset = $(el).attr('srcset');
+      if (srcset) {
+        const newSrcset = srcset.split(',').map(part => {
+          const [url, size] = part.trim().split(/\s+/);
+          const absoluteUrl = this.resolveUrl(baseUrl, url);
+          return absoluteUrl ? `${absoluteUrl}${size ? ' ' + size : ''}` : part;
+        }).join(', ');
+        $(el).attr('srcset', newSrcset);
+      }
+    });
+
+    // Fix data-src (lazy loading)
+    $('[data-src]').each((_, el) => {
+      const dataSrc = $(el).attr('data-src');
+      if (dataSrc && !dataSrc.startsWith('data:')) {
+        const absoluteUrl = this.resolveUrl(baseUrl, dataSrc);
+        if (absoluteUrl) {
+          $(el).attr('data-src', absoluteUrl);
+          // Also set src for immediate display
+          if (!$(el).attr('src') || $(el).attr('src')?.includes('placeholder') || $(el).attr('src')?.includes('data:')) {
+            $(el).attr('src', absoluteUrl);
+          }
+        }
+      }
+    });
+
+    // Fix background-image in inline styles
+    $('[style*="background"]').each((_, el) => {
+      let style = $(el).attr('style') || '';
+      style = style.replace(/url\(["']?(?!data:|http)([^"')]+)["']?\)/gi, (match, url) => {
+        const absoluteUrl = this.resolveUrl(baseUrl, url);
+        return absoluteUrl ? `url("${absoluteUrl}")` : match;
+      });
+      $(el).attr('style', style);
+    });
+
+    // Fix poster (video)
+    $('[poster]').each((_, el) => {
+      const poster = $(el).attr('poster');
+      if (poster && !poster.startsWith('data:')) {
+        const absoluteUrl = this.resolveUrl(baseUrl, poster);
+        if (absoluteUrl) $(el).attr('poster', absoluteUrl);
+      }
+    });
+
+    // Fix action (forms)
+    $('form[action]').each((_, el) => {
+      const action = $(el).attr('action');
+      if (action && !action.startsWith('javascript:') && !action.startsWith('#')) {
+        const absoluteUrl = this.resolveUrl(baseUrl, action);
+        if (absoluteUrl) $(el).attr('action', absoluteUrl);
+      }
+    });
+  }
+
+  /**
+   * Remove tracking scripts (like SiteMirror filters)
+   */
+  private removeTrackingScripts($: CheerioAPI): void {
+    const blockPatterns = [
+      'google-analytics', 'googletagmanager', 'gtag', 'fbevents',
+      'facebook.net', 'analytics', 'tracking', 'pixel', 'hotjar',
+      'clarity.ms', 'segment.com', 'intercom', 'crisp.chat',
+      'drift.com', 'hubspot', 'marketo', 'pardot', 'doubleclick',
+      'adsense', 'adservice', 'googlesyndication'
+    ];
+
+    $('script').each((_, el) => {
+      const src = $(el).attr('src') || '';
+      const content = $(el).html() || '';
+      
+      if (blockPatterns.some(p => src.includes(p) || content.includes(p))) {
+        $(el).remove();
+        return;
+      }
+      
+      if (content.includes('gtag(') || content.includes('fbq(') || 
+          content.includes('dataLayer') || content.includes('_gaq')) {
+        $(el).remove();
+      }
+    });
+
+    // Remove noscript tracking pixels
+    $('noscript').each((_, el) => {
+      const content = $(el).html() || '';
+      if (content.includes('facebook') || content.includes('google') || 
+          content.includes('linkedin') || content.includes('pixel')) {
+        $(el).remove();
+      }
+    });
+  }
+
+  /**
+   * Fetch and inline external CSS (like SiteMirror's ResourceDownloader)
+   */
+  private async fetchAndInlineCSS(cssUrls: string[], baseUrl: string): Promise<string> {
+    const cssContents: string[] = [];
+    
+    // Filter tracking CSS
+    const filteredUrls = cssUrls.filter(url => {
+      const lower = url.toLowerCase();
+      return !['analytics', 'tracking', 'pixel', 'gtm'].some(p => lower.includes(p));
+    });
+
+    // Concurrent fetch (like SiteMirror's ThreadPoolExecutor)
+    for (let i = 0; i < filteredUrls.length; i += this.options.maxWorkers) {
+      const batch = filteredUrls.slice(i, i + this.options.maxWorkers);
+      
+      const promises = batch.map(async (url) => {
+        // Check cache first
+        if (this.resourceCache.has(url)) {
+          return this.resourceCache.get(url)!;
+        }
+        
+        try {
+          const response = await axios.get(url, {
+            timeout: this.options.timeout,
+            headers: { 'User-Agent': this.userAgent },
+            responseType: 'text',
+          });
+          
+          let css = response.data;
+          css = this.rewriteCSSUrls(css, url);
+          
+          this.resourceCache.set(url, css);
+          return `/* SiteMirror: Inlined from ${url} */\n${css}`;
+        } catch (e) {
+          logError('SiteMirror: CSS fetch failed', e, { url });
+          return '';
+        }
+      });
+
+      const results = await Promise.all(promises);
+      cssContents.push(...results.filter(Boolean));
+      
+      if (i + this.options.maxWorkers < filteredUrls.length) {
+        await this.sleep(this.options.delay);
+      }
+    }
+
+    return cssContents.join('\n\n');
+  }
+
+  /**
+   * Extract images
+   */
+  private extractImages($: CheerioAPI): string[] {
+    const images: string[] = [];
+    const seen = new Set<string>();
+
+    $('img').each((_, el) => {
+      const src = $(el).attr('src') || $(el).attr('data-src');
+      if (src && !src.startsWith('data:') && !seen.has(src)) {
+        seen.add(src);
+        images.push(src);
+      }
+    });
+
+    // Background images
+    $('[style*="background-image"]').each((_, el) => {
+      const style = $(el).attr('style') || '';
+      const match = style.match(/url\(["']?([^"')]+)["']?\)/);
+      if (match && match[1] && !match[1].startsWith('data:') && !seen.has(match[1])) {
+        seen.add(match[1]);
+        images.push(match[1]);
+      }
+    });
+
+    return images;
+  }
+
+  /**
+   * Extract CSS info
+   */
+  private extractCSSInfo($: CheerioAPI): { external: string[]; inline: string } {
+    const external: string[] = [];
+    let inline = '';
+
+    $('link[rel="stylesheet"]').each((_, el) => {
+      const href = $(el).attr('href');
+      if (href) external.push(href);
+    });
+
+    $('style').each((_, el) => {
+      const content = $(el).html();
+      if (content) inline += content + '\n';
+    });
+
+    return { external, inline };
+  }
+
+  /**
+   * Extract navigation
+   */
+  private extractNavigation($: CheerioAPI): Array<{ text: string; url: string }> {
+    const nav: Array<{ text: string; url: string }> = [];
+    const seen = new Set<string>();
+
+    const selectors = ['nav a', 'header a', '.nav a', '.navigation a', '.menu a'];
+    
+    for (const selector of selectors) {
+      $(selector).each((_, el) => {
+        const href = $(el).attr('href');
+        const text = $(el).text().trim();
+        
+        if (href && text && !seen.has(href) && 
+            !href.startsWith('#') && !href.startsWith('javascript:')) {
+          seen.add(href);
+          nav.push({ text, url: href });
+        }
+      });
+      
+      if (nav.length >= 10) break;
+    }
+
+    return nav;
+  }
+
+  /**
+   * Extract text content
+   */
+  private extractTextContent($: CheerioAPI): { headings: string[]; paragraphs: string[]; buttons: string[] } {
+    return {
+      headings: $('h1, h2, h3, h4, h5, h6').map((_, el) => $(el).text().trim()).get().slice(0, 50),
+      paragraphs: $('p').map((_, el) => $(el).text().trim()).get().slice(0, 50),
+      buttons: $('button, .btn, .button, [role="button"]')
+        .map((_, el) => $(el).text().trim() || $(el).val()?.toString().trim())
+        .get()
+        .filter(Boolean)
+        .slice(0, 20),
+    };
+  }
+
+  /**
+   * Extract sections
+   */
+  private extractSections($: CheerioAPI): Array<{ type: string; content: string }> {
+    const sections: Array<{ type: string; content: string }> = [];
+
+    $('body > section, body > div, body > main, body > article, body > header, body > footer').each((_, el) => {
+      const type = el.tagName;
+      const id = $(el).attr('id') || '';
+      const cls = ($(el).attr('class') || '').split(' ')[0];
+      
+      sections.push({
+        type: `${type}${id ? '#' + id : ''}${cls ? '.' + cls : ''}`,
+        content: $(el).html()?.substring(0, 500) || '',
+      });
+    });
+
+    return sections;
+  }
+
+  /**
+   * Get layout structure
+   */
+  private getLayoutStructure($: CheerioAPI): string {
+    const structure: string[] = [];
+    $('body').children().each((_, el) => {
+      structure.push(el.tagName);
+    });
+    return structure.join(' > ');
+  }
+
+  /**
+   * Extract colors from CSS
+   */
+  private extractColors(css: string): string[] {
+    const regex = /#(?:[0-9a-fA-F]{3}){1,2}\b|rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)|rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*[\d.]+\s*\)/g;
+    const matches = css.match(regex);
+    return matches ? [...new Set(matches)] : [];
+  }
+
+  /**
+   * Extract fonts from CSS
+   */
+  private extractFonts(css: string): string[] {
+    const regex = /font-family:\s*([^;]+)/g;
+    const matches = css.match(regex);
+    if (!matches) return [];
+    
+    const fonts = matches.map(m => 
+      m.replace(/font-family:\s*/, '').replace(/['"]/g, '').split(',')[0].trim()
+    );
+    return [...new Set(fonts)];
+  }
+
+  /**
+   * MAIN METHOD: Fetch website content
+   * Like SiteMirror's main crawl loop
+   */
   async fetchWebsiteContent(url?: string): Promise<WebsiteAnalysis | null> {
     const targetUrl = url || this.baseUrl;
-    
+
     logInfo('🚀 SiteMirror: Starting website clone', { url: targetUrl });
 
     try {
       let html: string | null = null;
-      
-      // Following SiteMirror's dual-engine approach (Requests vs Selenium)
+
+      // DUAL-ENGINE: Try Puppeteer first if forceRender, else try static first
       if (this.options.forceRender) {
-        // Use Puppeteer for JavaScript rendering (like SiteMirror's Selenium mode)
+        logInfo('SiteMirror: Using Puppeteer (--force_render)', { url: targetUrl });
         html = await this.fetchWithPuppeteer(targetUrl);
         
-        // Fallback to HTTP fetch if Puppeteer fails
+        // Fallback to Requests if Puppeteer fails
         if (!html) {
-          logInfo('🔄 SiteMirror: Puppeteer failed, falling back to HTTP fetch', { url: targetUrl });
-          const response = await this.fetchWithRetry(targetUrl);
-          if (response) {
-            html = response.data;
-          }
+          logInfo('SiteMirror: Puppeteer failed, falling back to Requests', { url: targetUrl });
+          html = await this.fetchWithRequests(targetUrl);
         }
       } else {
-        // Try regular fetch first (like SiteMirror's Requests mode)
-        const response = await this.fetchWithRetry(targetUrl);
-        if (response) {
-          html = response.data;
-        } else {
-          // Fallback to Puppeteer if HTTP fails
-          logInfo('🔄 SiteMirror: Regular fetch failed, trying Puppeteer', { url: targetUrl });
+        // Static first, then Puppeteer if needed
+        logInfo('SiteMirror: Using Requests (static mode)', { url: targetUrl });
+        html = await this.fetchWithRequests(targetUrl);
+        
+        // If static fetch seems incomplete, try Puppeteer
+        if (!html || html.length < 1000) {
+          logInfo('SiteMirror: Static fetch incomplete, trying Puppeteer', { url: targetUrl });
           html = await this.fetchWithPuppeteer(targetUrl);
         }
       }
-      
+
       if (!html) {
-        logError('SiteMirror: Failed to fetch main page', null, { url: targetUrl });
+        logError('SiteMirror: Failed to fetch content', null, { url: targetUrl });
         return null;
       }
 
       const $ = load(html);
-      const title = $('title').first().text() || '';
-      const description = $('meta[name="description"]').attr('content') || '';
 
-      // Rewrite all URLs to be absolute
-      this.rewriteUrls($, targetUrl);
+      // Remove tracking scripts
+      this.removeTrackingScripts($);
 
+      // Fix resource URLs
+      this.fixResourceUrls($, targetUrl);
+
+      // Convert internal links to local
+      this.convertInternalLinksToLocal($);
+
+      const title = $('title').text() || this.domain;
+      const description = $('meta[name="description"]').attr('content') || 
+                         $('meta[property="og:description"]').attr('content') || '';
+
+      // Extract resources
       const images = this.extractImages($);
-      const css = this.extractCss($, targetUrl);
-      const colors = this.extractColors(css.parsed);
-      const fonts = this.extractFonts(css.parsed);
-      const layout = this.analyzeLayout($);
+      const { external: externalCss, inline: inlineCss } = this.extractCSSInfo($);
       const navigation = this.extractNavigation($);
       const sections = this.extractSections($);
       const textContent = this.extractTextContent($);
 
-      logInfo('✅ SiteMirror: Website clone complete', {
+      // Fetch and inline external CSS
+      const allCss = await this.fetchAndInlineCSS(externalCss, targetUrl);
+      const parsedCss = inlineCss + '\n' + allCss;
+
+      // Extract colors and fonts
+      const colors = this.extractColors(parsedCss);
+      const fonts = this.extractFonts(parsedCss);
+
+      // Add inlined CSS to document
+      if (allCss.length > 0) {
+        const styleTag = `<style data-sitemirror-inlined="true">\n${allCss}\n</style>`;
+        if ($('head').length) {
+          $('head').append(styleTag);
+        }
+      }
+
+      const finalHtml = $.html();
+
+      logInfo('✅ SiteMirror: Clone complete!', {
         url: targetUrl,
-        title,
-        htmlLength: html.length,
-        cssLength: css.parsed.length,
+        htmlLength: finalHtml.length,
+        images: images.length,
+        css: externalCss.length,
         colors: colors.length,
         fonts: fonts.length,
-        images: images.length,
-        internalLinks: navigation.filter(link => this.isSameDomain(link.url)).length,
       });
 
       return {
-        html,
+        html: finalHtml,
         title,
         description,
         colors,
         fonts,
         images,
-        css,
-        layout,
+        css: {
+          inline: inlineCss,
+          external: externalCss,
+          parsed: parsedCss,
+        },
+        layout: {
+          structure: this.getLayoutStructure($),
+          sections: sections.map(s => s.type),
+        },
         navigation,
         sections,
         textContent,
       };
     } catch (error) {
-      logError('SiteMirror: Error during website cloning', error, { url: targetUrl });
+      logError('SiteMirror: Clone failed', error, { url: targetUrl });
       return null;
     }
-  }
-
-  private rewriteUrls($: CheerioAPI, baseUrl: string): void {
-    $('a, link, script, img, source, iframe').each((_, element) => {
-      const $element = $(element);
-      let href = $element.attr('href');
-      let src = $element.attr('src');
-      let srcset = $element.attr('srcset');
-
-      if (href) {
-        const absoluteUrl = this.resolveUrl(baseUrl, href);
-        if (absoluteUrl) {
-          $element.attr('href', absoluteUrl);
-        }
-      }
-      if (src) {
-        const absoluteUrl = this.resolveUrl(baseUrl, src);
-        if (absoluteUrl) {
-          $element.attr('src', absoluteUrl);
-        }
-      }
-      if (srcset) {
-        // Handle srcset for responsive images
-        const updatedSrcset = srcset.split(',').map(s => {
-          const parts = s.trim().split(/\s+/);
-          const url = parts[0];
-          const descriptor = parts[1] || '';
-          const absoluteUrl = this.resolveUrl(baseUrl, url);
-          return absoluteUrl ? `${absoluteUrl} ${descriptor}`.trim() : s;
-        }).join(', ');
-        $element.attr('srcset', updatedSrcset);
-      }
-    });
-  }
-
-  private extractImages($: CheerioAPI): string[] {
-    const images: string[] = [];
-    $('img').each((_, element) => {
-      const src = $(element).attr('src');
-      if (src) {
-        images.push(src);
-      }
-    });
-    return images;
-  }
-
-  private extractCss($: CheerioAPI, baseUrl: string): { inline: string; external: string[]; parsed: string } {
-    let inlineCss = '';
-    const externalCss: string[] = [];
-    let parsedCss = '';
-
-    // Extract inline styles
-    $('style').each((_, element) => {
-      inlineCss += $(element).html() || '';
-    });
-
-    // Extract external stylesheets
-    $('link[rel="stylesheet"]').each((_, element) => {
-      const href = $(element).attr('href');
-      if (href) {
-        const absoluteUrl = this.resolveUrl(baseUrl, href);
-        if (absoluteUrl) {
-          externalCss.push(absoluteUrl);
-        }
-      }
-    });
-
-    // For now, combine for parsing. In a real scenario, you'd fetch external CSS.
-    parsedCss = inlineCss; // Simplified: only inline for now
-
-    logInfo('🎨 SiteMirror: CSS parsed', { url: baseUrl, embeddedAssets: inlineCss.length > 0 ? 1 : 0 });
-
-    return { inline: inlineCss, external: externalCss, parsed: parsedCss };
-  }
-
-  private extractColors(css: string): string[] {
-    const colorRegex = /#(?:[0-9a-fA-F]{3}){1,2}|rgb\((?:\d{1,3},\s*){2}\d{1,3}\)|rgba\((?:\d{1,3},\s*){3}(?:0?\.\d+|1)\)|hsl\(\d{1,3},\s*\d{1,3}%,\s*\d{1,3}%\)|hsla\(\d{1,3},\s*\d{1,3}%,\s*\d{1,3}%(?:,\s*(?:0?\.\d+|1))\)/g;
-    const colors = css.match(colorRegex) || [];
-    return [...new Set(colors)]; // Unique colors
-  }
-
-  private extractFonts(css: string): string[] {
-    const fontRegex = /font-family:\s*([^;]+)/g;
-    const matches = css.match(fontRegex) || [];
-    const fonts = matches.map(match => match.replace(/font-family:\s*/, '').replace(/['";]/g, '').trim());
-    return [...new Set(fonts)]; // Unique fonts
-  }
-
-  private analyzeLayout($: CheerioAPI): { structure: string; sections: string[] } {
-    const sections: string[] = [];
-    // Basic section detection
-    $('header, nav, main, article, section, aside, footer').each((_, el) => {
-      sections.push(el.tagName);
-    });
-    return {
-      structure: 'Basic HTML structure detected',
-      sections: [...new Set(sections)],
-    };
-  }
-
-  private extractNavigation($: CheerioAPI): Array<{ text: string; url: string }> {
-    const navigation: Array<{ text: string; url: string }> = [];
-    $('nav a').each((_, element) => {
-      const $element = $(element);
-      const text = $element.text().trim();
-      const url = $element.attr('href');
-      if (text && url) {
-        navigation.push({ text, url });
-      }
-    });
-    return navigation;
-  }
-
-  private extractSections($: CheerioAPI): Array<{ type: string; content: string }> {
-    const sections: Array<{ type: string; content: string }> = [];
-    $('h1, h2, h3, p, button').each((_, element) => {
-      const $element = $(element);
-      sections.push({
-        type: element.tagName,
-        content: $element.text().trim(),
-      });
-    });
-    return sections;
-  }
-
-  private extractTextContent($: CheerioAPI): { headings: string[]; paragraphs: string[]; buttons: string[] } {
-    const headings: string[] = [];
-    const paragraphs: string[] = [];
-    const buttons: string[] = [];
-
-    $('h1, h2, h3, h4, h5, h6').each((_, el) => {
-      headings.push($(el).text().trim());
-    });
-
-    $('p').each((_, el) => {
-      paragraphs.push($(el).text().trim());
-    });
-
-    $('button').each((_, el) => {
-      buttons.push($(el).text().trim());
-    });
-
-    return { headings, paragraphs, buttons };
   }
 }

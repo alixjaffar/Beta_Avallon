@@ -75,18 +75,18 @@ export async function POST(req: NextRequest) {
       );
     }
     
-    // Initialize SiteMirror scraper with Puppeteer (forceRender: true)
+    // Initialize SiteMirror scraper
     // Following SiteMirror's approach: https://github.com/pakelcomedy/SiteMirror/
     let scraper;
     try {
       scraper = new SiteMirrorScraper(url, {
-        maxDepth: 5,
-        maxWorkers: 8,
-        delay: 500,
-        timeout: 30000, // Longer timeout for Puppeteer
-        ignoreRobots: false,
-        forceRender: true, // ALWAYS use Puppeteer for JavaScript rendering (like SiteMirror's Selenium)
-        respectSitemap: true,
+        maxWorkers: 8,           // Like --max_workers
+        delay: 500,              // Like --delay
+        timeout: 60000,          // Like --timeout (increased for JS rendering)
+        forceRender: true,       // Like --force_render (use Puppeteer)
+        seleniumWait: 5000,      // Like --selenium_wait
+        ignoreRobots: true,      // Like --ignore_robots
+        maxRetries: 3,           // Like --max_retries
       });
     } catch (scraperError: any) {
       logError('Failed to create SiteMirrorScraper', scraperError);
@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
     
     if (!analysis) {
       return NextResponse.json(
-        { error: 'Failed to fetch website content. The website may be blocking external access or may require JavaScript rendering.' },
+        { error: 'Failed to fetch website content. The website may be blocking automated access or using advanced bot protection.' },
         { status: 500, headers: corsHeaders }
       );
     }
@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
     }, { headers: corsHeaders });
 
   } catch (error: any) {
-    logError('SiteMirror import failed', error);
+    logError('GoClone import failed', error);
     
     // Handle specific error types
     if (error.name === 'TimeoutError' || error.message?.includes('timeout')) {

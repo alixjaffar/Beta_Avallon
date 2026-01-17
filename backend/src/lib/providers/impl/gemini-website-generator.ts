@@ -308,7 +308,7 @@ export class GeminiWebsiteGenerator {
   }
 
   /**
-   * ADVANCED website scraping using SiteMirror (pixel-perfect cloning)
+   * ADVANCED website scraping using SiteMirror (dual-engine cloning)
    * Extracts HTML, CSS, colors, fonts, images, and layout structure
    * Based on: https://github.com/pakelcomedy/SiteMirror/
    */
@@ -318,13 +318,12 @@ export class GeminiWebsiteGenerator {
       // Following SiteMirror's approach: https://github.com/pakelcomedy/SiteMirror/
       const { SiteMirrorScraper } = await import('@/lib/scrapers/site-mirror');
       const scraper = new SiteMirrorScraper(url, {
-        maxDepth: 5,
-        maxWorkers: 8,
-        delay: 500,
-        timeout: 30000, // Longer timeout for Puppeteer
-        ignoreRobots: false,
-        forceRender: true, // ALWAYS use Puppeteer (like SiteMirror's Selenium mode)
-        respectSitemap: true,
+        maxWorkers: 8,           // Like --max_workers
+        delay: 500,              // Like --delay
+        timeout: 60000,          // Like --timeout
+        forceRender: true,       // Like --force_render (use Puppeteer)
+        seleniumWait: 5000,      // Like --selenium_wait
+        ignoreRobots: true,      // Like --ignore_robots
       });
       
       const result = await scraper.fetchWebsiteContent(url);
