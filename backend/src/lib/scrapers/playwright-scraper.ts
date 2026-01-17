@@ -507,21 +507,35 @@ export class PlaywrightScraper {
       if (error.message?.includes('Executable doesn\'t exist') || error.message?.includes('chromium')) {
         logInfo('🎭 Playwright: Chromium not found, attempting to locate or install', { error: error.message });
         
-        // Try to find Chromium in common cache locations
+        // Try to find Chromium in common cache locations (both regular and headless shell)
+        const { existsSync } = await import('fs');
         const possiblePaths = [
+          // Regular Chromium
           '/opt/render/.cache/ms-playwright/chromium-1200/chrome-linux64/chrome',
-          process.env.PLAYWRIGHT_BROWSERS_PATH ? `${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium-1200/chrome-linux64/chrome` : null,
           `${process.cwd()}/.cache/ms-playwright/chromium-1200/chrome-linux64/chrome`,
+          // Headless Shell (what Playwright is looking for)
+          '/opt/render/.cache/ms-playwright/chromium_headless_shell-1200/chrome-headless-shell-linux64/chrome-headless-shell',
+          `${process.cwd()}/.cache/ms-playwright/chromium_headless_shell-1200/chrome-headless-shell-linux64/chrome-headless-shell`,
+          // Environment variable paths
+          process.env.PLAYWRIGHT_BROWSERS_PATH ? `${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium-1200/chrome-linux64/chrome` : null,
+          process.env.PLAYWRIGHT_BROWSERS_PATH ? `${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium_headless_shell-1200/chrome-headless-shell-linux64/chrome-headless-shell` : null,
+          // Common Render paths
+          '/home/render/.cache/ms-playwright/chromium-1200/chrome-linux64/chrome',
+          '/home/render/.cache/ms-playwright/chromium_headless_shell-1200/chrome-headless-shell-linux64/chrome-headless-shell',
         ].filter(Boolean) as string[];
         
         let foundPath: string | null = null;
-        const { existsSync } = await import('fs');
         
+        // Check each path
         for (const path of possiblePaths) {
-          if (existsSync(path)) {
-            foundPath = path;
-            logInfo('🎭 Playwright: Found Chromium at', { path });
-            break;
+          try {
+            if (existsSync(path)) {
+              foundPath = path;
+              logInfo('🎭 Playwright: Found browser executable at', { path });
+              break;
+            }
+          } catch {
+            // Path check failed, continue
           }
         }
         
@@ -537,17 +551,41 @@ export class PlaywrightScraper {
             ],
           });
         } else {
-          // Last resort: try launching without explicit path (Playwright will attempt to download)
-          logInfo('🎭 Playwright: Attempting launch without explicit path (may download at runtime)');
-          this.browser = await chromium.launch({
-            headless: true,
-            args: [
-              '--no-sandbox',
-              '--disable-setuid-sandbox',
-              '--disable-dev-shm-usage',
-              '--disable-gpu',
-            ],
-          });
+          // Last resort: try to install at runtime
+          logInfo('🎭 Playwright: Browser not found in cache, attempting runtime installation');
+          try {
+            const { execSync } = await import('child_process');
+            // Install chromium (this will use the headless shell)
+            execSync('npx playwright install chromium', { 
+              stdio: 'inherit',
+              timeout: 120000, // 2 minute timeout
+              env: { ...process.env, PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '0' }
+            });
+            logInfo('🎭 Playwright: Runtime installation complete, retrying launch');
+            
+            // Retry launch after installation
+            this.browser = await chromium.launch({
+              headless: true,
+              args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+              ],
+            });
+          } catch (installError: any) {
+            logError('🎭 Playwright: Runtime installation failed', installError);
+            // Final fallback: try launch anyway (might work if partially installed)
+            this.browser = await chromium.launch({
+              headless: true,
+              args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+              ],
+            });
+          }
         }
       } else {
         throw error;
