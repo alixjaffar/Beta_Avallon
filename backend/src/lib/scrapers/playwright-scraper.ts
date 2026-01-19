@@ -369,143 +369,138 @@ export class PlaywrightScraper {
       // Normalize the path
       const normalizedPath = pagePath.startsWith('/') ? pagePath : '/' + pagePath;
       const targetUrl = new URL(normalizedPath, this.baseUrl).href;
+      const pathKeyword = normalizedPath.replace(/^\/+|\/+$/g, '').toLowerCase();
       
       logInfo('🎭 Playwright: Scraping internal page (SPA-aware)', { 
         basePath: this.baseUrl,
         targetPath: normalizedPath,
         targetUrl,
+        pathKeyword,
       });
       
-      // STRATEGY 1: Load homepage first, then click on navigation link
-      await page.goto(this.baseUrl, { 
+      // STRATEGY 1: Try direct navigation first (works for most sites)
+      logInfo('🎭 Playwright: Trying direct navigation first', { targetUrl });
+      await page.goto(targetUrl, { 
         waitUntil: 'networkidle',
         timeout: this.options.timeout,
       });
-      await this.sleep(4000); // Wait longer for SPA to fully initialize
+      await this.sleep(3000);
       
-      // Get initial content hash to detect if page changed after navigation
-      const initialContent = await page.evaluate(() => document.body.innerHTML.length);
-      
-      // Try to find and click a link that navigates to this page
-      const linkClicked = await page.evaluate((targetPath: string) => {
-        const normalizedTarget = targetPath.toLowerCase().replace(/^\/+|\/+$/g, '');
-        const links = Array.from(document.querySelectorAll('a[href]'));
-        
-        for (const link of links) {
-          const href = link.getAttribute('href') || '';
-          const hrefLower = href.toLowerCase();
-          const normalizedHref = hrefLower.replace(/^\/+|\/+$/g, '').replace(/^https?:\/\/[^/]+\/?/, '');
-          
-          // Match by path (multiple patterns)
-          if (normalizedHref === normalizedTarget || 
-              normalizedHref === normalizedTarget + '/' ||
-              href.endsWith(targetPath) ||
-              href.endsWith(targetPath + '/') ||
-              hrefLower.includes(normalizedTarget) ||
-              (normalizedTarget.includes('apply') && hrefLower.includes('apply'))) {
-            console.log('Clicking navigation link:', href, 'for path:', targetPath);
-            (link as HTMLElement).click();
-            return { clicked: true, href };
-          }
-        }
-        return { clicked: false, href: null };
-      }, normalizedPath);
-      
-      if (linkClicked.clicked) {
-        logInfo('🎭 Playwright: Clicked SPA navigation link', { link: linkClicked.href, targetPath: normalizedPath });
-        
-        // Wait for SPA navigation with multiple strategies
-        await this.sleep(2000);
-        
-        // Wait for URL to change or content to update
-        try {
-          // Poll for content change - simpler than waitForFunction with args
-          const startTime = Date.now();
-          const timeout = 8000;
-          while (Date.now() - startTime < timeout) {
-            const changed = await page.evaluate((initialLen) => {
-              const currentLen = document.body.innerHTML.length;
-              const currentPath = window.location.pathname;
-              return currentLen !== initialLen || currentPath !== '/';
-            }, initialContent);
-            if (changed) break;
-            await this.sleep(200);
-          }
-        } catch {
-          // Timeout is okay, continue
-        }
-        
-        await this.sleep(2000); // Additional wait for content to render
-        await page.waitForLoadState('networkidle').catch(() => {});
-      } else {
-        // STRATEGY 2: Use History API first (better for SPAs)
-        logInfo('🎭 Playwright: No nav link found, trying History API navigation', { targetPath: normalizedPath });
-        
-        const historyNavigated = await page.evaluate((path: string) => {
-          window.history.pushState({}, '', path);
-          window.dispatchEvent(new PopStateEvent('popstate'));
-          window.dispatchEvent(new Event('locationchange'));
-          // Also try hashchange for hash routers
-          if (path.includes('#')) {
-            window.location.hash = path;
-          }
-          return window.location.pathname === path;
-        }, normalizedPath);
-        
-        await this.sleep(3000); // Wait for SPA router to handle navigation
-        
-        // Check if content changed
-        const afterHistoryContent = await page.evaluate(() => document.body.innerHTML.length);
-        
-        // If History API didn't work, try direct navigation
-        if (!historyNavigated || afterHistoryContent === initialContent) {
-          logInfo('🎭 Playwright: History API failed, trying direct navigation', { targetUrl });
-          await page.goto(targetUrl, {
-            waitUntil: 'networkidle',
-            timeout: this.options.timeout,
-          });
-          await this.sleep(3000);
-        }
-      }
-      
-      // Wait for content to render
-      await this.sleep(this.options.waitForJs);
-      
-      // Scroll to trigger lazy loading
-      await this.autoScroll(page);
-      await page.evaluate(() => window.scrollTo(0, 0));
-      await this.sleep(500);
-      
-      // Check if we got a 404 page
-      const pageInfo = await page.evaluate(() => {
+      // Check if direct navigation worked (not a 404 or redirect to home)
+      let pageInfo = await page.evaluate(() => {
         const h1 = document.querySelector('h1')?.textContent?.toLowerCase() || '';
         const title = document.title.toLowerCase();
-        const bodyText = document.body.innerText.toLowerCase().slice(0, 500);
+        const bodyText = document.body.innerText.toLowerCase().slice(0, 1000);
         const currentPath = window.location.pathname;
         return { h1, title, bodyText, bodyLength: document.body.innerHTML.length, currentPath };
       });
       
-      logInfo('🎭 Playwright: Page info after navigation', { 
-        path: normalizedPath, 
+      const isHomeOrError = pageInfo.currentPath === '/' || 
+                           pageInfo.h1.includes('404') || 
+                           pageInfo.title.includes('404') ||
+                           pageInfo.bodyText.includes('page not found');
+      
+      // Check if we're on a page that matches our target (title/h1 contains keyword)
+      const contentMatchesTarget = pageInfo.h1.includes(pathKeyword) || 
+                                   pageInfo.title.includes(pathKeyword) ||
+                                   pageInfo.bodyText.includes(pathKeyword);
+      
+      logInfo('🎭 Playwright: Direct navigation result', { 
         currentPath: pageInfo.currentPath,
-        bodyLength: pageInfo.bodyLength,
-        has404: pageInfo.h1.includes('404') || pageInfo.title.includes('404'),
+        h1: pageInfo.h1.slice(0, 50),
+        isHomeOrError,
+        contentMatchesTarget,
       });
       
-      // If it looks like a 404 or content is too small, try direct navigation one more time
-      if ((pageInfo.h1.includes('404') || pageInfo.title.includes('404') || 
-           pageInfo.h1.includes('not found') || pageInfo.bodyText.includes('page not found')) &&
-          pageInfo.bodyLength < 5000) {
-        logInfo('🎭 Playwright: Content looks like 404, trying direct navigation as final fallback');
+      // STRATEGY 2: If direct nav failed, load homepage and click navigation link
+      if (isHomeOrError && !contentMatchesTarget) {
+        logInfo('🎭 Playwright: Direct navigation failed, trying SPA click navigation');
         
-        await page.goto(targetUrl, {
+        await page.goto(this.baseUrl, { 
           waitUntil: 'networkidle',
           timeout: this.options.timeout,
         });
+        await this.sleep(3000);
         
-        await this.sleep(4000); // Longer wait for content
-        await this.autoScroll(page);
+        // Get initial H1 to detect page change
+        const initialH1 = await page.evaluate(() => document.querySelector('h1')?.textContent || '');
+        
+        // Find and click navigation link using Playwright's locator API
+        const linkSelector = `a[href*="${pathKeyword}"], a[href$="/${pathKeyword}"], a[href$="/${pathKeyword}/"], a:has-text("${pathKeyword}")`;
+        const navLink = page.locator(linkSelector).first();
+        
+        if (await navLink.count() > 0) {
+          const linkHref = await navLink.getAttribute('href');
+          logInfo('🎭 Playwright: Found nav link, clicking', { href: linkHref, pathKeyword });
+          
+          // Use Promise.all to wait for navigation while clicking
+          try {
+            await Promise.all([
+              page.waitForURL(url => url.pathname.includes(pathKeyword), { timeout: 10000 }).catch(() => {}),
+              navLink.click(),
+            ]);
+          } catch {
+            // Click anyway if navigation wait fails
+            await navLink.click().catch(() => {});
+          }
+          
+          // Wait for content to change
+          await this.sleep(3000);
+          await page.waitForLoadState('networkidle').catch(() => {});
+          
+          // Wait for H1 to change (indicating page transition)
+          const startTime = Date.now();
+          while (Date.now() - startTime < 8000) {
+            const currentH1 = await page.evaluate(() => document.querySelector('h1')?.textContent || '');
+            if (currentH1 !== initialH1 && currentH1.toLowerCase().includes(pathKeyword)) {
+              logInfo('🎭 Playwright: H1 changed, page transition detected', { initialH1, currentH1 });
+              break;
+            }
+            await this.sleep(500);
+          }
+          
+          await this.sleep(2000); // Additional wait for content
+        } else {
+          // Try clicking by visible text
+          const textLink = page.getByRole('link', { name: new RegExp(pathKeyword, 'i') }).first();
+          if (await textLink.count() > 0) {
+            logInfo('🎭 Playwright: Found link by text, clicking');
+            await textLink.click().catch(() => {});
+            await this.sleep(4000);
+            await page.waitForLoadState('networkidle').catch(() => {});
+          }
+        }
       }
+      
+      // STRATEGY 3: History API fallback (for hash routers or pushState SPAs)
+      pageInfo = await page.evaluate(() => {
+        const h1 = document.querySelector('h1')?.textContent?.toLowerCase() || '';
+        const title = document.title.toLowerCase();
+        const bodyText = document.body.innerText.toLowerCase().slice(0, 1000);
+        return { h1, title, bodyText, bodyLength: document.body.innerHTML.length, currentPath: window.location.pathname };
+      });
+      
+      const stillOnHome = pageInfo.currentPath === '/' && !pageInfo.h1.includes(pathKeyword);
+      
+      if (stillOnHome) {
+        logInfo('🎭 Playwright: Still on home, trying History API navigation');
+        
+        await page.evaluate((path: string) => {
+          window.history.pushState({}, '', path);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+          window.dispatchEvent(new Event('locationchange'));
+          window.dispatchEvent(new HashChangeEvent('hashchange'));
+        }, normalizedPath);
+        
+        await this.sleep(4000);
+        await page.waitForLoadState('networkidle').catch(() => {});
+      }
+      
+      // Final wait and scroll
+      await this.sleep(this.options.waitForJs);
+      await this.autoScroll(page);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await this.sleep(500);
       
       const html = await page.content();
       const $ = load(html);
