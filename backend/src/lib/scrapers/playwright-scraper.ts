@@ -951,6 +951,7 @@ export class PlaywrightScraper {
   }
 
   private removeTrackingScripts($: CheerioAPI): void {
+    // Tracking and analytics patterns
     const trackingPatterns = [
       'google-analytics', 'googletagmanager', 'gtag',
       'facebook', 'fb', 'pixel',
@@ -958,12 +959,50 @@ export class PlaywrightScraper {
       'intercom', 'drift', 'crisp',
     ];
     
+    // WordPress-specific scripts that cause CORS errors when loaded from scraped pages
+    const wordpressPatterns = [
+      'wp-emoji', 'wp-embed', 'wp-includes',
+      'wp-content/plugins', 'wp-content/themes',
+      'twemoji', 'emoji-release',
+      'wp-block', 'wp-json',
+      'jetpack', 'akismet',
+      'woocommerce', 'elementor',
+    ];
+    
+    // External scripts that should be removed (they won't work without proper CORS)
+    const externalPatterns = [
+      ...trackingPatterns,
+      ...wordpressPatterns,
+    ];
+    
     $('script').each((_, el) => {
       const src = $(el).attr('src') || '';
       const content = $(el).html() || '';
       
-      if (trackingPatterns.some(p => src.includes(p) || content.includes(p))) {
+      // Remove scripts matching patterns
+      if (externalPatterns.some(p => src.toLowerCase().includes(p) || content.toLowerCase().includes(p))) {
         $(el).remove();
+        return;
+      }
+      
+      // Remove external scripts from different origin (they cause CORS errors)
+      if (src && !src.startsWith('data:')) {
+        try {
+          const scriptUrl = new URL(src, this.baseUrl);
+          // Remove scripts from WordPress sites and other CMS platforms
+          if (scriptUrl.pathname.includes('/wp-') || 
+              scriptUrl.pathname.includes('/wp_') ||
+              scriptUrl.hostname !== this.baseDomain) {
+            // Keep CDN scripts like React, jQuery, etc.
+            const safeCDNs = ['cdnjs', 'unpkg', 'jsdelivr', 'cloudflare', 'googleapis', 'jquery'];
+            if (!safeCDNs.some(cdn => scriptUrl.hostname.includes(cdn))) {
+              $(el).remove();
+            }
+          }
+        } catch {
+          // Invalid URL, remove it
+          $(el).remove();
+        }
       }
     });
     
@@ -974,6 +1013,23 @@ export class PlaywrightScraper {
         $(el).remove();
       }
     });
+    
+    // Remove WordPress-specific inline scripts that reference wp-emoji, etc.
+    $('script:not([src])').each((_, el) => {
+      const content = $(el).html() || '';
+      if (content.includes('wp-emoji') || 
+          content.includes('twemoji') || 
+          content.includes('window._wpemojiSettings') ||
+          content.includes('WordPressSettings')) {
+        $(el).remove();
+      }
+    });
+    
+    // Remove link preloads for WP resources
+    $('link[rel="preload"][href*="wp-"]').remove();
+    $('link[rel="preload"][href*="wp_"]').remove();
+    $('link[rel="prefetch"][href*="wp-"]').remove();
+    $('link[rel="dns-prefetch"]').remove(); // Remove DNS prefetch for external domains
   }
 
   // ==================== METADATA EXTRACTION ====================

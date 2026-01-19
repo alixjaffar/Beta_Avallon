@@ -142,6 +142,72 @@ function fixImageUrls(html: string): string {
   return html;
 }
 
+// Inject CSS to ensure navigation is always visible in the editor
+// This overrides responsive CSS that might hide nav on smaller viewports
+function injectEditorOverrideCSS(html: string): string {
+  if (!html || typeof html !== 'string') return html;
+  
+  const overrideCSS = `
+<style data-avallon-editor-override="true">
+/* Force navigation to always be visible in the editor */
+nav, header nav, .nav, .navbar, .navigation, .site-header, 
+.header, #header, #nav, #navbar, .main-navigation,
+.menu, .main-menu, #main-menu, .site-navigation {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative !important;
+  transform: none !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+/* Override mobile-menu hiding */
+.mobile-menu, .hamburger-menu, .menu-toggle, .nav-toggle,
+.mobile-nav-toggle, .mobile-menu-toggle {
+  display: none !important;
+}
+
+/* Show desktop navigation items */
+.nav-menu, .menu-items, nav ul, header nav ul, 
+.navbar-nav, .nav-links, .desktop-menu, .desktop-nav {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative !important;
+  flex-wrap: wrap !important;
+  max-height: none !important;
+  height: auto !important;
+  transform: none !important;
+}
+
+/* Show all nav links */
+nav a, header nav a, .nav a, .navbar a, .nav-link,
+.menu-item, .menu-item a, nav li, header nav li {
+  display: inline-block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* WordPress specific overrides */
+.wp-block-navigation, .wp-block-navigation__container,
+.wp-block-navigation-item, .wp-block-navigation-link {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+</style>`;
+
+  // Insert CSS in head
+  if (html.includes('</head>')) {
+    return html.replace('</head>', overrideCSS + '</head>');
+  } else if (html.includes('<body')) {
+    return html.replace('<body', overrideCSS + '<body');
+  }
+  
+  return overrideCSS + html;
+}
+
 // Inject navigation script for multi-page support
 function injectNavigationScript(html: string): string {
   if (!html || typeof html !== 'string') return html;
@@ -1179,6 +1245,7 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       }
       
       htmlContent = fixImageUrls(htmlContent);
+      htmlContent = injectEditorOverrideCSS(htmlContent); // Force nav to be visible
       htmlContent = injectNavigationScript(htmlContent);
       
       // Inject visual editor script when in visual mode
