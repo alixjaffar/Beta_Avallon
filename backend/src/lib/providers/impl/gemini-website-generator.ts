@@ -718,77 +718,83 @@ LOVABLE-LEVEL QUALITY BAR (MUST FOLLOW):
       const footerMatch = indexHtml.match(/<footer[^>]*>[\s\S]*?<\/footer>/gi);
       const existingFooter = footerMatch ? footerMatch[0] : '';
       
+      // Get list of existing files for context
+      const existingFiles = Object.keys(currentCode || {}).filter(f => f.endsWith('.html'));
+      
       // Build modification prompt with STRICT preservation rules
-      let modificationPrompt = `⚠️ CRITICAL: YOU ARE EDITING AN IMPORTED/EXISTING WEBSITE - NOT GENERATING NEW ⚠️
+      let modificationPrompt = `⚠️ CRITICAL: YOU ARE EDITING AN EXISTING WEBSITE - NOT CREATING NEW ⚠️
 
-The user has imported a website (or has an existing website) and wants to MODIFY it.
-You MUST preserve the EXACT look and feel of their existing site.
+The user has an existing multi-page website and wants to ADD TO IT or MODIFY IT.
+You MUST preserve their design. The existing pages will be kept automatically.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 USER'S EDIT REQUEST: "${originalPrompt}"
+📋 USER'S REQUEST: "${originalPrompt}"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📁 EXISTING PAGES (these are PRESERVED automatically, don't re-output them unless modifying):
+${existingFiles.map(f => `   • ${f}`).join('\n')}
 
 ${currentCodeContext}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎨 STYLE TEMPLATE - COPY THIS EXACTLY FOR ANY NEW PAGES:
+🎯 OUTPUT RULES - VERY IMPORTANT:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${existingCSS ? `The existing CSS (MUST be copied verbatim to new pages):\n${existingCSS.substring(0, 15000)}` : ''}
+1️⃣ ONLY OUTPUT FILES YOU ARE ADDING OR MODIFYING:
+   - If adding a new page → Output ONLY the new page file
+   - If modifying index.html → Output ONLY index.html with the change
+   - DO NOT re-output pages you aren't changing!
+   - The system will MERGE your output with existing files
 
-${existingHeader ? `The existing header/navigation (MUST be copied to new pages):\n${existingHeader.substring(0, 3000)}` : ''}
+2️⃣ FOR NEW PAGES - COPY THE DESIGN EXACTLY:
+   Copy these elements from index.html (shown above):
+   - The ENTIRE <style> block (CSS)
+   - The EXACT <header>/<nav> structure  
+   - The EXACT <footer> structure
+   - Same fonts, colors, spacing
 
-${existingFooter ? `The existing footer (MUST be copied to new pages):\n${existingFooter.substring(0, 3000)}` : ''}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚨 ABSOLUTE REQUIREMENTS - FAILURE TO FOLLOW = REJECTED OUTPUT:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-1️⃣ FOR EXISTING PAGES (like index.html):
-   - Output the EXACT same HTML with ONLY the requested change
-   - Do NOT change colors, fonts, layout, or structure
-   - Do NOT remove or modify any existing sections
-   - Do NOT "improve" or "modernize" anything
-   - Keep ALL existing text content (unless user asked to change specific text)
-
-2️⃣ FOR NEW PAGES (if user requests adding a page):
-   - Copy the ENTIRE <style> block from index.html - DO NOT CREATE NEW STYLES
-   - Copy the EXACT same <header>/<nav> structure
-   - Copy the EXACT same <footer> structure
-   - Use the SAME color scheme (copy the CSS variables/colors exactly)
-   - Use the SAME fonts (copy the font-family declarations)
-   - Use the SAME layout patterns (same container widths, spacing, etc.)
-   - The new page should look like it's part of the SAME website
-
-3️⃣ OUTPUT FORMAT:
-   === FILE: index.html ===
-   [The existing index.html with ONLY the requested modification]
-   
-   === FILE: newpage.html ===
-   [New page using COPIED styles from index.html]
+3️⃣ UPDATE NAVIGATION IN EXISTING PAGES:
+   If adding a new page, you MUST also output the modified index.html
+   (and any other pages with navigation) with the new link added to the nav.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-❌ ABSOLUTELY FORBIDDEN - DO NOT DO THESE:
+🎨 STYLE TEMPLATE - COPY EXACTLY TO NEW PAGES:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Creating a new design or color scheme
-- Changing the overall look and feel
-- Using different fonts than the existing site
-- Creating a different navigation structure
-- Making the new page look "modern" or "better" - it should match EXACTLY
-- Adding your own creative touches
-- Using a different CSS framework
-- Simplifying or removing existing CSS
+
+${existingCSS ? `EXISTING CSS (copy verbatim):\n${existingCSS.substring(0, 12000)}` : ''}
+
+${existingHeader ? `EXISTING HEADER/NAV (copy and add new link):\n${existingHeader.substring(0, 2500)}` : ''}
+
+${existingFooter ? `EXISTING FOOTER (copy verbatim):\n${existingFooter.substring(0, 2500)}` : ''}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ YOUR TASK: "${originalPrompt}"
+📤 OUTPUT FORMAT:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+=== FILE: sales-agent.html ===
+[NEW page with COPIED styles from index.html]
+
+=== FILE: index.html ===
+[EXISTING index.html with navigation link added for new page]
+
+(Only output files you're creating or modifying!)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+❌ DO NOT:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Create new CSS styles (copy existing)
+- Change the color scheme
+- Use different fonts
+- Create a different nav structure
+- "Improve" or "modernize" anything
+- Re-output unchanged pages
 
 ${wantsStripe ? this.getStripeIntegrationInstructions() : ''}
 
-IMPORTANT: The user imported this website because they LIKE how it looks. 
-They want to BUILD ON IT, not replace it. Return code that maintains their design.
+✅ TASK: "${originalPrompt}"
 
-Now return the modified code:`;
+The user LOVES their current design. Add to it without changing the look.
+Output ONLY new/modified files:`;
       
       return modificationPrompt;
     }

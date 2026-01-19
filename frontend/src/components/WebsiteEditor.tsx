@@ -988,27 +988,34 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         throw new Error(result.message || result.error || 'Failed to generate website');
       }
       
-      // Update content
-      const websiteContent = result.websiteContent || result.files || result.result?.websiteContent || {};
-      if (Object.keys(websiteContent).length === 0) {
+      // Update content - MERGE with existing content instead of replacing
+      const newContent = result.websiteContent || result.files || result.result?.websiteContent || {};
+      if (Object.keys(newContent).length === 0) {
         throw new Error(result.message || 'No website content was generated. Please try again.');
       }
       
-      setCurrentWebsiteContent(websiteContent);
-
+      // CRITICAL: Merge new/modified files with existing files to preserve all pages
+      const mergedContent = { ...currentWebsiteContent, ...newContent };
+      setCurrentWebsiteContent(mergedContent);
+      
+      // Track which files were added vs modified
+      const newFiles = Object.keys(newContent).filter(f => !currentWebsiteContent[f]);
+      const modifiedFiles = Object.keys(newContent).filter(f => currentWebsiteContent[f]);
+      
       // Add AI response
-      const changes = Object.keys(websiteContent).length > 0 
-        ? [`Updated ${Object.keys(websiteContent).length} file(s)`]
-        : [];
+      const changesList: string[] = [];
+      if (newFiles.length > 0) changesList.push(`Added ${newFiles.length} new page(s): ${newFiles.join(', ')}`);
+      if (modifiedFiles.length > 0) changesList.push(`Modified ${modifiedFiles.length} page(s): ${modifiedFiles.join(', ')}`);
+      if (changesList.length === 0) changesList.push(`Updated ${Object.keys(newContent).length} file(s)`);
 
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: isNewSite 
           ? "I've generated your website! You can see the preview on the right. Let me know if you'd like any changes."
-          : "Done! I've made the changes you requested. The preview has been updated.",
+          : `Done! I've made the changes you requested. ${newFiles.length > 0 ? `Added new page: ${newFiles.join(', ')}. ` : ''}All your existing pages have been preserved.`,
         timestamp: new Date(),
-        changes,
+        changes: changesList,
       };
       
       setMessages(prev => [...prev, assistantMessage]);
@@ -1018,11 +1025,11 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       onUpdate({
         ...site,
         ...siteData,
-        websiteContent,
+        websiteContent: mergedContent, // Use merged content
         status: 'deployed',
       });
 
-      // Save
+      // Save - use merged content to preserve all pages
       await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`, {
         method: 'PUT',
         body: JSON.stringify({
@@ -1030,7 +1037,7 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
             ...msg,
             timestamp: msg.timestamp.toISOString()
           })),
-          websiteContent: websiteContent || currentWebsiteContent,
+          websiteContent: mergedContent, // CRITICAL: Save merged content
           status: 'deployed',
         }),
       });
