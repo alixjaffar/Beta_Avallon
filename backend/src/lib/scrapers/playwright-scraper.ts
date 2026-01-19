@@ -419,15 +419,18 @@ export class PlaywrightScraper {
         
         // Wait for URL to change or content to update
         try {
-          await page.waitForFunction(
-            (initialLen: number) => {
+          // Poll for content change - simpler than waitForFunction with args
+          const startTime = Date.now();
+          const timeout = 8000;
+          while (Date.now() - startTime < timeout) {
+            const changed = await page.evaluate((initialLen) => {
               const currentLen = document.body.innerHTML.length;
               const currentPath = window.location.pathname;
               return currentLen !== initialLen || currentPath !== '/';
-            },
-            { timeout: 8000 },
-            initialContent
-          );
+            }, initialContent);
+            if (changed) break;
+            await this.sleep(200);
+          }
         } catch {
           // Timeout is okay, continue
         }
