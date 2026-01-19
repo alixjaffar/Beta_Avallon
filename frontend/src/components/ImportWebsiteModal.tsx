@@ -405,8 +405,8 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
       if (!isHTML(content)) {
         setError('The file does not contain valid HTML.');
         setIsLoading(false);
-        return;
-      }
+      return;
+    }
 
       // For file imports, use directly
       onImport(content, file.name);
@@ -478,17 +478,22 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
     return 'text/plain';
   };
 
-  // Combine uploaded files into a single page
+  // Combine uploaded files into a single page or multiple pages
   const handleFolderImport = () => {
     if (uploadedFiles.length === 0) {
       setError('No files uploaded');
       return;
     }
 
-    // Find the main HTML file (index.html or the only .html file)
-    let mainHtml = uploadedFiles.find(f => f.name.endsWith('index.html'));
-    if (!mainHtml) {
-      mainHtml = uploadedFiles.find(f => f.name.endsWith('.html') || f.name.endsWith('.htm'));
+    // Find all HTML files in the upload
+    const htmlFiles = uploadedFiles.filter(f => 
+      f.name.endsWith('.html') || f.name.endsWith('.htm')
+    );
+    
+    // Find main HTML file
+    let mainHtml = uploadedFiles.find(f => f.name.endsWith('index.html') || f.name.split('/').pop() === 'index.html');
+    if (!mainHtml && htmlFiles.length > 0) {
+      mainHtml = htmlFiles[0];
     }
 
     // Collect all CSS and JS
@@ -497,6 +502,55 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
       f.name.endsWith('.js') || f.name.endsWith('.jsx') || 
       f.name.endsWith('.ts') || f.name.endsWith('.tsx')
     );
+    
+    // Collect JSON config files (might contain settings)
+    const jsonFiles = uploadedFiles.filter(f => f.name.endsWith('.json') && !f.name.includes('package'));
+    
+    // If multiple HTML files exist, import them all as separate pages
+    if (htmlFiles.length > 1) {
+      const pages: Array<{ filename: string; html: string; title: string }> = [];
+      
+      for (const htmlFile of htmlFiles) {
+        let html = htmlFile.content;
+        const filename = htmlFile.name.split('/').pop() || htmlFile.name;
+        
+        // Inject shared CSS into each HTML file
+        if (cssFiles.length > 0) {
+          const cssContent = cssFiles.map(f => 
+            `/* === ${f.name} === */\n${f.content}`
+          ).join('\n\n');
+          
+          if (html.includes('</head>')) {
+            html = html.replace('</head>', `<style>\n${cssContent}\n</style>\n</head>`);
+          } else if (html.includes('<body')) {
+            html = html.replace('<body', `<head><style>\n${cssContent}\n</style></head>\n<body`);
+          }
+        }
+        
+        // Inject shared JS
+        if (jsFiles.length > 0) {
+          const jsContent = jsFiles.map(f => 
+            `// === ${f.name} ===\n${f.content}`
+          ).join('\n\n');
+          
+          if (html.includes('</body>')) {
+            html = html.replace('</body>', `<script>\n${jsContent}\n</script>\n</body>`);
+      } else {
+            html += `\n<script>\n${jsContent}\n</script>`;
+          }
+        }
+        
+        // Extract title
+        const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+        const title = titleMatch ? titleMatch[1] : filename.replace(/\.html?$/i, '');
+        
+        pages.push({ filename, html, title });
+      }
+      
+      onMultiPageImport(pages);
+        handleClose();
+      return;
+    }
 
     let finalHtml = '';
 
@@ -529,6 +583,18 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
           finalHtml += `\n<script>\n${jsContent}\n</script>`;
         }
       }
+      
+      // Inject JSON config as data attributes or global variables
+      if (jsonFiles.length > 0) {
+        const configScript = jsonFiles.map(f => {
+          const varName = f.name.split('/').pop()?.replace('.json', '').replace(/[^a-zA-Z0-9]/g, '_') || 'config';
+          return `window.${varName} = ${f.content};`;
+        }).join('\n');
+        
+        if (finalHtml.includes('</head>')) {
+          finalHtml = finalHtml.replace('</head>', `<script>\n${configScript}\n</script>\n</head>`);
+        }
+      }
     } else {
       // No HTML file - create one from scratch
       const cssContent = cssFiles.map(f => 
@@ -538,12 +604,25 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
       const jsContent = jsFiles.map(f => 
         `// === ${f.name} ===\n${f.content}`
       ).join('\n\n');
+      
+      const configContent = jsonFiles.map(f => {
+        const varName = f.name.split('/').pop()?.replace('.json', '').replace(/[^a-zA-Z0-9]/g, '_') || 'config';
+        return `window.${varName} = ${f.content};`;
+      }).join('\n');
 
       // Check if there's a React/component-like structure
       const hasReact = jsFiles.some(f => 
         f.content.includes('import React') || 
         f.content.includes('from "react"') ||
         f.content.includes("from 'react'")
+      );
+      
+      // Check for common widget patterns
+      const hasWidget = jsFiles.some(f => 
+        f.content.includes('Widget') || 
+        f.content.includes('chatbot') ||
+        f.content.includes('sales') ||
+        f.content.includes('agent')
       );
 
       if (hasReact) {
@@ -557,6 +636,9 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script>
+${configContent}
+  </script>
   <style>
 ${cssContent}
   </style>
@@ -570,7 +652,44 @@ ${jsContent}
 if (typeof App !== 'undefined') {
   const root = ReactDOM.createRoot(document.getElementById('root'));
   root.render(<App />);
+} else if (typeof Widget !== 'undefined') {
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(<Widget />);
+} else if (typeof SalesAgent !== 'undefined') {
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(<SalesAgent />);
 }
+  </script>
+</body>
+</html>`;
+      } else if (hasWidget) {
+        // Create a widget-ready HTML template
+        finalHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sales Agent</title>
+  <script>
+${configContent}
+  </script>
+  <style>
+${cssContent}
+  </style>
+</head>
+<body>
+  <div id="sales-agent-container"></div>
+  <div id="chat-widget"></div>
+  <div id="app"></div>
+  <script>
+${jsContent}
+
+// Auto-initialize common widget patterns
+document.addEventListener('DOMContentLoaded', function() {
+  if (typeof initWidget === 'function') initWidget();
+  if (typeof initSalesAgent === 'function') initSalesAgent();
+  if (typeof init === 'function') init();
+});
   </script>
 </body>
 </html>`;
@@ -582,6 +701,9 @@ if (typeof App !== 'undefined') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sales Agent</title>
+  <script>
+${configContent}
+  </script>
   <style>
 ${cssContent}
   </style>

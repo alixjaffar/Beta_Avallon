@@ -1362,18 +1362,34 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
 
   const handleDeploy = async () => {
     setIsDeploying(true);
+    
+    // First, ensure the site is saved
+    try {
+      await autoSaveContent(currentWebsiteContent);
+    } catch (saveError) {
+      console.error('Pre-deploy save error:', saveError);
+    }
+    
     try {
       const response = await fetchWithAuth(`${baseUrl}/api/sites/deploy/vercel`, {
         method: 'POST',
         body: JSON.stringify({ siteId: site.id }),
       });
 
+      const result = await response.json().catch(() => ({}));
+      
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to deploy');
+        // Provide more detailed error messages
+        let errorMessage = result.error || result.details || 'Failed to deploy';
+        if (errorMessage.includes('VERCEL_TOKEN') || errorMessage.includes('not configured')) {
+          errorMessage = 'Vercel is not configured. Please contact support to enable publishing.';
+        } else if (errorMessage.includes('No website files')) {
+          errorMessage = 'No website content found. Please add content before publishing.';
+        } else if (errorMessage.includes('GitHub')) {
+          errorMessage = 'GitHub connection issue. Your site can still be downloaded for self-hosting.';
+        }
+        throw new Error(errorMessage);
       }
-
-      const result = await response.json();
       
       toast({
         title: "🚀 Published!",
@@ -1390,7 +1406,7 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       console.error('Deploy error:', error);
       toast({
         title: "Deployment Failed",
-        description: error.message || "Failed to publish website",
+        description: error.message || "Failed to publish website. Try downloading instead.",
         variant: "destructive",
       });
     } finally {
