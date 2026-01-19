@@ -186,13 +186,23 @@ function getVisualEditorScript(): string {
   let dragStart = { x: 0, y: 0 };
   let elementStart = { x: 0, y: 0, width: 0, height: 0 };
   let resizeHandle = null;
+  let dropIndicator = null;
+  let dragClone = null;
+  let dropTarget = null;
+  let dropPosition = null; // 'before' or 'after'
   
   // Create selection overlay
   function createOverlay() {
     overlay = document.createElement('div');
     overlay.id = 'avallon-selection-overlay';
-    overlay.style.cssText = 'position:fixed;pointer-events:none;border:2px solid #6366f1;background:rgba(99,102,241,0.1);z-index:99999;transition:all 0.15s ease;display:none;';
+    overlay.style.cssText = 'position:absolute;pointer-events:none;border:2px solid #6366f1;background:rgba(99,102,241,0.1);z-index:99999;transition:all 0.1s ease;display:none;';
     document.body.appendChild(overlay);
+    
+    // Create drop indicator line
+    dropIndicator = document.createElement('div');
+    dropIndicator.id = 'avallon-drop-indicator';
+    dropIndicator.style.cssText = 'position:absolute;background:#6366f1;z-index:100001;display:none;pointer-events:none;border-radius:2px;';
+    document.body.appendChild(dropIndicator);
     
     // Create resize handles
     const handlePositions = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
@@ -200,11 +210,24 @@ function getVisualEditorScript(): string {
       const handle = document.createElement('div');
       handle.className = 'avallon-handle avallon-handle-' + pos;
       handle.dataset.position = pos;
-      handle.style.cssText = 'position:fixed;width:10px;height:10px;background:#6366f1;border:2px solid white;border-radius:2px;z-index:100000;cursor:' + getCursor(pos) + ';display:none;box-shadow:0 2px 4px rgba(0,0,0,0.2);';
+      handle.style.cssText = 'position:absolute;width:10px;height:10px;background:#6366f1;border:2px solid white;border-radius:2px;z-index:100000;cursor:' + getCursor(pos) + ';display:none;box-shadow:0 2px 4px rgba(0,0,0,0.2);';
       handle.addEventListener('mousedown', startResize);
       document.body.appendChild(handle);
       handles.push(handle);
     });
+  }
+  
+  // Get absolute position (accounts for scroll)
+  function getAbsoluteRect(el) {
+    const rect = el.getBoundingClientRect();
+    return {
+      left: rect.left + window.scrollX,
+      top: rect.top + window.scrollY,
+      right: rect.right + window.scrollX,
+      bottom: rect.bottom + window.scrollY,
+      width: rect.width,
+      height: rect.height
+    };
   }
   
   function getCursor(pos) {
@@ -214,7 +237,7 @@ function getVisualEditorScript(): string {
   
   function updateOverlay(el) {
     if (!overlay || !el) return;
-    const rect = el.getBoundingClientRect();
+    const rect = getAbsoluteRect(el);
     overlay.style.left = rect.left + 'px';
     overlay.style.top = rect.top + 'px';
     overlay.style.width = rect.width + 'px';
@@ -357,10 +380,25 @@ function getVisualEditorScript(): string {
   
   function startDrag(e) {
     if (!selectedElement || isResizing) return;
+    
+    // Don't drag non-movable elements
+    const tag = selectedElement.tagName.toLowerCase();
+    if (tag === 'html' || tag === 'body' || tag === 'head') return;
+    
     isDragging = true;
     dragStart = { x: e.clientX, y: e.clientY };
     const rect = selectedElement.getBoundingClientRect();
     elementStart = { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+    
+    // Create drag clone for visual feedback
+    dragClone = selectedElement.cloneNode(true);
+    dragClone.id = 'avallon-drag-clone';
+    dragClone.style.cssText = 'position:fixed;pointer-events:none;opacity:0.7;z-index:100002;width:' + rect.width + 'px;left:' + rect.left + 'px;top:' + rect.top + 'px;transform:scale(0.95);box-shadow:0 10px 40px rgba(0,0,0,0.3);';
+    document.body.appendChild(dragClone);
+    
+    // Dim the original
+    selectedElement.style.opacity = '0.3';
+    
     e.preventDefault();
   }
   
@@ -376,11 +414,53 @@ function getVisualEditorScript(): string {
   }
   
   function handleMouseMove(e) {
-    if (isDragging && selectedElement) {
-      // For now, just update visual position - actual position change on mouseup
-      const dx = e.clientX - dragStart.x;
-      const dy = e.clientY - dragStart.y;
-      // Visual feedback only
+    if (isDragging && selectedElement && dragClone) {
+      // Move the drag clone
+      dragClone.style.left = (e.clientX - elementStart.width / 2) + 'px';
+      dragClone.style.top = (e.clientY - 20) + 'px';
+      
+      // Find potential drop target
+      dragClone.style.display = 'none'; // Hide clone to get element underneath
+      const elementBelow = document.elementFromPoint(e.clientX, e.clientY);
+      dragClone.style.display = 'block';
+      
+      if (elementBelow && elementBelow !== selectedElement && !elementBelow.id?.startsWith('avallon-') && !elementBelow.className?.includes?.('avallon-')) {
+        // Find the nearest sibling-level element
+        let target = elementBelow;
+        
+        // Skip text nodes and inline elements, find block-level siblings
+        while (target && target !== document.body) {
+          const display = window.getComputedStyle(target).display;
+          if (display === 'block' || display === 'flex' || display === 'grid' || target.tagName.toLowerCase() === 'li' || target.tagName.toLowerCase() === 'section' || target.tagName.toLowerCase() === 'div') {
+            break;
+          }
+          target = target.parentElement;
+        }
+        
+        if (target && target !== selectedElement && target !== document.body && target !== document.documentElement) {
+          dropTarget = target;
+          
+          // Determine drop position (before or after)
+          const targetRect = target.getBoundingClientRect();
+          const mouseY = e.clientY;
+          const middleY = targetRect.top + targetRect.height / 2;
+          dropPosition = mouseY < middleY ? 'before' : 'after';
+          
+          // Show drop indicator
+          const absRect = getAbsoluteRect(target);
+          if (dropPosition === 'before') {
+            dropIndicator.style.cssText = 'position:absolute;background:#6366f1;z-index:100001;display:block;pointer-events:none;border-radius:2px;left:' + absRect.left + 'px;top:' + (absRect.top - 2) + 'px;width:' + absRect.width + 'px;height:4px;';
+          } else {
+            dropIndicator.style.cssText = 'position:absolute;background:#6366f1;z-index:100001;display:block;pointer-events:none;border-radius:2px;left:' + absRect.left + 'px;top:' + (absRect.bottom - 2) + 'px;width:' + absRect.width + 'px;height:4px;';
+          }
+        } else {
+          dropTarget = null;
+          dropIndicator.style.display = 'none';
+        }
+      } else {
+        dropTarget = null;
+        dropIndicator.style.display = 'none';
+      }
     }
     
     if (isResizing && selectedElement && resizeHandle) {
@@ -403,6 +483,50 @@ function getVisualEditorScript(): string {
   }
   
   function handleMouseUp(e) {
+    if (isDragging && selectedElement) {
+      // Restore original element opacity
+      selectedElement.style.opacity = '';
+      
+      // Remove drag clone
+      if (dragClone) {
+        dragClone.remove();
+        dragClone = null;
+      }
+      
+      // Hide drop indicator
+      if (dropIndicator) {
+        dropIndicator.style.display = 'none';
+      }
+      
+      // Perform the drop if we have a valid target
+      if (dropTarget && dropPosition) {
+        try {
+          if (dropPosition === 'before') {
+            dropTarget.parentNode.insertBefore(selectedElement, dropTarget);
+          } else {
+            dropTarget.parentNode.insertBefore(selectedElement, dropTarget.nextSibling);
+          }
+          
+          // Update overlay to new position
+          updateOverlay(selectedElement);
+          
+          // Notify parent that element was moved
+          window.parent.postMessage({ 
+            type: 'elementMoved', 
+            data: { 
+              xpath: getXPath(selectedElement),
+              message: 'Element moved successfully'
+            } 
+          }, '*');
+        } catch (err) {
+          console.error('Failed to move element:', err);
+        }
+      }
+      
+      dropTarget = null;
+      dropPosition = null;
+    }
+    
     if (isResizing && selectedElement) {
       const styles = getComputedStyles(selectedElement);
       window.parent.postMessage({ 
@@ -607,11 +731,11 @@ function getVisualEditorScript(): string {
     if (!hoverOverlay) {
       hoverOverlay = document.createElement('div');
       hoverOverlay.id = 'avallon-hover-overlay';
-      hoverOverlay.style.cssText = 'position:fixed;pointer-events:none;border:1px dashed #6366f1;background:rgba(99,102,241,0.05);z-index:99998;transition:all 0.1s ease;';
+      hoverOverlay.style.cssText = 'position:absolute;pointer-events:none;border:1px dashed #6366f1;background:rgba(99,102,241,0.05);z-index:99998;transition:all 0.1s ease;';
       document.body.appendChild(hoverOverlay);
     }
     
-    const rect = e.target.getBoundingClientRect();
+    const rect = getAbsoluteRect(e.target);
     hoverOverlay.style.left = rect.left + 'px';
     hoverOverlay.style.top = rect.top + 'px';
     hoverOverlay.style.width = rect.width + 'px';
@@ -627,6 +751,24 @@ function getVisualEditorScript(): string {
   
   document.addEventListener('mousemove', handleMouseMove);
   document.addEventListener('mouseup', handleMouseUp);
+  
+  // Scroll listener - update overlay position when scrolling
+  window.addEventListener('scroll', function() {
+    if (selectedElement && !isDragging) {
+      updateOverlay(selectedElement);
+    }
+    // Hide hover overlay on scroll
+    if (hoverOverlay) {
+      hoverOverlay.style.display = 'none';
+    }
+  }, true);
+  
+  // Also update on any scroll within the document (for nested scrollable elements)
+  document.addEventListener('scroll', function(e) {
+    if (selectedElement && !isDragging) {
+      updateOverlay(selectedElement);
+    }
+  }, true);
   
   // Initialize
   createOverlay();
