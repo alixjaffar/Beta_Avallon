@@ -88,7 +88,7 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
   onMultiPageImport,
   isLight = false,
 }) => {
-  const [activeTab, setActiveTab] = useState<'paste' | 'url'>('url'); // Default to URL tab
+  const [activeTab, setActiveTab] = useState<'paste' | 'url' | 'folder'>('url'); // Default to URL tab
   const [pastedContent, setPastedContent] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [pageName, setPageName] = useState('index.html');
@@ -98,6 +98,10 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  
+  // Folder upload state
+  const [uploadedFiles, setUploadedFiles] = useState<Array<{ name: string; content: string; type: string }>>([]);
   
   // Multi-page import state
   const [step, setStep] = useState<'input' | 'selectPages'>('input');
@@ -205,7 +209,7 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
       }
 
       onImport(finalHtml, pageName);
-      handleClose();
+        handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to import code');
     } finally {
@@ -415,6 +419,189 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
     }
   };
 
+  // Handle folder/multiple file upload
+  const handleFolderUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsLoading(true);
+    setError(null);
+    setLoadingStatus('Reading files...');
+
+    try {
+      const fileContents: Array<{ name: string; content: string; type: string }> = [];
+      
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        // Only process text-based files
+        if (file.type.startsWith('text/') || 
+            file.name.endsWith('.html') || 
+            file.name.endsWith('.htm') ||
+            file.name.endsWith('.css') || 
+            file.name.endsWith('.js') ||
+            file.name.endsWith('.jsx') ||
+            file.name.endsWith('.ts') ||
+            file.name.endsWith('.tsx') ||
+            file.name.endsWith('.json') ||
+            file.name.endsWith('.svg') ||
+            file.name.endsWith('.md')) {
+          const content = await file.text();
+          // Get relative path from webkitRelativePath or just the name
+          const relativePath = (file as any).webkitRelativePath || file.name;
+          fileContents.push({
+            name: relativePath,
+            content,
+            type: file.type || getFileType(file.name),
+          });
+          setLoadingStatus(`Reading ${i + 1}/${files.length} files...`);
+        }
+      }
+
+      setUploadedFiles(fileContents);
+      setLoadingStatus('');
+      setIsLoading(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to read files');
+      setIsLoading(false);
+      setLoadingStatus('');
+    }
+  };
+
+  // Helper to detect file type
+  const getFileType = (filename: string): string => {
+    if (filename.endsWith('.html') || filename.endsWith('.htm')) return 'text/html';
+    if (filename.endsWith('.css')) return 'text/css';
+    if (filename.endsWith('.js') || filename.endsWith('.jsx')) return 'text/javascript';
+    if (filename.endsWith('.ts') || filename.endsWith('.tsx')) return 'text/typescript';
+    if (filename.endsWith('.json')) return 'application/json';
+    if (filename.endsWith('.svg')) return 'image/svg+xml';
+    return 'text/plain';
+  };
+
+  // Combine uploaded files into a single page
+  const handleFolderImport = () => {
+    if (uploadedFiles.length === 0) {
+      setError('No files uploaded');
+      return;
+    }
+
+    // Find the main HTML file (index.html or the only .html file)
+    let mainHtml = uploadedFiles.find(f => f.name.endsWith('index.html'));
+    if (!mainHtml) {
+      mainHtml = uploadedFiles.find(f => f.name.endsWith('.html') || f.name.endsWith('.htm'));
+    }
+
+    // Collect all CSS and JS
+    const cssFiles = uploadedFiles.filter(f => f.name.endsWith('.css'));
+    const jsFiles = uploadedFiles.filter(f => 
+      f.name.endsWith('.js') || f.name.endsWith('.jsx') || 
+      f.name.endsWith('.ts') || f.name.endsWith('.tsx')
+    );
+
+    let finalHtml = '';
+
+    if (mainHtml) {
+      // We have an HTML file - inject CSS and JS into it
+      finalHtml = mainHtml.content;
+      
+      // Inject CSS into <head>
+      if (cssFiles.length > 0) {
+        const cssContent = cssFiles.map(f => 
+          `\n/* === ${f.name} === */\n${f.content}`
+        ).join('\n');
+        
+        if (finalHtml.includes('</head>')) {
+          finalHtml = finalHtml.replace('</head>', `<style>\n${cssContent}\n</style>\n</head>`);
+        } else if (finalHtml.includes('<body')) {
+          finalHtml = finalHtml.replace('<body', `<style>\n${cssContent}\n</style>\n<body`);
+        }
+      }
+
+      // Inject JS before </body>
+      if (jsFiles.length > 0) {
+        const jsContent = jsFiles.map(f => 
+          `\n// === ${f.name} ===\n${f.content}`
+        ).join('\n');
+        
+        if (finalHtml.includes('</body>')) {
+          finalHtml = finalHtml.replace('</body>', `<script>\n${jsContent}\n</script>\n</body>`);
+        } else {
+          finalHtml += `\n<script>\n${jsContent}\n</script>`;
+        }
+      }
+    } else {
+      // No HTML file - create one from scratch
+      const cssContent = cssFiles.map(f => 
+        `/* === ${f.name} === */\n${f.content}`
+      ).join('\n\n');
+      
+      const jsContent = jsFiles.map(f => 
+        `// === ${f.name} ===\n${f.content}`
+      ).join('\n\n');
+
+      // Check if there's a React/component-like structure
+      const hasReact = jsFiles.some(f => 
+        f.content.includes('import React') || 
+        f.content.includes('from "react"') ||
+        f.content.includes("from 'react'")
+      );
+
+      if (hasReact) {
+        // Create a React-ready HTML template
+        finalHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sales Agent</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+${cssContent}
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+${jsContent}
+
+// Auto-render if there's an App component
+if (typeof App !== 'undefined') {
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(<App />);
+}
+  </script>
+</body>
+</html>`;
+      } else {
+        // Create a standard HTML template
+        finalHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sales Agent</title>
+  <style>
+${cssContent}
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+${jsContent}
+  </script>
+</body>
+</html>`;
+      }
+    }
+
+    // Import as a new page
+    const fileName = pageName || 'sales-agent.html';
+    onImport(finalHtml, fileName);
+    handleClose();
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className={`w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col ${
@@ -494,9 +681,9 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
             </div>
           ) : (
             <>
-              {/* Tabs - Simplified to just URL and Code */}
+              {/* Tabs - URL, Code, and Folder */}
           <div className={`flex gap-1 p-1 rounded-lg mb-6 ${isLight ? 'bg-slate-100' : 'bg-panel-border'}`}>
-            {(['url', 'paste'] as const).map((tab) => (
+            {(['url', 'paste', 'folder'] as const).map((tab) => (
                 <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -510,6 +697,7 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
                 >
                 {tab === 'url' && '🌐 From URL'}
                 {tab === 'paste' && '📋 Paste Code'}
+                {tab === 'folder' && '📁 Upload Files'}
                 </button>
             ))}
               </div>
@@ -564,13 +752,13 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
                   placeholder="Paste any code: HTML, CSS, JavaScript, or a mix of all three!&#10;&#10;Examples:&#10;• Full HTML document&#10;• HTML snippet (will be wrapped in a page)&#10;• <style>...</style> and <script>...</script> tags"
                   rows={12}
                   className={`w-full px-4 py-3 rounded-lg border text-sm font-mono transition-colors resize-none ${
-                  isLight 
+                    isLight 
                       ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-primary' 
                       : 'bg-surface-dark border-panel-border text-white placeholder-gray-500 focus:border-primary'
                   }`}
                 />
               </div>
-              
+
               {/* Smart Detection Info */}
               <div className={`p-3 rounded-lg text-sm ${isLight ? 'bg-blue-50 text-blue-700' : 'bg-blue-500/10 text-blue-400'}`}>
                 <p className="font-medium">✨ Smart Code Detection</p>
@@ -581,6 +769,88 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
             </div>
           )}
 
+          {activeTab === 'folder' && (
+            <div className="space-y-4">
+              {/* Hidden folder input */}
+              <input
+                type="file"
+                ref={folderInputRef}
+                onChange={handleFolderUpload}
+                multiple
+                // @ts-ignore - webkitdirectory is not standard
+                webkitdirectory=""
+                className="hidden"
+              />
+              
+              {/* Upload Area */}
+              <div
+                onClick={() => folderInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all hover:border-primary ${
+                  isLight 
+                    ? 'border-slate-300 bg-slate-50 hover:bg-slate-100' 
+                    : 'border-panel-border bg-surface-dark hover:bg-panel-border/50'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[48px] text-primary mb-3 block">folder_open</span>
+                <p className={`text-lg font-medium mb-1 ${isLight ? 'text-slate-700' : 'text-white'}`}>
+                  Click to select a folder
+                </p>
+                <p className={`text-sm ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
+                  Upload your sales agent code, widget, or any multi-file project
+                </p>
+                <p className={`text-xs mt-2 ${isLight ? 'text-slate-400' : 'text-gray-500'}`}>
+                  Supports: HTML, CSS, JS, JSX, TS, TSX, JSON, SVG
+                </p>
+              </div>
+
+              {/* File List */}
+              {uploadedFiles.length > 0 && (
+                <div className={`rounded-lg border overflow-hidden ${isLight ? 'border-slate-200' : 'border-panel-border'}`}>
+                  <div className={`px-4 py-2 text-sm font-medium ${isLight ? 'bg-slate-100 text-slate-700' : 'bg-panel-border text-gray-300'}`}>
+                    📁 {uploadedFiles.length} files selected
+                  </div>
+                  <div className="max-h-[200px] overflow-y-auto">
+                    {uploadedFiles.map((file, idx) => (
+                      <div
+                        key={idx}
+                        className={`px-4 py-2 text-sm flex items-center gap-2 border-t ${
+                          isLight ? 'border-slate-100 text-slate-600' : 'border-panel-border/50 text-gray-400'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[16px]">
+                          {file.name.endsWith('.html') ? 'html' :
+                           file.name.endsWith('.css') ? 'css' :
+                           file.name.endsWith('.js') || file.name.endsWith('.jsx') ? 'javascript' :
+                           file.name.endsWith('.ts') || file.name.endsWith('.tsx') ? 'code' :
+                           'description'}
+                        </span>
+                        <span className="truncate">{file.name}</span>
+                        <span className={`ml-auto text-xs ${isLight ? 'text-slate-400' : 'text-gray-500'}`}>
+                          {(file.content.length / 1024).toFixed(1)} KB
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Info Box */}
+              <div className={`p-4 rounded-lg text-sm ${isLight ? 'bg-purple-50 text-purple-700' : 'bg-purple-500/10 text-purple-400'}`}>
+                <div className="flex items-start gap-2">
+                  <span className="material-symbols-outlined text-[18px] shrink-0">smart_toy</span>
+                  <div>
+                    <p className="font-medium mb-1">🤖 Sales Agent / Widget Upload</p>
+                    <ul className="list-disc list-inside space-y-1 text-xs opacity-80">
+                      <li>Upload your complete code folder</li>
+                      <li>Auto-detects HTML, CSS, and JS files</li>
+                      <li>Combines everything into a single page</li>
+                      <li>Supports React/JSX components</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Page Name */}
           <div className="mt-6">
@@ -741,19 +1011,30 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
                   Cancel
                 </button>
                 <button
-                  onClick={activeTab === 'paste' ? handlePasteImport : handleUrlImport}
-                  disabled={isLoading || (activeTab === 'paste' && !pastedContent.trim()) || (activeTab === 'url' && !urlInput.trim())}
+                  onClick={
+                    activeTab === 'paste' ? handlePasteImport : 
+                    activeTab === 'folder' ? handleFolderImport : 
+                    handleUrlImport
+                  }
+                  disabled={
+                    isLoading || 
+                    (activeTab === 'paste' && !pastedContent.trim()) || 
+                    (activeTab === 'url' && !urlInput.trim()) ||
+                    (activeTab === 'folder' && uploadedFiles.length === 0)
+                  }
                   className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 min-w-[120px] justify-center"
                 >
                   {isLoading ? (
                     <>
                       <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
-                      Cloning...
+                      {activeTab === 'folder' ? 'Processing...' : 'Cloning...'}
                     </>
                   ) : (
                     <>
-                      <span className="material-symbols-outlined text-[18px]">rocket_launch</span>
-                      Clone Website
+                      <span className="material-symbols-outlined text-[18px]">
+                        {activeTab === 'folder' ? 'upload_file' : 'rocket_launch'}
+                      </span>
+                      {activeTab === 'folder' ? 'Import Files' : 'Clone Website'}
                     </>
                   )}
                 </button>
