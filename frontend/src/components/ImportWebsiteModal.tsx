@@ -88,7 +88,7 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
   onMultiPageImport,
   isLight = false,
 }) => {
-  const [activeTab, setActiveTab] = useState<'paste' | 'url' | 'file'>('url'); // Default to URL tab
+  const [activeTab, setActiveTab] = useState<'paste' | 'url' | 'file' | 'combine'>('url'); // Default to URL tab
   const [pastedContent, setPastedContent] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [pageName, setPageName] = useState('index.html');
@@ -98,6 +98,12 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Combine Files state
+  const [combineHtml, setCombineHtml] = useState('');
+  const [combineCss, setCombineCss] = useState('');
+  const [combineJs, setCombineJs] = useState('');
+  const [combineTitle, setCombineTitle] = useState('Sales Agent');
   
   // Multi-page import state
   const [step, setStep] = useState<'input' | 'selectPages'>('input');
@@ -162,6 +168,76 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
       handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to import HTML');
+    } finally {
+      setIsLoading(false);
+      setLoadingStatus('');
+    }
+  };
+
+  /**
+   * COMBINE FILES - Merge HTML, CSS, JS into a single page
+   */
+  const handleCombineImport = async () => {
+    if (!combineHtml.trim()) {
+      setError('Please provide at least the HTML structure');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setLoadingStatus('Combining files...');
+
+    try {
+      // Check if HTML already includes full document structure
+      const hasFullHtml = combineHtml.toLowerCase().includes('<!doctype') || 
+                          combineHtml.toLowerCase().includes('<html');
+      
+      let combinedHtml: string;
+      
+      if (hasFullHtml) {
+        // User provided full HTML, inject CSS and JS
+        combinedHtml = combineHtml;
+        
+        // Inject CSS into head
+        if (combineCss.trim()) {
+          const styleTag = `<style>\n${combineCss}\n</style>`;
+          if (combinedHtml.includes('</head>')) {
+            combinedHtml = combinedHtml.replace('</head>', `${styleTag}\n</head>`);
+          } else if (combinedHtml.includes('<body')) {
+            combinedHtml = combinedHtml.replace('<body', `${styleTag}\n<body`);
+          }
+        }
+        
+        // Inject JS before closing body
+        if (combineJs.trim()) {
+          const scriptTag = `<script>\n${combineJs}\n</script>`;
+          if (combinedHtml.includes('</body>')) {
+            combinedHtml = combinedHtml.replace('</body>', `${scriptTag}\n</body>`);
+      } else {
+            combinedHtml += scriptTag;
+          }
+        }
+      } else {
+        // User provided body content only, wrap in full HTML
+        combinedHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${combineTitle || 'Sales Agent'}</title>
+  ${combineCss.trim() ? `<style>\n${combineCss}\n  </style>` : ''}
+</head>
+<body>
+  ${combineHtml}
+  ${combineJs.trim() ? `<script>\n${combineJs}\n  </script>` : ''}
+</body>
+</html>`;
+      }
+      
+      onImport(combinedHtml, pageName);
+      handleClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to combine files');
     } finally {
       setIsLoading(false);
       setLoadingStatus('');
@@ -244,19 +320,19 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
       // Detect internal pages if multi-page import is enabled
       if (options.importMultiplePages && onMultiPageImport && allPages.length > 0) {
         setFirstPageHtml(data.html);
-        setSourceUrl(normalizedUrl);
+          setSourceUrl(normalizedUrl);
         setDetectedPages(allPages);
         setSelectedPages(new Set(allPages.slice(0, 5).map(p => p.url)));
-        setStep('selectPages');
-        setIsLoading(false);
-        setLoadingStatus('');
-        return;
+          setStep('selectPages');
+          setIsLoading(false);
+          setLoadingStatus('');
+          return;
       }
 
       // Single page import
       console.log('%c✓ Playwright import complete!', 'color: #22c55e; font-weight: bold;');
       onImport(data.html, pageName);
-      handleClose();
+        handleClose();
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to import from URL');
@@ -340,7 +416,7 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
     }
     setSelectedPages(newSelected);
   };
-
+  
   const handleFileImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -351,7 +427,7 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
 
     try {
       const content = await file.text();
-      
+
       if (!isHTML(content)) {
         setError('The file does not contain valid HTML.');
         setIsLoading(false);
@@ -360,7 +436,7 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
 
       // For file imports, use directly
       onImport(content, file.name);
-      handleClose();
+        handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to read file');
     } finally {
@@ -377,7 +453,7 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
         {/* Header */}
         <div className={`px-6 py-4 border-b ${isLight ? 'border-slate-200' : 'border-panel-border'}`}>
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3">
               <span className="material-symbols-outlined text-primary text-[28px]">download</span>
               <div>
                 <h2 className={`text-xl font-semibold ${isLight ? 'text-slate-900' : 'text-white'}`}>
@@ -387,15 +463,15 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
                   Import any website with advanced scraping
                 </p>
               </div>
-            </div>
-            <button
-              onClick={handleClose}
+          </div>
+          <button 
+            onClick={handleClose}
               className={`p-2 rounded-lg transition-colors ${
                 isLight ? 'hover:bg-slate-100 text-slate-500' : 'hover:bg-panel-border text-gray-400'
               }`}
-            >
-              <span className="material-symbols-outlined">close</span>
-            </button>
+          >
+            <span className="material-symbols-outlined">close</span>
+          </button>
           </div>
         </div>
 
@@ -406,8 +482,8 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
               <div className="flex items-start gap-2">
                 <span className="material-symbols-outlined text-red-500 text-[20px] shrink-0">error</span>
                 <p className="text-sm text-red-500">{error}</p>
-              </div>
-            </div>
+                  </div>
+                </div>
           )}
 
           {step === 'selectPages' ? (
@@ -448,24 +524,33 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
             </div>
           ) : (
             <>
-          {/* Tabs */}
+              {/* Tabs */}
           <div className={`flex gap-1 p-1 rounded-lg mb-6 ${isLight ? 'bg-slate-100' : 'bg-panel-border'}`}>
-            {(['url', 'paste', 'file'] as const).map((tab) => (
-              <button
+            {(['url', 'paste', 'combine', 'file'] as const).map((tab) => (
+                <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                onClick={() => {
+                  setActiveTab(tab);
+                  // Set sensible default page name for combine tab
+                  if (tab === 'combine' && pageName === 'index.html') {
+                    setPageName('sales-agent.html');
+                  } else if (tab !== 'combine' && pageName === 'sales-agent.html') {
+                    setPageName('index.html');
+                  }
+                }}
+                className={`flex-1 px-2 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
                   activeTab === tab
-                    ? 'bg-primary text-white'
+                      ? 'bg-primary text-white'
                     : isLight
                       ? 'text-slate-600 hover:text-slate-900'
                       : 'text-gray-400 hover:text-white'
                 }`}
               >
-                {tab === 'url' && '🌐 From URL'}
-                {tab === 'paste' && '📋 Paste HTML'}
-                {tab === 'file' && '📁 Upload File'}
-              </button>
+                {tab === 'url' && '🌐 URL'}
+                {tab === 'paste' && '📋 HTML'}
+                {tab === 'combine' && '🔗 Combine'}
+                {tab === 'file' && '📁 File'}
+                </button>
             ))}
           </div>
 
@@ -488,7 +573,7 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
                   onKeyDown={(e) => e.key === 'Enter' && handleUrlImport()}
                 />
               </div>
-              
+
               {/* Scraper Info */}
               <div className={`p-4 rounded-lg text-sm ${isLight ? 'bg-emerald-50 text-emerald-700' : 'bg-emerald-500/10 text-emerald-400'}`}>
                 <div className="flex items-start gap-2">
@@ -518,6 +603,83 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
                   onChange={(e) => setPastedContent(e.target.value)}
                   placeholder="<!DOCTYPE html>&#10;<html>&#10;  <head>...</head>&#10;  <body>...</body>&#10;</html>"
                   rows={10}
+                  className={`w-full px-4 py-3 rounded-lg border text-sm font-mono transition-colors resize-none ${
+                    isLight 
+                      ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-primary' 
+                      : 'bg-surface-dark border-panel-border text-white placeholder-gray-500 focus:border-primary'
+                  }`}
+                />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'combine' && (
+            <div className="space-y-4">
+              <div className={`p-3 rounded-lg text-sm ${isLight ? 'bg-blue-50 text-blue-700' : 'bg-blue-500/10 text-blue-400'}`}>
+                <p className="font-medium">🔗 Combine Multiple Files</p>
+                <p className="text-xs mt-1 opacity-80">Paste your HTML, CSS, and JavaScript separately. They'll be combined into a single page.</p>
+              </div>
+              
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
+                  Page Title
+                </label>
+                <input
+                  type="text"
+                  value={combineTitle}
+                  onChange={(e) => setCombineTitle(e.target.value)}
+                  placeholder="Sales Agent"
+                  className={`w-full px-4 py-2 rounded-lg border text-sm transition-colors ${
+                    isLight 
+                      ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-primary' 
+                      : 'bg-surface-dark border-panel-border text-white placeholder-gray-500 focus:border-primary'
+                  }`}
+                />
+              </div>
+
+                  <div>
+                <label className={`block text-sm font-medium mb-2 ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
+                  HTML Structure <span className="text-xs opacity-60">(body content only, or full HTML)</span>
+                </label>
+                <textarea
+                  value={combineHtml}
+                  onChange={(e) => setCombineHtml(e.target.value)}
+                  placeholder="<div class='chat-container'>&#10;  <div id='chat-widget'></div>&#10;</div>"
+                  rows={5}
+                  className={`w-full px-4 py-3 rounded-lg border text-sm font-mono transition-colors resize-none ${
+                    isLight 
+                      ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-primary' 
+                      : 'bg-surface-dark border-panel-border text-white placeholder-gray-500 focus:border-primary'
+                  }`}
+                />
+                  </div>
+              
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
+                  CSS Styles <span className="text-xs opacity-60">(optional)</span>
+                </label>
+                <textarea
+                  value={combineCss}
+                  onChange={(e) => setCombineCss(e.target.value)}
+                  placeholder=".chat-container {&#10;  max-width: 800px;&#10;  margin: 0 auto;&#10;}"
+                  rows={4}
+                  className={`w-full px-4 py-3 rounded-lg border text-sm font-mono transition-colors resize-none ${
+                    isLight 
+                      ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-primary' 
+                      : 'bg-surface-dark border-panel-border text-white placeholder-gray-500 focus:border-primary'
+                  }`}
+                />
+                </div>
+              
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
+                  JavaScript <span className="text-xs opacity-60">(optional)</span>
+                </label>
+                <textarea
+                  value={combineJs}
+                  onChange={(e) => setCombineJs(e.target.value)}
+                  placeholder="// Your JavaScript code&#10;document.addEventListener('DOMContentLoaded', function() {&#10;  // Initialize widget&#10;});"
+                  rows={4}
                   className={`w-full px-4 py-3 rounded-lg border text-sm font-mono transition-colors resize-none ${
                     isLight 
                       ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-primary' 
@@ -717,8 +879,8 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
                   Cancel
                 </button>
                 <button
-                  onClick={activeTab === 'paste' ? handlePasteImport : handleUrlImport}
-                  disabled={isLoading || (activeTab === 'paste' && !pastedContent.trim()) || (activeTab === 'url' && !urlInput.trim())}
+                  onClick={activeTab === 'paste' ? handlePasteImport : activeTab === 'combine' ? handleCombineImport : handleUrlImport}
+                  disabled={isLoading || (activeTab === 'paste' && !pastedContent.trim()) || (activeTab === 'url' && !urlInput.trim()) || (activeTab === 'combine' && !combineHtml.trim())}
                   className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 min-w-[120px] justify-center"
                 >
                   {isLoading ? (
