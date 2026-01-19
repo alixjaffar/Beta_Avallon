@@ -701,14 +701,28 @@ LOVABLE-LEVEL QUALITY BAR (MUST FOLLOW):
     
     if (isModification) {
       // =====================================================
-      // WEBSITE EDITOR MODE - Make targeted changes ONLY
+      // WEBSITE EDITOR MODE - PRESERVE & EXTEND EXISTING CODE
       // =====================================================
       
+      // Extract CSS from existing index.html to ensure style consistency
+      const indexHtml = currentCode?.['index.html'] || Object.values(currentCode || {})[0] || '';
+      const cssMatch = indexHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/gi);
+      const existingCSS = cssMatch ? cssMatch.join('\n') : '';
+      
+      // Extract header/nav from existing HTML
+      const headerMatch = indexHtml.match(/<header[^>]*>[\s\S]*?<\/header>/gi) || 
+                          indexHtml.match(/<nav[^>]*>[\s\S]*?<\/nav>/gi);
+      const existingHeader = headerMatch ? headerMatch[0] : '';
+      
+      // Extract footer from existing HTML
+      const footerMatch = indexHtml.match(/<footer[^>]*>[\s\S]*?<\/footer>/gi);
+      const existingFooter = footerMatch ? footerMatch[0] : '';
+      
       // Build modification prompt with STRICT preservation rules
-      let modificationPrompt = `🛠️ WEBSITE EDITOR MODE - NOT A GENERATOR 🛠️
+      let modificationPrompt = `⚠️ CRITICAL: YOU ARE EDITING AN IMPORTED/EXISTING WEBSITE - NOT GENERATING NEW ⚠️
 
-You are a SURGICAL CODE EDITOR. Your ONLY job is to make the EXACT change the user requested.
-You are NOT a website generator. You are NOT redesigning anything. You are making a TARGETED EDIT.
+The user has imported a website (or has an existing website) and wants to MODIFY it.
+You MUST preserve the EXACT look and feel of their existing site.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📋 USER'S EDIT REQUEST: "${originalPrompt}"
@@ -717,63 +731,64 @@ You are NOT a website generator. You are NOT redesigning anything. You are makin
 ${currentCodeContext}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚨 CRITICAL RULES - YOU MUST FOLLOW THESE EXACTLY:
+🎨 STYLE TEMPLATE - COPY THIS EXACTLY FOR ANY NEW PAGES:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1️⃣ PRESERVE EVERYTHING:
-   - Keep the EXACT same HTML structure
-   - Keep the EXACT same CSS styles
-   - Keep the EXACT same layout and sections
-   - Keep the EXACT same colors (unless user asks to change them)
-   - Keep the EXACT same fonts
-   - Keep the EXACT same images
-   - Keep the EXACT same navigation
-   - Keep the EXACT same footer
+${existingCSS ? `The existing CSS (MUST be copied verbatim to new pages):\n${existingCSS.substring(0, 15000)}` : ''}
 
-2️⃣ CHANGE ONLY WHAT USER ASKED:
-   - If user says "add multi-page" → Add navigation links and create additional pages
-   - If user says "change name" → Change ONLY the name text, nothing else
-   - If user says "change color" → Change ONLY that specific color
-   - If user says "add section" → Add section WITHOUT modifying existing sections
+${existingHeader ? `The existing header/navigation (MUST be copied to new pages):\n${existingHeader.substring(0, 3000)}` : ''}
+
+${existingFooter ? `The existing footer (MUST be copied to new pages):\n${existingFooter.substring(0, 3000)}` : ''}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚨 ABSOLUTE REQUIREMENTS - FAILURE TO FOLLOW = REJECTED OUTPUT:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1️⃣ FOR EXISTING PAGES (like index.html):
+   - Output the EXACT same HTML with ONLY the requested change
+   - Do NOT change colors, fonts, layout, or structure
+   - Do NOT remove or modify any existing sections
+   - Do NOT "improve" or "modernize" anything
+   - Keep ALL existing text content (unless user asked to change specific text)
+
+2️⃣ FOR NEW PAGES (if user requests adding a page):
+   - Copy the ENTIRE <style> block from index.html - DO NOT CREATE NEW STYLES
+   - Copy the EXACT same <header>/<nav> structure
+   - Copy the EXACT same <footer> structure
+   - Use the SAME color scheme (copy the CSS variables/colors exactly)
+   - Use the SAME fonts (copy the font-family declarations)
+   - Use the SAME layout patterns (same container widths, spacing, etc.)
+   - The new page should look like it's part of the SAME website
 
 3️⃣ OUTPUT FORMAT:
-   Return the COMPLETE modified HTML. For multi-page sites:
    === FILE: index.html ===
-   [complete HTML - preserve original design]
+   [The existing index.html with ONLY the requested modification]
    
-   === FILE: about.html ===
-   [complete HTML - MATCH the style of index.html exactly]
-   
-   (etc for each page)
-
-4️⃣ STYLE MATCHING FOR NEW PAGES:
-   When adding new pages, they MUST:
-   - Use the EXACT same CSS variables and colors from index.html
-   - Use the EXACT same navigation structure
-   - Use the EXACT same footer
-   - Use the EXACT same fonts and typography
-   - Feel like part of the SAME website
+   === FILE: newpage.html ===
+   [New page using COPIED styles from index.html]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-❌ FORBIDDEN ACTIONS:
+❌ ABSOLUTELY FORBIDDEN - DO NOT DO THESE:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Do NOT redesign the website
-- Do NOT change the color scheme (unless asked)
-- Do NOT change the layout structure (unless asked)
-- Do NOT remove existing sections
-- Do NOT change text content that wasn't mentioned
-- Do NOT "improve" or "enhance" anything not requested
-- Do NOT change the overall look and feel
-- Do NOT generate a fresh design
-- Do NOT interpret the request broadly
+- Creating a new design or color scheme
+- Changing the overall look and feel
+- Using different fonts than the existing site
+- Creating a different navigation structure
+- Making the new page look "modern" or "better" - it should match EXACTLY
+- Adding your own creative touches
+- Using a different CSS framework
+- Simplifying or removing existing CSS
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ YOUR TASK: Apply ONLY this edit: "${originalPrompt}"
+✅ YOUR TASK: "${originalPrompt}"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ${wantsStripe ? this.getStripeIntegrationInstructions() : ''}
 
-Now return the complete modified code with ONLY the requested change applied:`;
+IMPORTANT: The user imported this website because they LIKE how it looks. 
+They want to BUILD ON IT, not replace it. Return code that maintains their design.
+
+Now return the modified code:`;
       
       return modificationPrompt;
     }
@@ -1839,17 +1854,31 @@ Create beautiful, functional payment buttons that are ready to use!`;
   private buildCurrentCodeContext(currentCode: Record<string, string>): string {
     if (!currentCode || Object.keys(currentCode).length === 0) return '';
     
+    // Check if this looks like an imported website (has external CSS references or complex structure)
+    const indexHtml = currentCode['index.html'] || Object.values(currentCode)[0] || '';
+    const isImported = indexHtml.includes('https://') || 
+                       indexHtml.includes('url(') ||
+                       indexHtml.length > 10000;
+    
     let context = `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📄 EXISTING WEBSITE CODE - YOU MUST PRESERVE THIS DESIGN
+🚨🚨🚨 USER'S EXISTING WEBSITE - DO NOT REDESIGN 🚨🚨🚨
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-The code below is the user's CURRENT website. This is what they see right now.
-Your job is to make a SURGICAL EDIT - change ONLY what the user asked for.
+${isImported ? '⚠️ THIS IS AN IMPORTED WEBSITE - The user scraped/imported this from another site.' : ''}
+${isImported ? '⚠️ They LOVE how it looks and want to KEEP the exact same design.' : ''}
 
-⚠️ WARNING: If you change the design, colors, layout, or structure beyond
-what the user explicitly requested, the user will be frustrated and confused.
-Their website should look 99% the same after your edit.
+The code below is the user's CURRENT website. This is EXACTLY what they see now.
+DO NOT CHANGE THE DESIGN. DO NOT CREATE NEW STYLES. DO NOT "IMPROVE" IT.
+
+Your ONLY job: Make the SPECIFIC change the user requested, nothing more.
+
+If user wants a NEW PAGE:
+- COPY the entire <style> section from index.html
+- COPY the exact <header>/<nav> section
+- COPY the exact <footer> section
+- Use the SAME colors, fonts, and spacing
+- The new page MUST look like it belongs to THIS website
 
 `;
     
@@ -1864,13 +1893,13 @@ Their website should look 99% the same after your edit.
         ? htmlContent.substring(0, maxLength) + `\n<!-- ... [${htmlContent.length - maxLength} more characters truncated] ... -->`
         : htmlContent;
       
-      context += `\n=== CURRENT FILE: ${filename} ===\n\`\`\`html\n${truncatedHtml}\n\`\`\`\n`;
+      context += `\n=== EXISTING FILE: ${filename} (PRESERVE THIS DESIGN) ===\n\`\`\`html\n${truncatedHtml}\n\`\`\`\n`;
     });
     
     context += `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎯 PRESERVE: Colors, fonts, layout, sections, navigation, footer
-🎯 CHANGE: ONLY what the user explicitly requested above
+🔒 LOCKED - DO NOT CHANGE: Overall design, colors, fonts, layout
+✏️ ALLOWED TO CHANGE: ONLY what the user explicitly requested
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
     
