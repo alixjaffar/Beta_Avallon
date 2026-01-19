@@ -3,7 +3,7 @@ import { getStripeClient } from "@/lib/clients/stripe";
 import { namecheapRequest, isMockMode } from "@/lib/namecheap";
 import { logInfo, logError } from "@/lib/log";
 import { prisma } from "@/lib/db";
-import { PLAN_CREDITS } from "@/lib/billing/credits";
+import { PLAN_CREDITS, addCredits } from "@/lib/billing/credits";
 import Stripe from "stripe";
 
 const corsHeaders = {
@@ -196,17 +196,25 @@ async function handleSubscriptionCheckout(session: Stripe.Checkout.Session) {
       },
     });
 
-    // Add credits to user account
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        credits: {
-          increment: credits,
+    // Add credits to user account (both database and file-based for compatibility)
+    try {
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          credits: {
+            increment: credits,
+          },
         },
-      },
-    });
+      });
+    } catch (dbError: any) {
+      logInfo('Database user update failed (user may not exist in db), using file-based credits', { userId, error: dbError.message });
+    }
+    
+    // Also add to file-based system (main credit system used by the app)
+    const userEmail = session.customer_email || session.metadata?.userEmail;
+    await addCredits(userId, credits, `Subscription activated: ${finalPlan} plan`, userEmail || undefined);
 
-    logInfo('Subscription activated', { userId, plan: finalPlan, creditsAdded: credits });
+    logInfo('Subscription activated and credits added', { userId, userEmail, plan: finalPlan, creditsAdded: credits });
   } catch (error: any) {
     logError('Failed to handle subscription checkout', error, { sessionId: session.id });
   }
@@ -233,55 +241,34 @@ async function handleCreditPurchase(session: Stripe.Checkout.Session) {
 
     logInfo('Processing credit purchase', { userId, userEmail, quantity, sessionId: session.id });
 
-    // Try to find user by ID first, then by email
-    let user = null;
-    if (userId) {
-      user = await prisma.user.findUnique({ where: { id: userId } });
-    }
-    if (!user && userEmail) {
-      user = await prisma.user.findUnique({ where: { email: userEmail } });
-    }
-
-    if (user) {
-      // Update user in database
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          credits: {
-            increment: quantity,
-          },
-        },
-      });
-      logInfo('Credits added to user account', { userId: user.id, creditsAdded: quantity, newTotal: user.credits + quantity });
+    // Use the unified addCredits function (handles both file and database)
+    const result = await addCredits(
+      userId || userEmail || 'unknown', 
+      quantity, 
+      'Credit purchase', 
+      userEmail || undefined
+    );
+    
+    if (result.success) {
+      logInfo('Credits added successfully', { userId, userEmail, creditsAdded: quantity, newBalance: result.newBalance });
     } else {
-      // Fallback: Update JSON file for users not in database
-      const fs = await import('fs');
-      const path = await import('path');
-      const creditsPath = path.join(process.cwd(), 'user-credits.json');
-      
-      let creditsData: Record<string, { credits: number; lastUpdated: string }> = {};
+      logError('Failed to add credits', new Error('addCredits returned false'), { userId, userEmail, quantity });
+    }
+
+    // Also try database update for users in the system
+    if (userId) {
       try {
-        if (fs.existsSync(creditsPath)) {
-          creditsData = JSON.parse(fs.readFileSync(creditsPath, 'utf-8'));
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (user) {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { credits: { increment: quantity } },
+          });
+          logInfo('Database credits also updated', { userId: user.id, creditsAdded: quantity });
         }
-      } catch {
-        creditsData = {};
+      } catch (dbError: any) {
+        logInfo('Database update skipped', { userId, error: dbError.message });
       }
-
-      const email = userEmail || userId;
-      if (!email) {
-        logError('Cannot add credits: missing email and userId', new Error('Missing identifier'), { userEmail, userId });
-        return;
-      }
-      
-      const currentCredits = creditsData[email]?.credits || 0;
-      creditsData[email] = {
-        credits: currentCredits + quantity,
-        lastUpdated: new Date().toISOString(),
-      };
-
-      fs.writeFileSync(creditsPath, JSON.stringify(creditsData, null, 2));
-      logInfo('Credits added to JSON file', { email, creditsAdded: quantity, newTotal: creditsData[email].credits });
     }
 
     logInfo('Credit purchase completed', { userId, userEmail, quantity });
@@ -388,14 +375,23 @@ async function handleInvoicePayment(invoice: Stripe.Invoice) {
     // Add monthly credits on renewal
     const credits = PLAN_CREDITS[dbSubscription.plan] || PLAN_CREDITS.pro;
 
-    await prisma.user.update({
-      where: { id: dbSubscription.userId },
-      data: {
-        credits: {
-          increment: credits,
+    // Update database
+    try {
+      await prisma.user.update({
+        where: { id: dbSubscription.userId },
+        data: {
+          credits: {
+            increment: credits,
+          },
         },
-      },
-    });
+      });
+    } catch (dbError: any) {
+      logInfo('Database user update failed on renewal', { userId: dbSubscription.userId, error: dbError.message });
+    }
+    
+    // Also add to file-based system
+    const userEmail = dbSubscription.user?.email;
+    await addCredits(dbSubscription.userId, credits, `Subscription renewal: ${dbSubscription.plan} plan`, userEmail || undefined);
 
     // Update subscription period
     const stripe = getStripeClient();

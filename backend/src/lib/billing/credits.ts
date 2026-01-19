@@ -326,6 +326,7 @@ export async function ensureUserHasCredits(
 
 /**
  * Initialize or update credits when user upgrades plan
+ * This ADDS credits to the user's existing balance (doesn't reset)
  */
 export async function initializeCreditsForPlan(
   userId: string,
@@ -333,7 +334,8 @@ export async function initializeCreditsForPlan(
   email?: string
 ): Promise<{ success: boolean; credits: number }> {
   const planCredits = getPlanCredits(plan);
-  const result = await setCredits(userId, planCredits, `Upgraded to ${plan} plan`, email);
+  // Use addCredits instead of setCredits to preserve existing credits
+  const result = await addCredits(userId, planCredits, `Upgraded to ${plan} plan`, email);
   return { success: result.success, credits: result.newBalance };
 }
 
