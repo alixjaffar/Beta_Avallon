@@ -198,6 +198,15 @@ function getVisualEditorScript(): string {
     overlay.style.cssText = 'position:absolute;pointer-events:none;border:2px solid #6366f1;background:rgba(99,102,241,0.1);z-index:99999;transition:all 0.1s ease;display:none;';
     document.body.appendChild(overlay);
     
+    // Create drag handle (shows at top of selection)
+    const dragHandle = document.createElement('div');
+    dragHandle.id = 'avallon-drag-handle';
+    dragHandle.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>';
+    dragHandle.style.cssText = 'position:absolute;width:28px;height:28px;background:#6366f1;border-radius:4px;z-index:100003;display:none;cursor:grab;pointer-events:auto;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+    dragHandle.addEventListener('mousedown', startDrag);
+    document.body.appendChild(dragHandle);
+    window.dragHandleEl = dragHandle;
+    
     // Create drop indicator line
     dropIndicator = document.createElement('div');
     dropIndicator.id = 'avallon-drop-indicator';
@@ -244,7 +253,14 @@ function getVisualEditorScript(): string {
     overlay.style.height = rect.height + 'px';
     overlay.style.display = 'block';
     
-    // Update handle positions
+    // Update drag handle position (top center)
+    if (window.dragHandleEl) {
+      window.dragHandleEl.style.left = (rect.left + rect.width/2 - 14) + 'px';
+      window.dragHandleEl.style.top = (rect.top - 36) + 'px';
+      window.dragHandleEl.style.display = 'flex';
+    }
+    
+    // Update resize handle positions
     const handleSize = 10;
     const positions = {
       nw: { left: rect.left - handleSize/2, top: rect.top - handleSize/2 },
@@ -269,6 +285,7 @@ function getVisualEditorScript(): string {
   
   function hideOverlay() {
     if (overlay) overlay.style.display = 'none';
+    if (window.dragHandleEl) window.dragHandleEl.style.display = 'none';
     handles.forEach(h => h.style.display = 'none');
   }
   
@@ -390,16 +407,26 @@ function getVisualEditorScript(): string {
     const rect = selectedElement.getBoundingClientRect();
     elementStart = { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
     
+    // Hide drag handle and overlay during drag
+    if (window.dragHandleEl) window.dragHandleEl.style.display = 'none';
+    if (overlay) overlay.style.display = 'none';
+    handles.forEach(h => h.style.display = 'none');
+    
     // Create drag clone for visual feedback
     dragClone = selectedElement.cloneNode(true);
     dragClone.id = 'avallon-drag-clone';
-    dragClone.style.cssText = 'position:fixed;pointer-events:none;opacity:0.7;z-index:100002;width:' + rect.width + 'px;left:' + rect.left + 'px;top:' + rect.top + 'px;transform:scale(0.95);box-shadow:0 10px 40px rgba(0,0,0,0.3);';
+    dragClone.style.cssText = 'position:fixed;pointer-events:none;opacity:0.8;z-index:100002;width:' + rect.width + 'px;max-width:300px;left:' + rect.left + 'px;top:' + rect.top + 'px;transform:scale(0.9);box-shadow:0 10px 40px rgba(99,102,241,0.4);border-radius:8px;overflow:hidden;';
     document.body.appendChild(dragClone);
     
     // Dim the original
     selectedElement.style.opacity = '0.3';
+    selectedElement.style.transition = 'opacity 0.2s';
+    
+    // Change cursor
+    document.body.style.cursor = 'grabbing';
     
     e.preventDefault();
+    e.stopPropagation();
   }
   
   function startResize(e) {
@@ -486,6 +513,10 @@ function getVisualEditorScript(): string {
     if (isDragging && selectedElement) {
       // Restore original element opacity
       selectedElement.style.opacity = '';
+      selectedElement.style.transition = '';
+      
+      // Restore cursor
+      document.body.style.cursor = '';
       
       // Remove drag clone
       if (dragClone) {
@@ -507,8 +538,18 @@ function getVisualEditorScript(): string {
             dropTarget.parentNode.insertBefore(selectedElement, dropTarget.nextSibling);
           }
           
+          // Highlight the moved element briefly
+          selectedElement.style.outline = '3px solid #22c55e';
+          selectedElement.style.outlineOffset = '2px';
+          setTimeout(() => {
+            selectedElement.style.outline = '';
+            selectedElement.style.outlineOffset = '';
+          }, 1500);
+          
           // Update overlay to new position
-          updateOverlay(selectedElement);
+          setTimeout(() => {
+            updateOverlay(selectedElement);
+          }, 50);
           
           // Notify parent that element was moved
           window.parent.postMessage({ 
@@ -520,7 +561,12 @@ function getVisualEditorScript(): string {
           }, '*');
         } catch (err) {
           console.error('Failed to move element:', err);
+          // Still show overlay
+          updateOverlay(selectedElement);
         }
+      } else {
+        // No drop target, just restore overlay
+        updateOverlay(selectedElement);
       }
       
       dropTarget = null;
@@ -614,13 +660,23 @@ function getVisualEditorScript(): string {
     }
     
     // Add similar element (smarter duplicate for cards/items)
-    if (e.data.type === 'addSimilar' && selectedElement) {
-      // Find the parent container (like a grid or flex container)
-      let container = selectedElement.parentElement;
+    if (e.data.type === 'addSimilar') {
+      // Find the element by xpath if passed, otherwise use selectedElement
       let template = selectedElement;
+      if (e.data.xpath && !template) {
+        template = getElementByXPath(e.data.xpath);
+      }
+      
+      if (!template) {
+        window.parent.postMessage({ type: 'error', data: { message: 'Could not find element to duplicate. Please re-select the element.' } }, '*');
+        return;
+      }
+      
+      // Find the parent container (like a grid or flex container)
+      let container = template.parentElement;
       
       // If we're in a carousel/slider, find the slides container
-      const carousel = selectedElement.closest('.swiper-wrapper, .slick-track, .carousel-inner, [class*="slider"], [class*="carousel"]');
+      const carousel = template.closest('.swiper-wrapper, .slick-track, .carousel-inner, [class*="slider"], [class*="carousel"]');
       if (carousel) {
         container = carousel;
       }
@@ -647,8 +703,8 @@ function getVisualEditorScript(): string {
         clone.style.outlineOffset = '';
       }, 3000);
       
-      // Insert at end of container
-      container.appendChild(clone);
+      // Insert after the template (not at end)
+      template.parentNode.insertBefore(clone, template.nextSibling);
       
       // Scroll to the new element
       clone.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -658,6 +714,16 @@ function getVisualEditorScript(): string {
       }, 100);
       
       window.parent.postMessage({ type: 'elementAdded', data: { xpath: getXPath(clone), message: 'New item added! Edit the content below.' } }, '*');
+    }
+    
+    // Helper to find element by xpath
+    function getElementByXPath(xpath) {
+      try {
+        const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+        return result.singleNodeValue;
+      } catch (e) {
+        return null;
+      }
     }
     
     if (e.data.type === 'deselectElement') {
@@ -1367,8 +1433,19 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
   };
   
   const addSimilarElement = () => {
-    if (!iframeRef.current?.contentWindow || !selectedElement) return;
-    iframeRef.current.contentWindow.postMessage({ type: 'addSimilar' }, '*');
+    if (!iframeRef.current?.contentWindow || !selectedElement) {
+      toast({
+        title: "No element selected",
+        description: "Please click on a team member card or similar element first.",
+        variant: "destructive",
+      });
+      return;
+    }
+    // Pass the xpath so the iframe can find the element even after a refresh
+    iframeRef.current.contentWindow.postMessage({ 
+      type: 'addSimilar',
+      xpath: selectedElement.xpath 
+    }, '*');
     toast({
       title: "Added!",
       description: "New item added to the section. Edit the placeholder text.",
