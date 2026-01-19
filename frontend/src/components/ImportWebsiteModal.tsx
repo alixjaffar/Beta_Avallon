@@ -384,7 +384,7 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
                   Import Website
                 </h2>
                 <p className={`text-sm ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
-                  Clone any website with SiteMirror
+                  Import any website with advanced scraping
                 </p>
               </div>
             </div>
@@ -414,7 +414,7 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
             <div className="space-y-4">
               <div className={`p-4 rounded-lg ${isLight ? 'bg-blue-50' : 'bg-blue-500/10'}`}>
                 <p className={`text-sm font-medium ${isLight ? 'text-blue-700' : 'text-blue-400'}`}>
-                  SiteMirror found {detectedPages.length} internal pages. Select which ones to import:
+                  Found {detectedPages.length} internal pages. Select which ones to import:
                 </p>
               </div>
               
@@ -489,17 +489,17 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
                 />
               </div>
               
-              {/* SiteMirror Info */}
+              {/* Scraper Info */}
               <div className={`p-4 rounded-lg text-sm ${isLight ? 'bg-emerald-50 text-emerald-700' : 'bg-emerald-500/10 text-emerald-400'}`}>
                 <div className="flex items-start gap-2">
                   <span className="material-symbols-outlined text-[18px] shrink-0">rocket_launch</span>
                   <div>
-                    <p className="font-medium mb-1">✨ Powered by SiteMirror</p>
+                    <p className="font-medium mb-1">✨ Advanced Website Scraping</p>
                     <ul className="list-disc list-inside space-y-1 text-xs opacity-80">
-                      <li>🚀 Dual-engine: Puppeteer (--force_render) + static fallback</li>
-                      <li>🎨 CSS parsing & URL rewriting (like cssutils)</li>
+                      <li>🚀 JavaScript rendering for dynamic content</li>
+                      <li>🎨 Complete asset extraction (CSS, images, fonts)</li>
                       <li>📸 Auto-scroll for lazy-loaded content</li>
-                      <li>🔗 Based on <a href="https://github.com/pakelcomedy/SiteMirror" target="_blank" rel="noopener" className="underline hover:no-underline">github.com/pakelcomedy/SiteMirror</a></li>
+                      <li>🔗 Smart link rewriting for offline use</li>
                     </ul>
                   </div>
                 </div>
@@ -652,7 +652,7 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
               <span className="material-symbols-outlined text-[20px] text-primary animate-spin">progress_activity</span>
               <div className="flex-1">
                 <p className={`text-sm font-medium ${isLight ? 'text-blue-700' : 'text-blue-400'}`}>{loadingStatus}</p>
-                <p className={`text-xs ${isLight ? 'text-blue-600/70' : 'text-blue-400/70'}`}>SiteMirror is rendering with Puppeteer (--force_render)...</p>
+                <p className={`text-xs ${isLight ? 'text-blue-600/70' : 'text-blue-400/70'}`}>Rendering website with browser automation...</p>
               </div>
             </div>
           )}
