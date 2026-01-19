@@ -182,9 +182,7 @@ export class GeminiWebsiteGenerator {
                 credentialsJson = JSON.parse(jsonMatch[0]);
               } else {
                 throw new Error(`Invalid JSON format. First error: ${parseError1?.message || 'Unknown'}, Second error: ${parseError2?.message || 'Unknown'}`);
-              } else {
-                throw new Error(`Invalid JSON format. First error: ${parseError1?.message || 'Unknown'}, Second error: ${parseError2?.message || 'Unknown'}`);
-                
+              }
             }
           }
           
@@ -1862,52 +1860,58 @@ Create beautiful, functional payment buttons that are ready to use!`;
   private buildCurrentCodeContext(currentCode: Record<string, string>): string {
     if (!currentCode || Object.keys(currentCode).length === 0) return '';
     
-    // Check if this looks like an imported website (has external CSS references or complex structure)
+    // Get index.html as the primary template
     const indexHtml = currentCode['index.html'] || Object.values(currentCode)[0] || '';
     const isImported = indexHtml.includes('https://') || 
                        indexHtml.includes('url(') ||
                        indexHtml.length > 10000;
     
+    // For modification mode, we need to be SMART about what we include
+    // to avoid overwhelming the model with too much context
+    const files = Object.keys(currentCode).filter(key => key.endsWith('.html'));
+    const totalSize = files.reduce((sum, f) => sum + (currentCode[f]?.length || 0), 0);
+    
+    // If total content is massive (>200KB), only include index.html as template
+    const includedFiles = totalSize > 200000 ? ['index.html'].filter(f => currentCode[f]) : files;
+    
     let context = `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚨🚨🚨 USER'S EXISTING WEBSITE - DO NOT REDESIGN 🚨🚨🚨
+🚨 USER'S EXISTING WEBSITE - DO NOT REDESIGN 🚨
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${isImported ? '⚠️ THIS IS AN IMPORTED WEBSITE - The user scraped/imported this from another site.' : ''}
-${isImported ? '⚠️ They LOVE how it looks and want to KEEP the exact same design.' : ''}
+${isImported ? '⚠️ THIS IS AN IMPORTED WEBSITE - User wants to KEEP the exact same design.' : ''}
 
-The code below is the user's CURRENT website. This is EXACTLY what they see now.
-DO NOT CHANGE THE DESIGN. DO NOT CREATE NEW STYLES. DO NOT "IMPROVE" IT.
+📁 ALL EXISTING PAGES: ${files.join(', ')}
+${totalSize > 200000 ? `(Showing only index.html as template due to size - all ${files.length} pages will be preserved)` : ''}
 
 Your ONLY job: Make the SPECIFIC change the user requested, nothing more.
 
 If user wants a NEW PAGE:
-- COPY the entire <style> section from index.html
-- COPY the exact <header>/<nav> section
-- COPY the exact <footer> section
-- Use the SAME colors, fonts, and spacing
-- The new page MUST look like it belongs to THIS website
+- COPY the <style> section from index.html
+- COPY the <header>/<nav> structure  
+- COPY the <footer> structure
+- The new page MUST match the existing design exactly
 
 `;
     
-    // Include ALL files, not just index.html
-    const files = Object.keys(currentCode).filter(key => key.endsWith('.html'));
-    
-    files.forEach((filename, index) => {
+    // Only include files we selected (to avoid token limits)
+    includedFiles.forEach((filename) => {
       const htmlContent = currentCode[filename];
-      // Increase limit to 60000 chars per file (Gemini can handle this)
-      const maxLength = 60000;
+      if (!htmlContent) return;
+      
+      // For very large files, truncate more aggressively
+      const maxLength = totalSize > 150000 ? 30000 : 50000;
       const truncatedHtml = htmlContent.length > maxLength 
-        ? htmlContent.substring(0, maxLength) + `\n<!-- ... [${htmlContent.length - maxLength} more characters truncated] ... -->`
+        ? htmlContent.substring(0, maxLength) + `\n<!-- ... [${htmlContent.length - maxLength} more characters - file continues] ... -->`
         : htmlContent;
       
-      context += `\n=== EXISTING FILE: ${filename} (PRESERVE THIS DESIGN) ===\n\`\`\`html\n${truncatedHtml}\n\`\`\`\n`;
+      context += `\n=== FILE: ${filename} ===\n\`\`\`html\n${truncatedHtml}\n\`\`\`\n`;
     });
     
     context += `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔒 LOCKED - DO NOT CHANGE: Overall design, colors, fonts, layout
-✏️ ALLOWED TO CHANGE: ONLY what the user explicitly requested
+🔒 PRESERVE: Design, colors, fonts, layout - ALL ${files.length} pages kept automatically
+✏️ ONLY CHANGE: What the user explicitly requested
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
     
