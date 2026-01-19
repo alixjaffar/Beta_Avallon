@@ -88,7 +88,7 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
   onMultiPageImport,
   isLight = false,
 }) => {
-  const [activeTab, setActiveTab] = useState<'paste' | 'url' | 'file' | 'combine'>('url'); // Default to URL tab
+  const [activeTab, setActiveTab] = useState<'paste' | 'url'>('url'); // Default to URL tab
   const [pastedContent, setPastedContent] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [pageName, setPageName] = useState('index.html');
@@ -98,12 +98,6 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // Combine Files state
-  const [combineHtml, setCombineHtml] = useState('');
-  const [combineCss, setCombineCss] = useState('');
-  const [combineJs, setCombineJs] = useState('');
-  const [combineTitle, setCombineTitle] = useState('Sales Agent');
   
   // Multi-page import state
   const [step, setStep] = useState<'input' | 'selectPages'>('input');
@@ -148,96 +142,72 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
 
   const handlePasteImport = async () => {
     if (!pastedContent.trim()) {
-      setError('Please paste some HTML content');
+      setError('Please paste some code');
       return;
     }
 
     setIsLoading(true);
     setError(null);
-    setLoadingStatus('Analyzing HTML...');
+    setLoadingStatus('Processing code...');
 
     try {
-      if (!isHTML(pastedContent)) {
-        setError('The pasted content does not appear to be valid HTML.');
-        setIsLoading(false);
-        return;
-      }
-
-      // For pasted HTML, just use it directly (already processed by user)
-      onImport(pastedContent, pageName);
-      handleClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to import HTML');
-    } finally {
-      setIsLoading(false);
-      setLoadingStatus('');
-    }
-  };
-
-  /**
-   * COMBINE FILES - Merge HTML, CSS, JS into a single page
-   */
-  const handleCombineImport = async () => {
-    if (!combineHtml.trim()) {
-      setError('Please provide at least the HTML structure');
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-    setLoadingStatus('Combining files...');
-
-    try {
-      // Check if HTML already includes full document structure
-      const hasFullHtml = combineHtml.toLowerCase().includes('<!doctype') || 
-                          combineHtml.toLowerCase().includes('<html');
+      const content = pastedContent.trim();
+      let finalHtml = content;
       
-      let combinedHtml: string;
+      // Check if it's a full HTML document
+      const isFullDocument = content.toLowerCase().includes('<!doctype') || 
+                             (content.toLowerCase().includes('<html') && content.toLowerCase().includes('</html>'));
       
-      if (hasFullHtml) {
-        // User provided full HTML, inject CSS and JS
-        combinedHtml = combineHtml;
+      if (!isFullDocument) {
+        // Smart wrap: detect what kind of code it is
+        const hasStyleTags = /<style[^>]*>[\s\S]*?<\/style>/i.test(content);
+        const hasScriptTags = /<script[^>]*>[\s\S]*?<\/script>/i.test(content);
+        const hasHtmlTags = /<[a-z][\s\S]*>/i.test(content);
         
-        // Inject CSS into head
-        if (combineCss.trim()) {
-          const styleTag = `<style>\n${combineCss}\n</style>`;
-          if (combinedHtml.includes('</head>')) {
-            combinedHtml = combinedHtml.replace('</head>', `${styleTag}\n</head>`);
-          } else if (combinedHtml.includes('<body')) {
-            combinedHtml = combinedHtml.replace('<body', `${styleTag}\n<body`);
+        // Extract style and script tags
+        let styles = '';
+        let scripts = '';
+        let bodyContent = content;
+        
+        if (hasStyleTags) {
+          const styleMatches = content.match(/<style[^>]*>[\s\S]*?<\/style>/gi);
+          if (styleMatches) {
+            styles = styleMatches.join('\n');
+            bodyContent = bodyContent.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
           }
         }
         
-        // Inject JS before closing body
-        if (combineJs.trim()) {
-          const scriptTag = `<script>\n${combineJs}\n</script>`;
-          if (combinedHtml.includes('</body>')) {
-            combinedHtml = combinedHtml.replace('</body>', `${scriptTag}\n</body>`);
-      } else {
-            combinedHtml += scriptTag;
+        if (hasScriptTags) {
+          const scriptMatches = content.match(/<script[^>]*>[\s\S]*?<\/script>/gi);
+          if (scriptMatches) {
+            scripts = scriptMatches.join('\n');
+            bodyContent = bodyContent.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
           }
         }
-      } else {
-        // User provided body content only, wrap in full HTML
-        combinedHtml = `<!DOCTYPE html>
+        
+        // Generate page title from filename
+        const pageTitle = pageName.replace('.html', '').replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase());
+        
+        // Wrap in a full HTML document
+        finalHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${combineTitle || 'Sales Agent'}</title>
-  ${combineCss.trim() ? `<style>\n${combineCss}\n  </style>` : ''}
+  <title>${pageTitle}</title>
+  ${styles}
 </head>
 <body>
-  ${combineHtml}
-  ${combineJs.trim() ? `<script>\n${combineJs}\n  </script>` : ''}
+  ${bodyContent.trim()}
+  ${scripts}
 </body>
 </html>`;
       }
-      
-      onImport(combinedHtml, pageName);
+
+      onImport(finalHtml, pageName);
       handleClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to combine files');
+      setError(err instanceof Error ? err.message : 'Failed to import code');
     } finally {
       setIsLoading(false);
       setLoadingStatus('');
@@ -327,7 +297,7 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
           setIsLoading(false);
           setLoadingStatus('');
           return;
-      }
+        }
 
       // Single page import
       console.log('%c✓ Playwright import complete!', 'color: #22c55e; font-weight: bold;');
@@ -524,35 +494,25 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
             </div>
           ) : (
             <>
-              {/* Tabs */}
+              {/* Tabs - Simplified to just URL and Code */}
           <div className={`flex gap-1 p-1 rounded-lg mb-6 ${isLight ? 'bg-slate-100' : 'bg-panel-border'}`}>
-            {(['url', 'paste', 'combine', 'file'] as const).map((tab) => (
+            {(['url', 'paste'] as const).map((tab) => (
                 <button
                 key={tab}
-                onClick={() => {
-                  setActiveTab(tab);
-                  // Set sensible default page name for combine tab
-                  if (tab === 'combine' && pageName === 'index.html') {
-                    setPageName('sales-agent.html');
-                  } else if (tab !== 'combine' && pageName === 'sales-agent.html') {
-                    setPageName('index.html');
-                  }
-                }}
-                className={`flex-1 px-2 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                onClick={() => setActiveTab(tab)}
+                className={`flex-1 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
                   activeTab === tab
                       ? 'bg-primary text-white'
                     : isLight
                       ? 'text-slate-600 hover:text-slate-900'
                       : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                {tab === 'url' && '🌐 URL'}
-                {tab === 'paste' && '📋 HTML'}
-                {tab === 'combine' && '🔗 Combine'}
-                {tab === 'file' && '📁 File'}
+                  }`}
+                >
+                {tab === 'url' && '🌐 From URL'}
+                {tab === 'paste' && '📋 Paste Code'}
                 </button>
             ))}
-          </div>
+              </div>
 
           {activeTab === 'url' && (
             <div className="space-y-4">
@@ -596,129 +556,31 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
             <div className="space-y-4">
               <div>
                 <label className={`block text-sm font-medium mb-2 ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
-                  Paste HTML Code
+                  Paste Your Code
                 </label>
                 <textarea
                   value={pastedContent}
                   onChange={(e) => setPastedContent(e.target.value)}
-                  placeholder="<!DOCTYPE html>&#10;<html>&#10;  <head>...</head>&#10;  <body>...</body>&#10;</html>"
-                  rows={10}
+                  placeholder="Paste any code: HTML, CSS, JavaScript, or a mix of all three!&#10;&#10;Examples:&#10;• Full HTML document&#10;• HTML snippet (will be wrapped in a page)&#10;• <style>...</style> and <script>...</script> tags"
+                  rows={12}
                   className={`w-full px-4 py-3 rounded-lg border text-sm font-mono transition-colors resize-none ${
-                    isLight 
-                      ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-primary' 
-                      : 'bg-surface-dark border-panel-border text-white placeholder-gray-500 focus:border-primary'
-                  }`}
-                />
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'combine' && (
-            <div className="space-y-4">
-              <div className={`p-3 rounded-lg text-sm ${isLight ? 'bg-blue-50 text-blue-700' : 'bg-blue-500/10 text-blue-400'}`}>
-                <p className="font-medium">🔗 Combine Multiple Files</p>
-                <p className="text-xs mt-1 opacity-80">Paste your HTML, CSS, and JavaScript separately. They'll be combined into a single page.</p>
-              </div>
-              
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
-                  Page Title
-                </label>
-                <input
-                  type="text"
-                  value={combineTitle}
-                  onChange={(e) => setCombineTitle(e.target.value)}
-                  placeholder="Sales Agent"
-                  className={`w-full px-4 py-2 rounded-lg border text-sm transition-colors ${
-                    isLight 
-                      ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-primary' 
-                      : 'bg-surface-dark border-panel-border text-white placeholder-gray-500 focus:border-primary'
-                  }`}
-                />
-              </div>
-
-                  <div>
-                <label className={`block text-sm font-medium mb-2 ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
-                  HTML Structure <span className="text-xs opacity-60">(body content only, or full HTML)</span>
-                </label>
-                <textarea
-                  value={combineHtml}
-                  onChange={(e) => setCombineHtml(e.target.value)}
-                  placeholder="<div class='chat-container'>&#10;  <div id='chat-widget'></div>&#10;</div>"
-                  rows={5}
-                  className={`w-full px-4 py-3 rounded-lg border text-sm font-mono transition-colors resize-none ${
-                    isLight 
-                      ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-primary' 
-                      : 'bg-surface-dark border-panel-border text-white placeholder-gray-500 focus:border-primary'
-                  }`}
-                />
-                  </div>
-              
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
-                  CSS Styles <span className="text-xs opacity-60">(optional)</span>
-                </label>
-                <textarea
-                  value={combineCss}
-                  onChange={(e) => setCombineCss(e.target.value)}
-                  placeholder=".chat-container {&#10;  max-width: 800px;&#10;  margin: 0 auto;&#10;}"
-                  rows={4}
-                  className={`w-full px-4 py-3 rounded-lg border text-sm font-mono transition-colors resize-none ${
-                    isLight 
-                      ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-primary' 
-                      : 'bg-surface-dark border-panel-border text-white placeholder-gray-500 focus:border-primary'
-                  }`}
-                />
-                </div>
-              
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
-                  JavaScript <span className="text-xs opacity-60">(optional)</span>
-                </label>
-                <textarea
-                  value={combineJs}
-                  onChange={(e) => setCombineJs(e.target.value)}
-                  placeholder="// Your JavaScript code&#10;document.addEventListener('DOMContentLoaded', function() {&#10;  // Initialize widget&#10;});"
-                  rows={4}
-                  className={`w-full px-4 py-3 rounded-lg border text-sm font-mono transition-colors resize-none ${
-                    isLight 
-                      ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-primary' 
-                      : 'bg-surface-dark border-panel-border text-white placeholder-gray-500 focus:border-primary'
-                  }`}
-                />
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'file' && (
-            <div className="space-y-4">
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
                   isLight 
-                    ? 'border-slate-200 hover:border-primary hover:bg-slate-50' 
-                    : 'border-panel-border hover:border-primary hover:bg-white/5'
-                }`}
-              >
-                <span className={`material-symbols-outlined text-[48px] mb-4 ${isLight ? 'text-slate-400' : 'text-gray-500'}`}>
-                  upload_file
-                </span>
-                <p className={`text-sm font-medium mb-2 ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
-                  Click to upload or drag and drop
-                </p>
-                <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>
-                  HTML files only (.html, .htm)
-                </p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".html,.htm,text/html"
-                  onChange={handleFileImport}
-                  className="hidden"
+                      ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-primary' 
+                      : 'bg-surface-dark border-panel-border text-white placeholder-gray-500 focus:border-primary'
+                  }`}
                 />
+              </div>
+              
+              {/* Smart Detection Info */}
+              <div className={`p-3 rounded-lg text-sm ${isLight ? 'bg-blue-50 text-blue-700' : 'bg-blue-500/10 text-blue-400'}`}>
+                <p className="font-medium">✨ Smart Code Detection</p>
+                <p className="text-xs mt-1 opacity-80">
+                  Paste HTML, CSS, or JavaScript - we'll automatically wrap it into a proper page.
+                </p>
               </div>
             </div>
           )}
+
 
           {/* Page Name */}
           <div className="mt-6">
@@ -879,8 +741,8 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
                   Cancel
                 </button>
                 <button
-                  onClick={activeTab === 'paste' ? handlePasteImport : activeTab === 'combine' ? handleCombineImport : handleUrlImport}
-                  disabled={isLoading || (activeTab === 'paste' && !pastedContent.trim()) || (activeTab === 'url' && !urlInput.trim()) || (activeTab === 'combine' && !combineHtml.trim())}
+                  onClick={activeTab === 'paste' ? handlePasteImport : handleUrlImport}
+                  disabled={isLoading || (activeTab === 'paste' && !pastedContent.trim()) || (activeTab === 'url' && !urlInput.trim())}
                   className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 min-w-[120px] justify-center"
                 >
                   {isLoading ? (
