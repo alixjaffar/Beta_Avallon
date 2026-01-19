@@ -182,7 +182,9 @@ export class GeminiWebsiteGenerator {
                 credentialsJson = JSON.parse(jsonMatch[0]);
               } else {
                 throw new Error(`Invalid JSON format. First error: ${parseError1?.message || 'Unknown'}, Second error: ${parseError2?.message || 'Unknown'}`);
-              }
+              } else {
+                throw new Error(`Invalid JSON format. First error: ${parseError1?.message || 'Unknown'}, Second error: ${parseError2?.message || 'Unknown'}`);
+                
             }
           }
           

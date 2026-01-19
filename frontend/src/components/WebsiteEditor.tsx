@@ -1386,13 +1386,23 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       }
       
       // Download images and create mapping
+      // Use backend proxy to bypass CORS restrictions
       const imageMapping: Record<string, string> = {};
       let imageIndex = 0;
+      let downloadedCount = 0;
       
       const fetchPromises = Array.from(imageUrls).map(async (url) => {
         try {
-          const response = await fetch(url);
-          if (!response.ok) return;
+          // Try direct fetch first (works for Unsplash, Picsum, etc.)
+          let response = await fetch(url).catch(() => null);
+          
+          // If direct fetch fails due to CORS, use backend proxy
+          if (!response || !response.ok) {
+            const proxyUrl = `${baseUrl}/api/proxy/image?url=${encodeURIComponent(url)}`;
+            response = await fetch(proxyUrl);
+          }
+          
+          if (!response || !response.ok) return;
           
           const blob = await response.blob();
           const extension = url.match(/\.(jpg|jpeg|png|gif|webp|svg|ico)/i)?.[1] || 
@@ -1406,6 +1416,7 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
           
           const arrayBuffer = await blob.arrayBuffer();
           imagesFolder?.file(filename, arrayBuffer);
+          downloadedCount++;
         } catch (e) {
           console.warn('Failed to download image:', url, e);
         }
