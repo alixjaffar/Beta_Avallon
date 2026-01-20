@@ -762,16 +762,26 @@ LOVABLE-LEVEL QUALITY BAR (MUST FOLLOW):
       const existingFiles = Object.keys(currentCode || {}).filter(f => f.endsWith('.html'));
       
       // Build modification prompt with STRICT preservation rules
-      let modificationPrompt = `⚠️ CRITICAL: YOU ARE EDITING AN EXISTING WEBSITE - NOT CREATING NEW ⚠️
+      let modificationPrompt = `
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 🛑🛑🛑 MODIFICATION MODE - DO NOT CREATE NEW DESIGN 🛑🛑🛑                    ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-The user has an existing multi-page website and wants to ADD TO IT or MODIFY IT.
-You MUST preserve their design. The existing pages will be kept automatically.
+You are MODIFYING an EXISTING website. The user IMPORTED this website because
+they LOVE how it looks. Your job is to make a SURGICAL EDIT - change ONLY what
+the user asked for, nothing else.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📋 USER'S REQUEST: "${originalPrompt}"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📁 EXISTING PAGES (these are PRESERVED automatically, don't re-output them unless modifying):
+WHAT YOU MUST DO:
+1. Find the EXACT page/section the user is referring to
+2. Make ONLY the specific change they requested  
+3. Keep the EXACT same HTML structure, CSS, layout, colors, fonts
+4. Output ONLY the modified file(s)
+
+📁 EXISTING PAGES (kept automatically, only output if you're modifying):
 ${existingFiles.map(f => `   • ${f}`).join('\n')}
 
 ${currentCodeContext}
@@ -1950,59 +1960,78 @@ Create beautiful, functional payment buttons that are ready to use!`;
   private buildCurrentCodeContext(currentCode: Record<string, string>): string {
     if (!currentCode || Object.keys(currentCode).length === 0) return '';
     
-    // Get index.html as the primary template
+    // Get all HTML files
+    const files = Object.keys(currentCode).filter(key => key.endsWith('.html'));
     const indexHtml = currentCode['index.html'] || Object.values(currentCode)[0] || '';
     const isImported = indexHtml.includes('https://') || 
                        indexHtml.includes('url(') ||
                        indexHtml.length > 10000;
     
-    // For modification mode, we need to be SMART about what we include
-    // to avoid overwhelming the model with too much context
-    const files = Object.keys(currentCode).filter(key => key.endsWith('.html'));
+    // Calculate total size
     const totalSize = files.reduce((sum, f) => sum + (currentCode[f]?.length || 0), 0);
     
-    // If total content is massive (>200KB), only include index.html as template
-    const includedFiles = totalSize > 200000 ? ['index.html'].filter(f => currentCode[f]) : files;
+    // IMPORTANT: Always include ALL pages so AI can modify any of them
+    // Use aggressive truncation if needed to stay within limits
+    const maxPerFile = totalSize > 300000 ? 15000 : (totalSize > 150000 ? 25000 : 40000);
     
     let context = `
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚨 USER'S EXISTING WEBSITE - DO NOT REDESIGN 🚨
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 🛑 STOP! THIS IS AN EXISTING WEBSITE - READ BEFORE PROCEEDING 🛑             ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ THIS IS ${isImported ? 'AN IMPORTED' : 'AN EXISTING'} WEBSITE. THE USER LOVES HOW IT LOOKS.           ║
+║ DO NOT CREATE A NEW DESIGN. DO NOT CHANGE THE STYLING. DO NOT REPLACE IT.   ║
+║ ONLY MAKE THE EXACT CHANGE THE USER REQUESTED - NOTHING MORE.               ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-${isImported ? '⚠️ THIS IS AN IMPORTED WEBSITE - User wants to KEEP the exact same design.' : ''}
+🚨 ABSOLUTE RULES - VIOLATION = FAILURE:
+1. DO NOT change the logo, brand name, or company name
+2. DO NOT change the color scheme
+3. DO NOT change the fonts
+4. DO NOT change the header/navigation structure
+5. DO NOT change the footer
+6. DO NOT create a new design - USE THE EXISTING ONE
 
-📁 ALL EXISTING PAGES: ${files.join(', ')}
-${totalSize > 200000 ? `(Showing only index.html as template due to size - all ${files.length} pages will be preserved)` : ''}
+📁 ALL EXISTING PAGES (${files.length} total): ${files.join(', ')}
 
-Your ONLY job: Make the SPECIFIC change the user requested, nothing more.
-
-If user wants a NEW PAGE:
-- COPY the <style> section from index.html
-- COPY the <header>/<nav> structure  
-- COPY the <footer> structure
-- The new page MUST match the existing design exactly
+🎯 YOUR TASK:
+- Read the user's request carefully
+- Find the specific file/section they want to modify
+- Make ONLY that change
+- Keep EVERYTHING ELSE exactly the same
+- Output ONLY the modified file(s)
 
 `;
     
-    // Only include files we selected (to avoid token limits)
-    includedFiles.forEach((filename) => {
+    // Include ALL pages so AI can modify any of them
+    files.forEach((filename) => {
       const htmlContent = currentCode[filename];
       if (!htmlContent) return;
       
-      // For very large files, truncate more aggressively
-      const maxLength = totalSize > 150000 ? 30000 : 50000;
-      const truncatedHtml = htmlContent.length > maxLength 
-        ? htmlContent.substring(0, maxLength) + `\n<!-- ... [${htmlContent.length - maxLength} more characters - file continues] ... -->`
+      // Truncate if needed
+      const truncatedHtml = htmlContent.length > maxPerFile 
+        ? htmlContent.substring(0, maxPerFile) + `\n<!-- ... TRUNCATED [${htmlContent.length - maxPerFile} more chars] ... -->`
         : htmlContent;
       
-      context += `\n=== FILE: ${filename} ===\n\`\`\`html\n${truncatedHtml}\n\`\`\`\n`;
+      context += `
+════════════════════════════════════════════════════════════
+📄 EXISTING FILE: ${filename} ${filename === 'index.html' ? '(MAIN TEMPLATE - COPY STYLES FROM HERE)' : ''}
+════════════════════════════════════════════════════════════
+\`\`\`html
+${truncatedHtml}
+\`\`\`
+`;
     });
     
     context += `
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔒 PRESERVE: Design, colors, fonts, layout - ALL ${files.length} pages kept automatically
-✏️ ONLY CHANGE: What the user explicitly requested
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 📤 OUTPUT INSTRUCTIONS                                                        ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ • Output ONLY the file(s) you are MODIFYING                                  ║
+║ • The system will MERGE your changes with existing files                     ║
+║ • DO NOT re-output files you aren't changing                                 ║
+║ • If modifying team.html, output team.html with your changes                 ║
+║ • If adding to index.html, output index.html with your additions             ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 `;
     
     return context;
