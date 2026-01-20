@@ -820,6 +820,54 @@ ${existingFooter ? `EXISTING FOOTER (copy verbatim):\n${existingFooter.substring
 (Only output files you're creating or modifying!)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 COMMON IMPLEMENTATIONS - USE THESE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FOR CAROUSELS/SLIDERS - Use Swiper.js (ALWAYS INCLUDE THESE):
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">
+<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+<script>
+new Swiper('.swiper', {
+  loop: true,
+  pagination: { el: '.swiper-pagination', clickable: true },
+  navigation: { nextEl: '.swiper-button-next', prevEl: '.swiper-button-prev' },
+  slidesPerView: 3,
+  spaceBetween: 30,
+  breakpoints: { 320: { slidesPerView: 1 }, 768: { slidesPerView: 2 }, 1024: { slidesPerView: 3 } }
+});
+</script>
+
+FOR MODALS/POPUPS - Use simple JS:
+<div id="modal" class="modal hidden">...</div>
+<script>
+document.querySelector('.open-modal').addEventListener('click', () => document.getElementById('modal').classList.remove('hidden'));
+document.querySelector('.close-modal').addEventListener('click', () => document.getElementById('modal').classList.add('hidden'));
+</script>
+
+FOR ACCORDIONS/FAQ:
+<script>
+document.querySelectorAll('.accordion-btn').forEach(btn => {
+  btn.addEventListener('click', () => btn.nextElementSibling.classList.toggle('hidden'));
+});
+</script>
+
+FOR TABS:
+<script>
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+    document.getElementById(btn.dataset.tab).classList.remove('hidden');
+  });
+});
+</script>
+
+FOR ANIMATIONS - Use AOS (Animate On Scroll):
+<link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+<script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+<script>AOS.init();</script>
+Then add data-aos="fade-up" to elements.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ❌ DO NOT:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 - Create new CSS styles (copy existing)
@@ -832,6 +880,8 @@ ${existingFooter ? `EXISTING FOOTER (copy verbatim):\n${existingFooter.substring
 ${wantsStripe ? this.getStripeIntegrationInstructions() : ''}
 
 ✅ TASK: "${originalPrompt}"
+
+IMPORTANT: If the task involves interactive elements (carousel, slider, modal, tabs, accordion, animations), USE THE IMPLEMENTATIONS ABOVE. Include ALL required CDN links and initialization scripts.
 
 The user LOVES their current design. Add to it without changing the look.
 Output ONLY new/modified files:`;
