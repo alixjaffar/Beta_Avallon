@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 import { getUser } from "@/lib/auth/getUser";
 import { z } from "zod";
-import { hasEnoughCredits, deductCredits, CREDIT_COSTS, ensureUserHasCredits } from "@/lib/billing/credits";
+import { hasEnoughCredits, deductCredits, deductTokenCredits, CREDIT_COSTS, ensureUserHasCredits, calculateTokenCredits } from "@/lib/billing/credits";
 import { 
   getUserStripeIntegration, 
   getUserGoogleAnalyticsIntegration,
@@ -117,15 +117,18 @@ export async function POST(req: NextRequest) {
     // Ensure user exists in DB with initial credits (20 for free users)
     await ensureUserHasCredits(user.id, user.email, 20);
 
-    // Check if user has enough credits (pass email for lookup)
-    const creditCheck = await hasEnoughCredits(user.id, CREDIT_COSTS.GENERATE_WEBSITE, user.email);
+    // Check if user has enough credits (minimum 5 credits to start, actual cost based on tokens used)
+    // We use a minimum threshold since we don't know exact token usage upfront
+    const MIN_CREDITS_REQUIRED = 5;
+    const creditCheck = await hasEnoughCredits(user.id, MIN_CREDITS_REQUIRED, user.email);
     if (!creditCheck.hasEnough) {
       return NextResponse.json({
         error: "Insufficient credits",
-        message: `You need ${creditCheck.requiredCredits} credits to generate a website, but you only have ${creditCheck.currentCredits} credits. Please upgrade your plan to get more credits.`,
+        message: `You need at least ${MIN_CREDITS_REQUIRED} credits to generate a website, but you only have ${creditCheck.currentCredits} credits. Actual cost depends on content complexity (typically 5-30 credits).`,
         credits: {
           current: creditCheck.currentCredits,
-          required: creditCheck.requiredCredits,
+          required: MIN_CREDITS_REQUIRED,
+          note: "Credits are charged based on actual AI usage (1 credit per ~1000 tokens)",
         },
       }, {
         status: 402, // Payment Required
@@ -333,18 +336,44 @@ export async function POST(req: NextRequest) {
         logError('Failed to inject integrations (continuing without)', integrationError);
       }
 
-      // Deduct credits after successful generation (pass email for lookup)
-      const creditDeduction = await deductCredits(
-        user.id,
-        CREDIT_COSTS.GENERATE_WEBSITE,
-        'Website generation',
-        user.email
-      );
+      // Deduct credits based on actual token usage (or fallback to fixed cost)
+      let creditDeduction;
+      let actualCreditsUsed = CREDIT_COSTS.GENERATE_WEBSITE; // Default fallback
+      
+      if (websiteResult.tokensUsed && websiteResult.tokensUsed.total > 0) {
+        // Use actual token usage: 1 credit per 1000 tokens
+        actualCreditsUsed = calculateTokenCredits(
+          websiteResult.tokensUsed.input,
+          websiteResult.tokensUsed.output
+        );
+        
+        logInfo('Using token-based credit deduction', {
+          inputTokens: websiteResult.tokensUsed.input,
+          outputTokens: websiteResult.tokensUsed.output,
+          totalTokens: websiteResult.tokensUsed.total,
+          creditsToDeduct: actualCreditsUsed,
+        });
+        
+        creditDeduction = await deductCredits(
+          user.id,
+          actualCreditsUsed,
+          `Website generation (${websiteResult.tokensUsed.total.toLocaleString()} tokens)`,
+          user.email
+        );
+      } else {
+        // Fallback to fixed cost if token info not available
+        creditDeduction = await deductCredits(
+          user.id,
+          CREDIT_COSTS.GENERATE_WEBSITE,
+          'Website generation',
+          user.email
+        );
+      }
 
       if (!creditDeduction.success) {
         logError('Failed to deduct credits after generation', new Error(creditDeduction.error || 'Unknown error'), {
           userId: user.id,
-          cost: CREDIT_COSTS.GENERATE_WEBSITE,
+          cost: actualCreditsUsed,
         });
         // Continue anyway - the website was already generated
       }
@@ -401,8 +430,9 @@ export async function POST(req: NextRequest) {
         repoUrl: websiteResult.repoUrl,
         credits: {
           remaining: creditDeduction.remainingCredits,
-          deducted: CREDIT_COSTS.GENERATE_WEBSITE,
+          deducted: actualCreditsUsed,
         },
+        tokensUsed: websiteResult.tokensUsed,
       }, {
         headers: corsHeaders,
       });

@@ -33,6 +33,12 @@ export interface GeneratedWebsite {
   files: Record<string, string>;
   createdAt: string;
   updatedAt: string;
+  // Token usage for billing
+  tokensUsed?: {
+    input: number;
+    output: number;
+    total: number;
+  };
 }
 
 // ============= ADVANCED CLONING INTERFACES =============
@@ -355,6 +361,9 @@ export class GeminiWebsiteGenerator {
     return this.fixFontAwesomeLinks(html);
   }
 
+  // Track token usage for billing
+  private lastTokenUsage: { input: number; output: number; total: number } = { input: 0, output: 0, total: 0 };
+
   async generateWebsite(request: WebsiteGenerationRequest, chatHistory?: any[], currentCode?: Record<string, string>): Promise<GeneratedWebsite> {
     try {
       logInfo('Starting Gemini website generation', { 
@@ -363,6 +372,9 @@ export class GeminiWebsiteGenerator {
         currentCodeKeys: currentCode ? Object.keys(currentCode) : [],
         chatHistoryLength: chatHistory?.length || 0
       });
+
+      // Reset token tracking
+      this.lastTokenUsage = { input: 0, output: 0, total: 0 };
 
       // Step 1: Generate website code using Gemini (modify if currentCode exists, otherwise generate new)
       const websiteCode = await this.generateWebsiteCode(request, chatHistory, currentCode);
@@ -387,9 +399,15 @@ export class GeminiWebsiteGenerator {
         files: websiteCode,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        tokensUsed: this.lastTokenUsage,
       };
 
-      logInfo('Website generation completed', { name: request.name, previewUrl, repoUrl });
+      logInfo('Website generation completed', { 
+        name: request.name, 
+        previewUrl, 
+        repoUrl,
+        tokensUsed: this.lastTokenUsage 
+      });
       return website;
 
     } catch (error) {
@@ -543,6 +561,17 @@ export class GeminiWebsiteGenerator {
           }
           
           content = candidate.content.parts[0].text || '';
+          
+          // Extract token usage from response
+          if (response.data.usageMetadata) {
+            const usage = response.data.usageMetadata;
+            this.lastTokenUsage = {
+              input: usage.promptTokenCount || 0,
+              output: usage.candidatesTokenCount || usage.totalTokenCount || 0,
+              total: usage.totalTokenCount || (usage.promptTokenCount || 0) + (usage.candidatesTokenCount || 0),
+            };
+            logInfo('Token usage from global endpoint', this.lastTokenUsage);
+          }
         } catch (globalError: any) {
           logError('Global endpoint failed, trying Vertex AI SDK', globalError);
           // Fall through to Vertex AI SDK attempt
@@ -582,6 +611,17 @@ export class GeminiWebsiteGenerator {
           }
           
           content = candidate.content.parts[0].text || '';
+          
+          // Extract token usage from Vertex AI SDK response
+          if (response.usageMetadata) {
+            const usage = response.usageMetadata;
+            this.lastTokenUsage = {
+              input: usage.promptTokenCount || 0,
+              output: usage.candidatesTokenCount || 0,
+              total: usage.totalTokenCount || (usage.promptTokenCount || 0) + (usage.candidatesTokenCount || 0),
+            };
+            logInfo('Token usage from Vertex AI SDK', this.lastTokenUsage);
+          }
       }
       
       if (!content) {
