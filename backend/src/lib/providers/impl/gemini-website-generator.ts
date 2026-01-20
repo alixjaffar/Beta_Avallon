@@ -744,115 +744,358 @@ LOVABLE-LEVEL QUALITY BAR (MUST FOLLOW):
     
     if (isModification) {
       // =====================================================
-      // 🔧 SIMPLE EDIT MODE - Detect if this is just a text change
+      // 🚀 LOVABLE-QUALITY MODIFICATION ENGINE
       // =====================================================
+      // Advanced prompt engineering for professional-grade edits
       
       const existingFiles = Object.keys(currentCode || {}).filter(f => f.endsWith('.html'));
       const promptLower = originalPrompt.toLowerCase();
       
-      // Detect if this is a STYLE change (colors, fonts, etc.) vs text change
-      const isStyleChange = 
-        promptLower.includes('color') || promptLower.includes('colour') ||
-        promptLower.includes('font') || promptLower.includes('background') ||
-        promptLower.includes('border') || promptLower.includes('padding') ||
-        promptLower.includes('margin') || promptLower.includes('size') ||
-        promptLower.includes('bigger') || promptLower.includes('smaller') ||
-        promptLower.includes('darker') || promptLower.includes('lighter') ||
-        promptLower.includes('green') || promptLower.includes('blue') ||
-        promptLower.includes('red') || promptLower.includes('black') ||
-        promptLower.includes('white') || promptLower.includes('style');
+      // ========== INTELLIGENT REQUEST CLASSIFICATION ==========
       
-      // Detect simple text changes that should NEVER redesign (excluding style changes)
-      const isSimpleTextChange = !isStyleChange && (
-        (promptLower.includes('change') && promptLower.includes(' to ') && !promptLower.includes('color') && !promptLower.includes('colour')) ||
-        (promptLower.includes('change') && promptLower.includes('instead')) ||
-        promptLower.includes('update the text') ||
-        promptLower.includes('rename') ||
-        promptLower.match(/summer|winter|spring|fall|2024|2025|2026|2027/) !== null ||
-        promptLower.includes('cohort') ||
-        promptLower.match(/(change|update|edit).*(name|text|title|date|year)/) !== null
+      // STYLE changes (colors, fonts, spacing, visual appearance)
+      const isStyleChange = 
+        promptLower.match(/colou?r|background|gradient|shadow|border|rounded|opacity/) !== null ||
+        promptLower.match(/font|text-size|bigger|smaller|bold|italic|underline/) !== null ||
+        promptLower.match(/padding|margin|spacing|gap|width|height|size/) !== null ||
+        promptLower.match(/darker|lighter|brighter|muted|vibrant/) !== null ||
+        promptLower.match(/#[0-9a-f]{3,6}|rgb|hsl|navy|teal|coral|crimson|indigo|violet/) !== null ||
+        promptLower.match(/green|blue|red|black|white|gray|grey|purple|orange|yellow|pink/) !== null ||
+        promptLower.match(/hover|active|focus|transition|animation|animate/) !== null;
+      
+      // LAYOUT changes (structure, positioning, arrangement)
+      const isLayoutChange =
+        promptLower.match(/layout|grid|flex|column|row|center|align|justify/) !== null ||
+        promptLower.match(/move|reorder|rearrange|swap|position|left|right|top|bottom/) !== null ||
+        promptLower.match(/side.?by.?side|stack|horizontal|vertical|responsive/) !== null;
+      
+      // CONTENT additions (adding new sections, elements, features)
+      const isAddition =
+        promptLower.match(/add|create|insert|include|put|make.*new/) !== null ||
+        promptLower.match(/section|card|button|form|modal|popup|carousel|slider|gallery/) !== null ||
+        promptLower.match(/testimonial|faq|pricing|team|contact|hero|feature|cta/) !== null;
+      
+      // INTERACTIVE features (JavaScript functionality)
+      const isInteractive =
+        promptLower.match(/carousel|slider|slideshow|swipe/) !== null ||
+        promptLower.match(/modal|popup|dialog|overlay|lightbox/) !== null ||
+        promptLower.match(/accordion|collapse|expand|toggle|dropdown/) !== null ||
+        promptLower.match(/tab|switch|filter|sort|search/) !== null ||
+        promptLower.match(/animate|scroll|reveal|fade|slide|zoom/) !== null ||
+        promptLower.match(/counter|timer|countdown|progress/) !== null ||
+        promptLower.match(/form|validation|submit|input/) !== null;
+      
+      // SIMPLE text changes (just changing words)
+      const isSimpleTextChange = !isStyleChange && !isLayoutChange && !isAddition && !isInteractive && (
+        promptLower.match(/(change|update|replace|edit|modify).*( to | with | into )/) !== null ||
+        promptLower.match(/rename|reword|rephrase/) !== null ||
+        promptLower.match(/summer|winter|spring|fall|202\d/) !== null ||
+        promptLower.match(/(fix|correct|update).*(text|typo|spelling|name|title|date)/) !== null
       );
       
-      // For simple text changes, use MINIMAL prompt
+      // ========== LOVABLE-QUALITY PROMPTS ==========
+      
+      // 📝 SIMPLE TEXT CHANGE - Ultra-precise, no redesign
       if (isSimpleTextChange) {
-        return `TASK: Change some text in this website. DO NOT redesign anything.
+        return `You are a SURGICAL CODE EDITOR. Make ONE precise text change.
 
-USER REQUEST: "${originalPrompt}"
+📋 USER REQUEST: "${originalPrompt}"
 
 ${currentCodeContext}
 
-INSTRUCTIONS:
-1. Find the EXACT text that matches what the user wants to change
-2. Replace ONLY that text
-3. Keep EVERYTHING ELSE 100% identical - same HTML, CSS, classes, structure
-4. Output the complete file with your ONE change
+🎯 YOUR MISSION:
+1. CTRL+F: Find the exact text the user mentioned
+2. Replace ONLY those specific words/characters
+3. Touch NOTHING else - not a single character of HTML, CSS, or other text
 
-OUTPUT FORMAT:
-=== FILE: filename.html ===
+⚠️ CRITICAL: The user's website looks PERFECT to them. They just want to fix one piece of text.
+If you change ANYTHING else, they will be frustrated.
+
+📤 OUTPUT (only the modified file):
+=== FILE: [filename].html ===
 \`\`\`html
-[the complete file with ONLY the text changed - nothing else modified]
-\`\`\`
-
-MAKE THE CHANGE NOW:`;
+[Complete file with the ONE text change]
+\`\`\``;
       }
       
-      // For style changes (colors, fonts, etc.)
+      // 🎨 STYLE CHANGE - Professional CSS modifications
       if (isStyleChange) {
-        return `🎨 STYLE EDIT - Change the styling of an existing website
+        return `You are an EXPERT CSS DEVELOPER making precise style changes.
 
-USER REQUEST: "${originalPrompt}"
+📋 USER REQUEST: "${originalPrompt}"
 
 ${currentCodeContext}
 
-TASK:
-1. Find the CSS styles that control what the user wants to change
-2. Update ONLY those specific CSS properties
-3. Keep ALL HTML structure exactly the same
-4. Keep ALL other styles exactly the same
-5. Output the complete modified file(s)
+🎨 STYLE MODIFICATION GUIDE:
 
-For button color changes:
-- Find the button's CSS (in <style> tag or inline)
-- Change the background-color and/or color property
-- Keep hover states consistent
+**For Color Changes:**
+- Find ALL instances of the target element's colors
+- Update background-color, color, border-color as needed
+- IMPORTANT: Also update hover/focus states to maintain visual consistency
+- Use CSS variables if the site already uses them: var(--primary-color)
+- For buttons: update both normal AND hover states
 
-OUTPUT FORMAT:
-=== FILE: filename.html ===
+**Color Reference (use these exact values):**
+- Dark Green: #166534 or #15803d (hover: #14532d)
+- Navy Blue: #1e3a5f or #1e40af (hover: #1e3a8a)
+- Coral/Red: #dc2626 (hover: #b91c1c)
+- Purple: #7c3aed (hover: #6d28d9)
+- Teal: #0d9488 (hover: #0f766e)
+
+**For Size Changes:**
+- Adjust font-size, padding, margin proportionally
+- Keep mobile responsiveness intact
+- Maintain visual hierarchy
+
+**For Spacing Changes:**
+- Use consistent spacing units (rem or px)
+- Maintain rhythm and alignment
+
+⚠️ PRESERVE: All HTML structure, all unrelated styles, all functionality
+
+📤 OUTPUT:
+=== FILE: [filename].html ===
 \`\`\`html
-[complete modified file with style change]
-\`\`\`
-
-MAKE THE STYLE CHANGE FOR: "${originalPrompt}"`;
+[Complete file with style changes - update the <style> section or inline styles]
+\`\`\``;
       }
       
-      // For other modifications (adding elements, etc.)
-      return `🔧 EDIT MODE - Modify the existing website
+      // 🔄 LAYOUT CHANGE - Structure modifications
+      if (isLayoutChange) {
+        return `You are a LAYOUT SPECIALIST restructuring an existing website.
 
-USER REQUEST: "${originalPrompt}"
+📋 USER REQUEST: "${originalPrompt}"
 
 ${currentCodeContext}
 
-RULES:
-1. Make ONLY the requested change
-2. Keep ALL existing design, structure, header, footer EXACTLY the same
-3. Copy the style of existing similar elements for additions
-4. Output ONLY the modified file(s)
+📐 LAYOUT MODIFICATION GUIDE:
 
-DO NOT:
-- Change unrelated elements
-- Change the logo or branding
-- Remove existing content
-- Re-output unchanged files
+**For Grid/Flex Changes:**
+- Use CSS Grid for 2D layouts: display: grid; grid-template-columns: repeat(3, 1fr);
+- Use Flexbox for 1D layouts: display: flex; justify-content: space-between;
+- Always include mobile breakpoints
+
+**For Positioning:**
+- Use relative/absolute positioning sparingly
+- Prefer CSS Grid/Flexbox over floats
+- Maintain document flow when possible
+
+**For Responsive Design:**
+- Mobile-first: start with mobile styles
+- Use @media (min-width: 768px) for tablet
+- Use @media (min-width: 1024px) for desktop
+
+**Common Patterns:**
+- Side-by-side: display: flex; gap: 2rem;
+- Centered: display: flex; justify-content: center; align-items: center;
+- Grid cards: display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+
+⚠️ PRESERVE: All content, all styling, all functionality
+
+📤 OUTPUT:
+=== FILE: [filename].html ===
+\`\`\`html
+[Complete file with layout changes]
+\`\`\``;
+      }
+      
+      // ✨ INTERACTIVE FEATURE - Add JavaScript functionality
+      if (isInteractive) {
+        return `You are a FRONTEND DEVELOPER adding interactive features.
+
+📋 USER REQUEST: "${originalPrompt}"
+
+${currentCodeContext}
+
+🎭 INTERACTIVE COMPONENTS TOOLKIT:
+
+**📸 CAROUSEL/SLIDER (use Swiper.js):**
+\`\`\`html
+<!-- Add to <head> -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">
+<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+
+<!-- HTML Structure -->
+<div class="swiper mySwiper">
+  <div class="swiper-wrapper">
+    <div class="swiper-slide">Slide 1</div>
+    <div class="swiper-slide">Slide 2</div>
+  </div>
+  <div class="swiper-pagination"></div>
+  <div class="swiper-button-next"></div>
+  <div class="swiper-button-prev"></div>
+</div>
+
+<!-- Initialize -->
+<script>
+new Swiper('.mySwiper', {
+  slidesPerView: 1,
+  spaceBetween: 30,
+  loop: true,
+  pagination: { el: '.swiper-pagination', clickable: true },
+  navigation: { nextEl: '.swiper-button-next', prevEl: '.swiper-button-prev' },
+  breakpoints: { 768: { slidesPerView: 2 }, 1024: { slidesPerView: 3 } }
+});
+</script>
+\`\`\`
+
+**🪟 MODAL/POPUP:**
+\`\`\`html
+<style>
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; }
+.modal-overlay.active { display: flex; justify-content: center; align-items: center; }
+.modal-content { background: white; padding: 2rem; border-radius: 12px; max-width: 500px; }
+</style>
+<div class="modal-overlay" id="modal">
+  <div class="modal-content">
+    <button onclick="document.getElementById('modal').classList.remove('active')">×</button>
+    <h2>Modal Title</h2>
+    <p>Content here</p>
+  </div>
+</div>
+<button onclick="document.getElementById('modal').classList.add('active')">Open Modal</button>
+\`\`\`
+
+**🎸 ACCORDION/FAQ:**
+\`\`\`html
+<style>
+.accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.3s; }
+.accordion-item.active .accordion-content { max-height: 500px; }
+.accordion-header { cursor: pointer; padding: 1rem; background: #f3f4f6; border-radius: 8px; }
+</style>
+<div class="accordion-item">
+  <div class="accordion-header" onclick="this.parentElement.classList.toggle('active')">
+    Question here? <span>+</span>
+  </div>
+  <div class="accordion-content"><p>Answer here</p></div>
+</div>
+\`\`\`
+
+**🎬 SCROLL ANIMATIONS (use AOS):**
+\`\`\`html
+<link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+<script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+<script>AOS.init({ duration: 800, once: true });</script>
+<!-- Use: data-aos="fade-up" data-aos-delay="100" -->
+\`\`\`
+
+**📑 TABS:**
+\`\`\`html
+<style>
+.tab-btn { padding: 0.75rem 1.5rem; border: none; background: #e5e7eb; cursor: pointer; }
+.tab-btn.active { background: #3b82f6; color: white; }
+.tab-content { display: none; padding: 1.5rem; }
+.tab-content.active { display: block; }
+</style>
+<div class="tabs">
+  <button class="tab-btn active" onclick="showTab(0)">Tab 1</button>
+  <button class="tab-btn" onclick="showTab(1)">Tab 2</button>
+</div>
+<div class="tab-content active">Content 1</div>
+<div class="tab-content">Content 2</div>
+<script>
+function showTab(i) {
+  document.querySelectorAll('.tab-btn').forEach((b,j) => b.classList.toggle('active', i===j));
+  document.querySelectorAll('.tab-content').forEach((c,j) => c.classList.toggle('active', i===j));
+}
+</script>
+\`\`\`
+
+⚠️ PRESERVE: All existing content, design, and functionality. ADD the new feature seamlessly.
+
+📤 OUTPUT:
+=== FILE: [filename].html ===
+\`\`\`html
+[Complete file with interactive feature added]
+\`\`\``;
+      }
+      
+      // ➕ CONTENT ADDITION - Adding new sections/elements
+      if (isAddition) {
+        return `You are an EXPERT WEB DESIGNER adding new content to an existing site.
+
+📋 USER REQUEST: "${originalPrompt}"
+
+${currentCodeContext}
+
+🎨 CONTENT ADDITION GUIDE:
+
+**CRITICAL RULE:** Copy the EXACT styling from existing similar elements!
+
+**Steps:**
+1. Analyze the existing design: colors, fonts, spacing, button styles
+2. Find a similar existing element to use as your template
+3. Create the new element using the SAME classes and styling
+4. Insert it in the logical location
+
+**Section Templates (adapt to match existing style):**
+
+**Team Member Card:**
+- Copy existing card structure exactly
+- Use same image dimensions/placeholder
+- Match text hierarchy (name: h3/h4, title: p/span)
+- Keep same hover effects
+
+**Testimonial:**
+- Quote with citation
+- Star rating if site has them
+- Avatar/photo if site uses them
+
+**FAQ Item:**
+- Question as header
+- Collapsible answer
+- Same spacing as existing FAQs
+
+**CTA Section:**
+- Compelling headline
+- Brief subtext
+- Primary action button matching site style
+
+**Pricing Card:**
+- Plan name, price, features list
+- CTA button
+- Highlight "popular" option if appropriate
 
 ${wantsStripe ? this.getStripeIntegrationInstructions() : ''}
 
-OUTPUT FORMAT:
-=== FILE: filename.html ===
-\`\`\`html
-[complete modified file]
-\`\`\`
+⚠️ MATCH THE EXISTING DESIGN EXACTLY. The new element should look like it was always there.
 
-MAKE THE CHANGE FOR: "${originalPrompt}"`;
+📤 OUTPUT:
+=== FILE: [filename].html ===
+\`\`\`html
+[Complete file with new content added - matching existing style perfectly]
+\`\`\``;
+      }
+      
+      // 🔧 GENERAL MODIFICATION - Catch-all for other changes
+      return `You are a PROFESSIONAL WEB DEVELOPER making precise modifications.
+
+📋 USER REQUEST: "${originalPrompt}"
+
+${currentCodeContext}
+
+🎯 MODIFICATION PRINCIPLES:
+
+1. **Understand First:** Read the existing code carefully before making changes
+2. **Minimal Impact:** Change ONLY what's needed to fulfill the request
+3. **Style Consistency:** Match existing design patterns exactly
+4. **Preserve Everything:** Keep all unrelated content, styles, and functionality
+
+**Common Tasks:**
+- Updating links: Change href attributes
+- Changing images: Update src attributes, maintain dimensions
+- Editing navigation: Modify nav items while keeping structure
+- Form changes: Update form fields, keep validation
+
+${wantsStripe ? this.getStripeIntegrationInstructions() : ''}
+
+⚠️ The user loves their current website design. They want a SPECIFIC change, not a redesign.
+
+📤 OUTPUT:
+=== FILE: [filename].html ===
+\`\`\`html
+[Complete file with the requested modification]
+\`\`\``;
     }
     
     // ALWAYS generate multi-page websites by default (unless explicitly single page)
