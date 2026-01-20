@@ -338,7 +338,7 @@ export async function POST(req: NextRequest) {
 
       // Deduct credits based on actual token usage (or fallback to fixed cost)
       let creditDeduction;
-      let actualCreditsUsed = CREDIT_COSTS.GENERATE_WEBSITE; // Default fallback
+      let actualCreditsUsed: number = CREDIT_COSTS.GENERATE_WEBSITE; // Default fallback
       
       if (websiteResult.tokensUsed && websiteResult.tokensUsed.total > 0) {
         // Use actual token usage: 1 credit per 1000 tokens
