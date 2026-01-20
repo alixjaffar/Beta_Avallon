@@ -741,162 +741,102 @@ LOVABLE-LEVEL QUALITY BAR (MUST FOLLOW):
     
     if (isModification) {
       // =====================================================
-      // WEBSITE EDITOR MODE - PRESERVE & EXTEND EXISTING CODE
+      // 🔧 CODE EDITOR MODE - NOT A GENERATOR
       // =====================================================
+      // The AI acts as a code EDITOR, not a generator.
+      // It first analyzes all the existing code, then makes targeted edits.
       
-      // Extract CSS from existing index.html to ensure style consistency
-      const indexHtml = currentCode?.['index.html'] || Object.values(currentCode || {})[0] || '';
-      const cssMatch = indexHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/gi);
-      const existingCSS = cssMatch ? cssMatch.join('\n') : '';
-      
-      // Extract header/nav from existing HTML
-      const headerMatch = indexHtml.match(/<header[^>]*>[\s\S]*?<\/header>/gi) || 
-                          indexHtml.match(/<nav[^>]*>[\s\S]*?<\/nav>/gi);
-      const existingHeader = headerMatch ? headerMatch[0] : '';
-      
-      // Extract footer from existing HTML
-      const footerMatch = indexHtml.match(/<footer[^>]*>[\s\S]*?<\/footer>/gi);
-      const existingFooter = footerMatch ? footerMatch[0] : '';
-      
-      // Get list of existing files for context
       const existingFiles = Object.keys(currentCode || {}).filter(f => f.endsWith('.html'));
       
-      // Build modification prompt with STRICT preservation rules
-      let modificationPrompt = `
-╔══════════════════════════════════════════════════════════════════════════════╗
-║ 🛑🛑🛑 MODIFICATION MODE - DO NOT CREATE NEW DESIGN 🛑🛑🛑                    ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+      // Detect if this is an imported website (has external URLs, lots of inline CSS, etc.)
+      const indexHtml = currentCode?.['index.html'] || Object.values(currentCode || {})[0] || '';
+      const isImportedSite = indexHtml.includes('https://') || 
+                             indexHtml.includes('http://') ||
+                             (indexHtml.match(/<style/gi) || []).length > 0 ||
+                             indexHtml.length > 5000;
+      
+      // Build the CODE EDITOR prompt - focuses on understanding first, then editing
+      let editorPrompt = `
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ 🔧 CODE EDITOR MODE - YOU ARE EDITING, NOT GENERATING                      ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-You are MODIFYING an EXISTING website. The user IMPORTED this website because
-they LOVE how it looks. Your job is to make a SURGICAL EDIT - change ONLY what
-the user asked for, nothing else.
+You are a CODE EDITOR. The user has an existing website and wants you to 
+make a specific edit. You are NOT creating a new website.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 USER'S REQUEST: "${originalPrompt}"
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 1: UNDERSTAND THE REQUEST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+User's edit request: "${originalPrompt}"
 
-WHAT YOU MUST DO:
-1. Find the EXACT page/section the user is referring to
-2. Make ONLY the specific change they requested  
-3. Keep the EXACT same HTML structure, CSS, layout, colors, fonts
-4. Output ONLY the modified file(s)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 2: ANALYZE THE EXISTING CODE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${isImportedSite ? '⚠️ This is an IMPORTED website - the user wants to keep the exact design.' : ''}
 
-📁 EXISTING PAGES (kept automatically, only output if you're modifying):
-${existingFiles.map(f => `   • ${f}`).join('\n')}
+EXISTING FILES (${existingFiles.length}): ${existingFiles.join(', ')}
+
+Read and understand EACH file below carefully before making changes:
 
 ${currentCodeContext}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎯 OUTPUT RULES - VERY IMPORTANT:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 3: MAKE THE EDIT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Now that you've analyzed the code:
 
-1️⃣ ONLY OUTPUT FILES YOU ARE ADDING OR MODIFYING:
-   - If adding a new page → Output ONLY the new page file
-   - If modifying index.html → Output ONLY index.html with the change
-   - DO NOT re-output pages you aren't changing!
-   - The system will MERGE your output with existing files
+1. IDENTIFY which file(s) need to be edited for: "${originalPrompt}"
+2. Make ONLY that specific change
+3. Keep ALL existing HTML, CSS, classes, and structure EXACTLY the same
+4. Output ONLY the file(s) you modified
 
-2️⃣ FOR NEW PAGES - COPY THE DESIGN EXACTLY:
-   Copy these elements from index.html (shown above):
-   - The ENTIRE <style> block (CSS)
-   - The EXACT <header>/<nav> structure  
-   - The EXACT <footer> structure
-   - Same fonts, colors, spacing
+CRITICAL RULES:
+• DO NOT change the design, colors, fonts, or layout
+• DO NOT change the logo or branding
+• DO NOT remove any existing content unless specifically asked
+• DO NOT re-output files you aren't modifying
+• If adding a new element, match the EXACT style of existing similar elements
 
-3️⃣ UPDATE NAVIGATION IN EXISTING PAGES:
-   If adding a new page, you MUST also output the modified index.html
-   (and any other pages with navigation) with the new link added to the nav.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 4: OUTPUT FORMAT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Output ONLY modified files using this format:
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎨 STYLE TEMPLATE - COPY EXACTLY TO NEW PAGES:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+=== FILE: filename.html ===
+\`\`\`html
+[THE COMPLETE FILE WITH YOUR EDIT - keep all existing code, just add/modify the specific part]
+\`\`\`
 
-${existingCSS ? `EXISTING CSS (copy verbatim):\n${existingCSS.substring(0, 12000)}` : ''}
+Example: If asked to "add Adam Smith to the team page", you would:
+1. Find team.html in the existing code
+2. Find the team members section
+3. Copy an existing team member card
+4. Change the name to "Adam Smith"
+5. Output the COMPLETE team.html with that one addition
 
-${existingHeader ? `EXISTING HEADER/NAV (copy and add new link):\n${existingHeader.substring(0, 2500)}` : ''}
-
-${existingFooter ? `EXISTING FOOTER (copy verbatim):\n${existingFooter.substring(0, 2500)}` : ''}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📤 OUTPUT FORMAT:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-=== FILE: sales-agent.html ===
-[NEW page with COPIED styles from index.html]
-
-=== FILE: index.html ===
-[EXISTING index.html with navigation link added for new page]
-
-(Only output files you're creating or modifying!)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💡 COMMON IMPLEMENTATIONS - USE THESE:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-FOR CAROUSELS/SLIDERS - Use Swiper.js (ALWAYS INCLUDE THESE):
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">
-<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
-<script>
-new Swiper('.swiper', {
-  loop: true,
-  pagination: { el: '.swiper-pagination', clickable: true },
-  navigation: { nextEl: '.swiper-button-next', prevEl: '.swiper-button-prev' },
-  slidesPerView: 3,
-  spaceBetween: 30,
-  breakpoints: { 320: { slidesPerView: 1 }, 768: { slidesPerView: 2 }, 1024: { slidesPerView: 3 } }
-});
-</script>
-
-FOR MODALS/POPUPS - Use simple JS:
-<div id="modal" class="modal hidden">...</div>
-<script>
-document.querySelector('.open-modal').addEventListener('click', () => document.getElementById('modal').classList.remove('hidden'));
-document.querySelector('.close-modal').addEventListener('click', () => document.getElementById('modal').classList.add('hidden'));
-</script>
-
-FOR ACCORDIONS/FAQ:
-<script>
-document.querySelectorAll('.accordion-btn').forEach(btn => {
-  btn.addEventListener('click', () => btn.nextElementSibling.classList.toggle('hidden'));
-});
-</script>
-
-FOR TABS:
-<script>
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-    document.getElementById(btn.dataset.tab).classList.remove('hidden');
-  });
-});
-</script>
-
-FOR ANIMATIONS - Use AOS (Animate On Scroll):
-<link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
-<script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
-<script>AOS.init();</script>
-Then add data-aos="fade-up" to elements.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-❌ DO NOT:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Create new CSS styles (copy existing)
-- Change the color scheme
-- Use different fonts
-- Create a different nav structure
-- "Improve" or "modernize" anything
-- Re-output unchanged pages
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+COMMON PATTERNS (use if needed):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Carousel: Use Swiper.js CDN
+• Modal: Simple JS show/hide
+• Accordion: Toggle visibility
+• Animations: AOS library
 
 ${wantsStripe ? this.getStripeIntegrationInstructions() : ''}
 
-✅ TASK: "${originalPrompt}"
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ 🎯 YOUR TASK: "${originalPrompt}"                                          ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-IMPORTANT: If the task involves interactive elements (carousel, slider, modal, tabs, accordion, animations), USE THE IMPLEMENTATIONS ABOVE. Include ALL required CDN links and initialization scripts.
+Now make the edit. Remember:
+• Read the existing code first
+• Find the right file and section
+• Make ONLY the requested change
+• Output the complete modified file(s)
 
-The user LOVES their current design. Add to it without changing the look.
-Output ONLY new/modified files:`;
+GO:`;
       
-      return modificationPrompt;
+      return editorPrompt;
     }
     
     // ALWAYS generate multi-page websites by default (unless explicitly single page)
