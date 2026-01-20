@@ -1131,6 +1131,15 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         }
       }
       
+      // Handle error messages from iframe
+      if (event.data?.type === 'error') {
+        toast({
+          title: "Error",
+          description: event.data.data?.message || "An error occurred in the visual editor.",
+          variant: "destructive",
+        });
+      }
+      
       if (event.data?.type === 'elementDeleted' || event.data?.type === 'elementDuplicated') {
         setHasUnsavedChanges(true);
       }
@@ -1550,8 +1559,29 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     });
   };
   
+  // Store the last selected element's xpath for persistent add-similar functionality
+  const [lastSelectedXpath, setLastSelectedXpath] = useState<string | null>(null);
+  
+  // Update lastSelectedXpath when element is selected
+  useEffect(() => {
+    if (selectedElement?.xpath) {
+      setLastSelectedXpath(selectedElement.xpath);
+    }
+  }, [selectedElement]);
+  
   const addSimilarElement = () => {
-    if (!iframeRef.current?.contentWindow || !selectedElement) {
+    const xpath = selectedElement?.xpath || lastSelectedXpath;
+    
+    if (!iframeRef.current?.contentWindow) {
+      toast({
+        title: "No preview loaded",
+        description: "Please wait for the website preview to load.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!xpath) {
       toast({
         title: "No element selected",
         description: "Please click on a team member card or similar element first.",
@@ -1559,14 +1589,16 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       });
       return;
     }
+    
     // Pass the xpath so the iframe can find the element even after a refresh
     iframeRef.current.contentWindow.postMessage({ 
       type: 'addSimilar',
-      xpath: selectedElement.xpath 
+      xpath: xpath
     }, '*');
+    
     toast({
-      title: "Added!",
-      description: "New item added to the section. Edit the placeholder text.",
+      title: "Adding...",
+      description: "Creating a new team member card. Edit the placeholder text after it's added.",
     });
   };
 
