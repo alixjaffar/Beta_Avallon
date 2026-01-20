@@ -30,8 +30,8 @@ export class VercelProvider implements HostingProvider {
 
   async createProject(input: CreateProjectInput): Promise<CreateProjectResult> {
     if (!isConfigured) {
-      logInfo('Vercel not configured, returning mocked project', input);
-      return { projectId: 'mock-project-id', projectName: input.name };
+      logError('Vercel not configured - VERCEL_TOKEN is required for deployments', new Error('Missing VERCEL_TOKEN'));
+      throw new Error('Vercel is not configured. Please add VERCEL_TOKEN to environment variables to enable publishing.');
     }
 
     try {
@@ -120,12 +120,8 @@ export class VercelProvider implements HostingProvider {
 
   async createDeployment(input: CreateDeploymentInput): Promise<CreateDeploymentResult> {
     if (!isConfigured) {
-      logInfo('Vercel not configured, returning mocked deployment', input);
-      return {
-        deploymentId: 'mock-deployment-id',
-        url: `https://mock-${input.projectId}.vercel.app`,
-        readyState: 'READY',
-      };
+      logError('Vercel not configured - VERCEL_TOKEN is required for deployments', new Error('Missing VERCEL_TOKEN'));
+      throw new Error('Vercel is not configured. Please add VERCEL_TOKEN to environment variables to enable publishing.');
     }
 
     try {
@@ -269,7 +265,7 @@ export class VercelProvider implements HostingProvider {
 
   async getDeploymentStatus(deploymentId: string): Promise<{ status: string; url?: string }> {
     if (!isConfigured) {
-      return { status: 'READY', url: `https://mock-${deploymentId}.vercel.app` };
+      throw new Error('Vercel is not configured. Please add VERCEL_TOKEN to environment variables.');
     }
 
     try {
@@ -291,8 +287,7 @@ export class VercelProvider implements HostingProvider {
 
   async addDomain(input: AddDomainInput): Promise<{ success: boolean; error?: string }> {
     if (!isConfigured) {
-      logInfo('Vercel not configured, returning mocked domain add', input);
-      return { success: true };
+      return { success: false, error: 'Vercel is not configured. Please add VERCEL_TOKEN to environment variables.' };
     }
 
     try {
@@ -312,8 +307,7 @@ export class VercelProvider implements HostingProvider {
 
   async removeDomain(projectId: string, domain: string): Promise<{ success: boolean; error?: string }> {
     if (!isConfigured) {
-      logInfo('Vercel not configured, returning mocked domain remove', { projectId, domain });
-      return { success: true };
+      return { success: false, error: 'Vercel is not configured. Please add VERCEL_TOKEN to environment variables.' };
     }
 
     try {
