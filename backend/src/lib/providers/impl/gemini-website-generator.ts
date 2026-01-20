@@ -437,8 +437,9 @@ export class GeminiWebsiteGenerator {
     
     // CLONE operations need MAXIMUM tokens for full replication
     // Multi-page sites also need high tokens
-    // Gemini 3.0 supports up to 2M context, so we can be more generous
+    // Modifications need LOW temperature for deterministic output
     const isCloneOperation = isCopyRequest && websiteUrl;
+    const isModification = currentCode && Object.keys(currentCode).length > 0;
     const maxOutputTokens = isCloneOperation ? 65000 : (isMultiPage ? 65000 : 49152); // Max 65536 for Gemini API
     const timeout = isCloneOperation ? 300000 : (isMultiPage ? 240000 : 180000); // Increased timeouts for better results
     
@@ -512,9 +513,10 @@ export class GeminiWebsiteGenerator {
               ]
             },
               generationConfig: {
-                temperature: isCloneOperation ? 0.3 : 0.6,
-                topP: 0.95,
-              topK: isCloneOperation ? 20 : 32,
+                // Use very low temperature for modifications to prevent redesigning
+                temperature: isModification ? 0.1 : (isCloneOperation ? 0.3 : 0.6),
+                topP: isModification ? 0.8 : 0.95,
+              topK: isModification ? 10 : (isCloneOperation ? 20 : 32),
                 maxOutputTokens: maxOutputTokens,
               candidateCount: 1,
               stopSequences: [],
@@ -586,9 +588,10 @@ export class GeminiWebsiteGenerator {
           const generativeModel = this.vertexAI.getGenerativeModel({
             model: model,
             generationConfig: {
-              temperature: isCloneOperation ? 0.3 : 0.6,
-              topK: isCloneOperation ? 20 : 32,
-              topP: 0.95,
+              // Use very low temperature for modifications to prevent redesigning
+              temperature: isModification ? 0.1 : (isCloneOperation ? 0.3 : 0.6),
+              topK: isModification ? 10 : (isCloneOperation ? 20 : 32),
+              topP: isModification ? 0.8 : 0.95,
               maxOutputTokens: maxOutputTokens,
             },
           });
@@ -741,102 +744,76 @@ LOVABLE-LEVEL QUALITY BAR (MUST FOLLOW):
     
     if (isModification) {
       // =====================================================
-      // 🔧 CODE EDITOR MODE - NOT A GENERATOR
+      // 🔧 SIMPLE EDIT MODE - Detect if this is just a text change
       // =====================================================
-      // The AI acts as a code EDITOR, not a generator.
-      // It first analyzes all the existing code, then makes targeted edits.
       
       const existingFiles = Object.keys(currentCode || {}).filter(f => f.endsWith('.html'));
+      const promptLower = originalPrompt.toLowerCase();
       
-      // Detect if this is an imported website (has external URLs, lots of inline CSS, etc.)
-      const indexHtml = currentCode?.['index.html'] || Object.values(currentCode || {})[0] || '';
-      const isImportedSite = indexHtml.includes('https://') || 
-                             indexHtml.includes('http://') ||
-                             (indexHtml.match(/<style/gi) || []).length > 0 ||
-                             indexHtml.length > 5000;
+      // Detect simple text changes that should NEVER redesign
+      const isSimpleTextChange = 
+        (promptLower.includes('change') && promptLower.includes(' to ')) ||
+        (promptLower.includes('change') && promptLower.includes('instead')) ||
+        promptLower.includes('replace') ||
+        promptLower.includes('update the text') ||
+        promptLower.includes('rename') ||
+        promptLower.match(/summer|winter|spring|fall|2024|2025|2026|2027/) !== null ||
+        promptLower.includes('cohort') ||
+        promptLower.includes('modify') ||
+        promptLower.match(/(change|update|edit).*(name|text|title|date|year)/) !== null;
       
-      // Build the CODE EDITOR prompt - focuses on understanding first, then editing
-      let editorPrompt = `
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ 🔧 CODE EDITOR MODE - YOU ARE EDITING, NOT GENERATING                      ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+      // For simple text changes, use MINIMAL prompt
+      if (isSimpleTextChange) {
+        return `TASK: Change some text in this website. DO NOT redesign anything.
 
-You are a CODE EDITOR. The user has an existing website and wants you to 
-make a specific edit. You are NOT creating a new website.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 1: UNDERSTAND THE REQUEST
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-User's edit request: "${originalPrompt}"
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 2: ANALYZE THE EXISTING CODE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${isImportedSite ? '⚠️ This is an IMPORTED website - the user wants to keep the exact design.' : ''}
-
-EXISTING FILES (${existingFiles.length}): ${existingFiles.join(', ')}
-
-Read and understand EACH file below carefully before making changes:
+USER REQUEST: "${originalPrompt}"
 
 ${currentCodeContext}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 3: MAKE THE EDIT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Now that you've analyzed the code:
+INSTRUCTIONS:
+1. Find the EXACT text that matches what the user wants to change
+2. Replace ONLY that text
+3. Keep EVERYTHING ELSE 100% identical - same HTML, CSS, classes, structure
+4. Output the complete file with your ONE change
 
-1. IDENTIFY which file(s) need to be edited for: "${originalPrompt}"
-2. Make ONLY that specific change
-3. Keep ALL existing HTML, CSS, classes, and structure EXACTLY the same
-4. Output ONLY the file(s) you modified
-
-CRITICAL RULES:
-• DO NOT change the design, colors, fonts, or layout
-• DO NOT change the logo or branding
-• DO NOT remove any existing content unless specifically asked
-• DO NOT re-output files you aren't modifying
-• If adding a new element, match the EXACT style of existing similar elements
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 4: OUTPUT FORMAT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Output ONLY modified files using this format:
-
+OUTPUT FORMAT:
 === FILE: filename.html ===
 \`\`\`html
-[THE COMPLETE FILE WITH YOUR EDIT - keep all existing code, just add/modify the specific part]
+[the complete file with ONLY the text changed - nothing else modified]
 \`\`\`
 
-Example: If asked to "add Adam Smith to the team page", you would:
-1. Find team.html in the existing code
-2. Find the team members section
-3. Copy an existing team member card
-4. Change the name to "Adam Smith"
-5. Output the COMPLETE team.html with that one addition
+MAKE THE CHANGE NOW:`;
+      }
+      
+      // For other modifications (adding elements, etc.)
+      return `🔧 EDIT MODE - Modify the existing website
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-COMMON PATTERNS (use if needed):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Carousel: Use Swiper.js CDN
-• Modal: Simple JS show/hide
-• Accordion: Toggle visibility
-• Animations: AOS library
+USER REQUEST: "${originalPrompt}"
+
+${currentCodeContext}
+
+RULES:
+1. Make ONLY the requested change
+2. Keep ALL existing design, colors, fonts, layout EXACTLY the same
+3. Keep the header and footer EXACTLY the same
+4. Copy the style of existing similar elements for additions
+5. Output ONLY the modified file(s)
+
+DO NOT:
+- Change colors, fonts, or design
+- Change the logo or branding
+- Remove existing content
+- Re-output unchanged files
 
 ${wantsStripe ? this.getStripeIntegrationInstructions() : ''}
 
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ 🎯 YOUR TASK: "${originalPrompt}"                                          ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+OUTPUT FORMAT:
+=== FILE: filename.html ===
+\`\`\`html
+[complete modified file]
+\`\`\`
 
-Now make the edit. Remember:
-• Read the existing code first
-• Find the right file and section
-• Make ONLY the requested change
-• Output the complete modified file(s)
-
-GO:`;
-      
-      return editorPrompt;
+MAKE THE CHANGE FOR: "${originalPrompt}"`;
     }
     
     // ALWAYS generate multi-page websites by default (unless explicitly single page)

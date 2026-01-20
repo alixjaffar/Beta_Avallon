@@ -1526,7 +1526,15 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       });
 
       window.open(result.previewUrl, '_blank');
-      onUpdate({ ...site, previewUrl: result.previewUrl, status: 'deployed' });
+      
+      // Update site with ALL deployment info including vercelProjectId for domain management
+      onUpdate({ 
+        ...site, 
+        previewUrl: result.previewUrl, 
+        vercelProjectId: result.vercelProjectId,
+        vercelDeploymentId: result.vercelDeploymentId,
+        status: 'deployed' 
+      });
       
     } catch (error: any) {
       console.error('Deploy error:', error);

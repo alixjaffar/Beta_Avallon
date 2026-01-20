@@ -151,6 +151,8 @@ export async function POST(req: NextRequest) {
         success: true,
         previewUrl,
         repoUrl,
+        vercelProjectId: project.projectId,
+        vercelDeploymentId: deployment.deploymentId,
         message: "Website deployed successfully!"
       }, { headers: corsHeaders });
     } catch (deployError: any) {
