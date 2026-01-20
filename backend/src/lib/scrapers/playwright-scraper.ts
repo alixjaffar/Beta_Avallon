@@ -951,85 +951,126 @@ export class PlaywrightScraper {
   }
 
   private removeTrackingScripts($: CheerioAPI): void {
-    // Tracking and analytics patterns
+    // ONLY remove tracking/analytics - KEEP interactive scripts like carousels
     const trackingPatterns = [
-      'google-analytics', 'googletagmanager', 'gtag',
-      'facebook', 'fb', 'pixel',
-      'hotjar', 'clarity', 'segment',
+      'google-analytics', 'googletagmanager', 'gtag(',
+      'fbevents', 'fbq(', 'pixel',
+      'hotjar', 'clarity.ms', 'segment.io',
       'intercom', 'drift', 'crisp',
+      'mixpanel', 'amplitude', 'heap',
     ];
     
-    // WordPress-specific scripts that cause CORS errors when loaded from scraped pages
-    const wordpressPatterns = [
-      'wp-emoji', 'wp-embed', 'wp-includes',
-      'wp-content/plugins', 'wp-content/themes',
-      'twemoji', 'emoji-release',
-      'wp-block', 'wp-json',
-      'jetpack', 'akismet',
-      'woocommerce', 'elementor',
+    // WordPress-specific scripts that ONLY cause issues (not functionality)
+    const wordpressProblematicPatterns = [
+      'wp-emoji', 'twemoji', 'emoji-release',
+      'wpemojiSettings', 'WordPressSettings',
     ];
     
-    // External scripts that should be removed (they won't work without proper CORS)
-    const externalPatterns = [
-      ...trackingPatterns,
-      ...wordpressPatterns,
+    // Scripts that MUST be kept (carousels, sliders, UI libraries)
+    const keepPatterns = [
+      'swiper', 'slick', 'owl', 'carousel', 'slider',
+      'flickity', 'glide', 'splide', 'keen-slider',
+      'lightbox', 'fancybox', 'magnific',
+      'gsap', 'anime', 'aos', 'scroll',
+      'jquery', 'bootstrap', 'foundation',
+      'alpine', 'vue', 'react', 'angular',
+      'lodash', 'underscore', 'moment', 'dayjs',
+      'popper', 'tippy', 'tooltip',
+      'modal', 'dialog', 'popup',
+      'accordion', 'tab', 'collapse',
+      'form', 'validation', 'input',
+      'menu', 'nav', 'dropdown',
+    ];
+    
+    // Safe CDNs that should ALWAYS be kept
+    const safeCDNs = [
+      'cdnjs', 'unpkg', 'jsdelivr', 'cloudflare', 
+      'googleapis', 'gstatic', 'jquery',
+      'bootstrapcdn', 'fontawesome', 'swiperjs',
+      'npmjs', 'esm.sh', 'skypack',
     ];
     
     $('script').each((_, el) => {
       const src = $(el).attr('src') || '';
       const content = $(el).html() || '';
+      const srcLower = src.toLowerCase();
+      const contentLower = content.toLowerCase();
       
-      // Remove scripts matching patterns
-      if (externalPatterns.some(p => src.toLowerCase().includes(p) || content.toLowerCase().includes(p))) {
+      // ALWAYS keep scripts that look like UI/interactive libraries
+      if (keepPatterns.some(p => srcLower.includes(p) || contentLower.includes(p))) {
+        return; // Keep this script
+      }
+      
+      // Remove ONLY tracking scripts
+      if (trackingPatterns.some(p => srcLower.includes(p) || contentLower.includes(p))) {
         $(el).remove();
         return;
       }
       
-      // Remove external scripts from different origin (they cause CORS errors)
+      // Remove ONLY problematic WordPress scripts
+      if (wordpressProblematicPatterns.some(p => srcLower.includes(p) || contentLower.includes(p))) {
+        $(el).remove();
+        return;
+      }
+      
+      // For external scripts, check if they're from safe CDNs
       if (src && !src.startsWith('data:')) {
         try {
           const scriptUrl = new URL(src, this.baseUrl);
-          // Remove scripts from WordPress sites and other CMS platforms
-          if (scriptUrl.pathname.includes('/wp-') || 
-              scriptUrl.pathname.includes('/wp_') ||
-              scriptUrl.hostname !== this.baseDomain) {
-            // Keep CDN scripts like React, jQuery, etc.
-            const safeCDNs = ['cdnjs', 'unpkg', 'jsdelivr', 'cloudflare', 'googleapis', 'jquery'];
-            if (!safeCDNs.some(cdn => scriptUrl.hostname.includes(cdn))) {
-              $(el).remove();
-            }
+          
+          // Always keep CDN scripts
+          if (safeCDNs.some(cdn => scriptUrl.hostname.includes(cdn))) {
+            return; // Keep
+          }
+          
+          // Keep scripts from same domain
+          if (scriptUrl.hostname === this.baseDomain) {
+            return; // Keep
+          }
+          
+          // Remove ONLY WordPress core scripts that cause CORS issues
+          if (scriptUrl.pathname.includes('/wp-includes/') && 
+              !keepPatterns.some(p => scriptUrl.pathname.toLowerCase().includes(p))) {
+            $(el).remove();
           }
         } catch {
-          // Invalid URL, remove it
-          $(el).remove();
+          // Keep script if URL parsing fails - might still be valid
         }
       }
     });
     
-    // Remove noscript tracking pixels
+    // Remove noscript tracking pixels ONLY
     $('noscript').each((_, el) => {
       const content = $(el).html() || '';
-      if (trackingPatterns.some(p => content.includes(p))) {
+      if (trackingPatterns.some(p => content.toLowerCase().includes(p))) {
         $(el).remove();
       }
     });
     
-    // Remove WordPress-specific inline scripts that reference wp-emoji, etc.
+    // Remove ONLY emoji-related inline scripts (keep all other inline scripts!)
     $('script:not([src])').each((_, el) => {
       const content = $(el).html() || '';
-      if (content.includes('wp-emoji') || 
-          content.includes('twemoji') || 
-          content.includes('window._wpemojiSettings') ||
-          content.includes('WordPressSettings')) {
+      const contentLower = content.toLowerCase();
+      
+      // Keep scripts that initialize UI components
+      if (keepPatterns.some(p => contentLower.includes(p))) {
+        return; // Keep - might be carousel/slider init
+      }
+      
+      // Remove ONLY emoji-related scripts
+      if (content.includes('_wpemojiSettings') ||
+          content.includes('twemoji.parse') ||
+          (content.includes('wp-emoji') && !content.includes('swiper') && !content.includes('slider'))) {
         $(el).remove();
       }
     });
     
-    // Remove link preloads for WP resources
-    $('link[rel="preload"][href*="wp-"]').remove();
-    $('link[rel="preload"][href*="wp_"]').remove();
-    $('link[rel="prefetch"][href*="wp-"]').remove();
-    $('link[rel="dns-prefetch"]').remove(); // Remove DNS prefetch for external domains
+    // Remove ONLY WP emoji preloads (keep other preloads)
+    $('link[rel="preload"][href*="wp-emoji"]').remove();
+    $('link[rel="preload"][href*="twemoji"]').remove();
+    // DON'T remove all dns-prefetch - only remove tracking-related ones
+    $('link[rel="dns-prefetch"][href*="google-analytics"]').remove();
+    $('link[rel="dns-prefetch"][href*="facebook"]').remove();
   }
 
   // ==================== METADATA EXTRACTION ====================
