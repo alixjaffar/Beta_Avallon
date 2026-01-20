@@ -92,6 +92,20 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
   const [pastedContent, setPastedContent] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [pageName, setPageName] = useState('index.html');
+  
+  // Update default page name when switching tabs
+  const handleTabChange = (tab: 'paste' | 'url' | 'folder') => {
+    setActiveTab(tab);
+    // Set smart defaults based on tab
+    if (tab === 'folder') {
+      setPageName('sales-agent.html'); // Better default for folder uploads
+    } else if (tab === 'url' || tab === 'paste') {
+      // Keep as is or reset to index.html if it's the folder default
+      if (pageName === 'sales-agent.html') {
+        setPageName('index.html');
+      }
+    }
+  };
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -808,7 +822,7 @@ ${jsContent}
             {(['url', 'paste', 'folder'] as const).map((tab) => (
                 <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => handleTabChange(tab)}
                 className={`flex-1 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
                   activeTab === tab
                       ? 'bg-primary text-white'
@@ -952,9 +966,9 @@ ${jsContent}
                         </span>
                       </div>
                     ))}
-                  </div>
-                </div>
-              )}
+              </div>
+            </div>
+          )}
 
               {/* Info Box */}
               <div className={`p-4 rounded-lg text-sm ${isLight ? 'bg-purple-50 text-purple-700' : 'bg-purple-500/10 text-purple-400'}`}>
@@ -974,22 +988,35 @@ ${jsContent}
             </div>
           )}
 
-          {/* Page Name */}
-          <div className="mt-6">
-            <label className={`block text-sm font-medium mb-2 ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
-              Save as page
+          {/* Page Name - More prominent for folder uploads */}
+          <div className={`mt-6 p-4 rounded-lg ${
+            activeTab === 'folder' 
+              ? (isLight ? 'bg-amber-50 border border-amber-200' : 'bg-amber-500/10 border border-amber-500/30')
+              : ''
+          }`}>
+            <label className={`block text-sm font-medium mb-2 ${
+              activeTab === 'folder' 
+                ? (isLight ? 'text-amber-700' : 'text-amber-400')
+                : (isLight ? 'text-slate-700' : 'text-gray-300')
+            }`}>
+              {activeTab === 'folder' ? '⚠️ Save as page (CHANGE THIS!)' : 'Save as page'}
             </label>
             <input
               type="text"
               value={pageName}
               onChange={(e) => setPageName(e.target.value.endsWith('.html') ? e.target.value : e.target.value + '.html')}
-              placeholder="index.html"
+              placeholder={activeTab === 'folder' ? 'sales-agent.html' : 'index.html'}
               className={`w-full px-4 py-2 rounded-lg border text-sm transition-colors ${
                 isLight 
-                  ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-primary' 
+                  ? 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-primary' 
                   : 'bg-surface-dark border-panel-border text-white placeholder-gray-500 focus:border-primary'
               }`}
             />
+            {activeTab === 'folder' && (
+              <p className={`text-xs mt-2 ${isLight ? 'text-amber-600' : 'text-amber-400/80'}`}>
+                💡 Change this to avoid overwriting your homepage! Examples: sales-agent.html, chatbot.html, widget.html
+              </p>
+            )}
           </div>
 
           {/* Advanced Options */}
