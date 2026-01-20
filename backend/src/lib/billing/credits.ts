@@ -63,10 +63,9 @@ export function calculateTokenCredits(inputTokens: number, outputTokens: number)
 
 /**
  * Get user's current credit balance (file-based)
+ * Checks BOTH userId AND email to find the user's credits
  */
 export async function getUserCredits(userId: string, email?: string): Promise<number> {
-  const lookupId = email || userId;
-  
   // Skip for mock users
   if (userId === 'mock_user_id' || userId.startsWith('mock_')) {
     return 5; // Default free plan credits
@@ -75,11 +74,27 @@ export async function getUserCredits(userId: string, email?: string): Promise<nu
   try {
     const allCredits = loadUserCredits();
     
-    // Try userId first, then email
-    const userCredits = allCredits[userId] || (email ? allCredits[email] : null);
+    // Try userId first, then email - return highest balance found (in case of sync issues)
+    const userIdCredits = allCredits[userId]?.credits;
+    const emailCredits = email ? allCredits[email]?.credits : undefined;
     
-    if (userCredits) {
-      return userCredits.credits;
+    if (userIdCredits !== undefined || emailCredits !== undefined) {
+      // Return the maximum of the two (in case they got out of sync)
+      const credits = Math.max(userIdCredits ?? 0, emailCredits ?? 0);
+      
+      // If there's a mismatch, sync them
+      if (userIdCredits !== emailCredits && (userIdCredits !== undefined && emailCredits !== undefined)) {
+        const syncEntry = {
+          credits,
+          lastUpdated: new Date().toISOString(),
+        };
+        allCredits[userId] = syncEntry;
+        if (email) allCredits[email] = syncEntry;
+        saveUserCredits(allCredits);
+        logInfo('Synced mismatched credits', { userId, email, credits });
+      }
+      
+      return credits;
     }
     
     // New user - give them 15 credits (free plan)
@@ -118,6 +133,7 @@ export async function hasEnoughCredits(
 /**
  * Deduct credits from user's account (file-based)
  * Returns true if successful, false if insufficient credits
+ * IMPORTANT: Updates BOTH userId AND email entries for consistency
  */
 export async function deductCredits(
   userId: string,
@@ -125,11 +141,11 @@ export async function deductCredits(
   reason?: string,
   email?: string
 ): Promise<{ success: boolean; remainingCredits: number; error?: string }> {
-  const lookupId = email || userId;
-  
   try {
     const allCredits = loadUserCredits();
-    const currentCredits = allCredits[lookupId]?.credits ?? PLAN_CREDITS.free;
+    
+    // Get current credits from either userId or email (check both)
+    const currentCredits = allCredits[userId]?.credits ?? allCredits[email || '']?.credits ?? PLAN_CREDITS.free;
     
     if (currentCredits < amount) {
       logInfo('Insufficient credits', {
@@ -148,13 +164,20 @@ export async function deductCredits(
 
     // Deduct credits
     const newCredits = currentCredits - amount;
-    allCredits[lookupId] = {
+    const creditEntry = {
       credits: newCredits,
       lastUpdated: new Date().toISOString(),
     };
+    
+    // Update BOTH userId AND email entries for consistency
+    allCredits[userId] = creditEntry;
+    if (email && email !== userId) {
+      allCredits[email] = creditEntry;
+    }
+    
     saveUserCredits(allCredits);
 
-    logInfo('Credits deducted', {
+    logInfo('Credits deducted (updated both userId and email)', {
       userId,
       email,
       amount,
@@ -197,6 +220,7 @@ export async function deductTokenCredits(
 
 /**
  * Add credits to user's account (file-based)
+ * IMPORTANT: Stores under BOTH userId AND email for redundancy
  */
 export async function addCredits(
   userId: string,
@@ -204,20 +228,31 @@ export async function addCredits(
   reason?: string,
   email?: string
 ): Promise<{ success: boolean; newBalance: number }> {
-  const lookupId = email || userId;
-  
   try {
     const allCredits = loadUserCredits();
-    const currentCredits = allCredits[lookupId]?.credits ?? 0;
+    
+    // Get current credits from either userId or email (whichever exists)
+    const currentCredits = allCredits[userId]?.credits ?? allCredits[email || '']?.credits ?? 0;
     const newBalance = currentCredits + amount;
     
-    allCredits[lookupId] = {
+    // Store under BOTH userId AND email for redundancy
+    // This ensures credits can be found regardless of which identifier is used
+    const creditEntry = {
       credits: newBalance,
       lastUpdated: new Date().toISOString(),
     };
+    
+    // Always store under userId
+    allCredits[userId] = creditEntry;
+    
+    // Also store under email if provided (creates a link)
+    if (email && email !== userId) {
+      allCredits[email] = creditEntry;
+    }
+    
     saveUserCredits(allCredits);
 
-    logInfo('Credits added', {
+    logInfo('Credits added (stored under both userId and email)', {
       userId,
       email,
       amount,
@@ -241,6 +276,7 @@ export async function addCredits(
 
 /**
  * Set user's credits to a specific amount (file-based)
+ * IMPORTANT: Updates BOTH userId AND email entries for consistency
  */
 export async function setCredits(
   userId: string,
@@ -248,18 +284,23 @@ export async function setCredits(
   reason?: string,
   email?: string
 ): Promise<{ success: boolean; newBalance: number }> {
-  const lookupId = email || userId;
-  
   try {
     const allCredits = loadUserCredits();
     
-    allCredits[lookupId] = {
+    const creditEntry = {
       credits: amount,
       lastUpdated: new Date().toISOString(),
     };
+    
+    // Update BOTH userId AND email for consistency
+    allCredits[userId] = creditEntry;
+    if (email && email !== userId) {
+      allCredits[email] = creditEntry;
+    }
+    
     saveUserCredits(allCredits);
 
-    logInfo('Credits set', {
+    logInfo('Credits set (updated both userId and email)', {
       userId,
       email,
       amount,
@@ -289,6 +330,7 @@ export function getPlanCredits(plan: string): number {
 
 /**
  * Ensure user has at least the minimum credits (file-based)
+ * IMPORTANT: Initializes BOTH userId AND email entries
  */
 export async function ensureUserHasCredits(
   userId: string,
@@ -296,7 +338,6 @@ export async function ensureUserHasCredits(
   minCredits?: number
 ): Promise<{ success: boolean; credits: number }> {
   const defaultCredits = minCredits ?? 15; // Default to 15 credits for all new users
-  const lookupId = email || userId;
   
   if (!email || email === 'user@example.com' || email === 'test@example.com') {
     return { success: true, credits: defaultCredits };
@@ -305,18 +346,34 @@ export async function ensureUserHasCredits(
   try {
     const allCredits = loadUserCredits();
     
-    if (allCredits[lookupId]) {
-      return { success: true, credits: allCredits[lookupId].credits };
+    // Check if user exists under either userId or email
+    const existingCredits = allCredits[userId]?.credits ?? allCredits[email]?.credits;
+    
+    if (existingCredits !== undefined) {
+      // Ensure both entries are synced
+      const creditEntry = {
+        credits: existingCredits,
+        lastUpdated: new Date().toISOString(),
+      };
+      allCredits[userId] = creditEntry;
+      allCredits[email] = creditEntry;
+      saveUserCredits(allCredits);
+      
+      return { success: true, credits: existingCredits };
     }
     
     // New user - give them 15 credits (free plan default)
-    allCredits[lookupId] = {
+    const creditEntry = {
       credits: 15,
       lastUpdated: new Date().toISOString(),
     };
+    
+    // Store under BOTH userId AND email
+    allCredits[userId] = creditEntry;
+    allCredits[email] = creditEntry;
     saveUserCredits(allCredits);
     
-    logInfo('Initialized user credits', { email, userId, credits: 15 });
+    logInfo('Initialized user credits (stored under both userId and email)', { email, userId, credits: 15 });
     return { success: true, credits: 15 };
   } catch (error: any) {
     logError('Failed to ensure user has credits', error, { userId, email });
