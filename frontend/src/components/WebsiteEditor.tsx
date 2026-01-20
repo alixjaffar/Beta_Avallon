@@ -604,13 +604,7 @@ function getVisualEditorScript(): string {
             dropTarget.parentNode.insertBefore(selectedElement, dropTarget.nextSibling);
           }
           
-          // Highlight the moved element briefly
-          selectedElement.style.outline = '3px solid #22c55e';
-          selectedElement.style.outlineOffset = '2px';
-          setTimeout(() => {
-            selectedElement.style.outline = '';
-            selectedElement.style.outlineOffset = '';
-          }, 1500);
+          // Element moved successfully - no highlight needed
           
           // Update overlay to new position
           setTimeout(() => {
@@ -701,13 +695,6 @@ function getVisualEditorScript(): string {
         // If it looks like a name (team member), prefix with "New "
         if (!originalText.toLowerCase().startsWith('new ')) {
           firstHeading.textContent = 'New ' + originalText;
-          // Add a subtle highlight to the new element
-          clone.style.outline = '3px solid #6366f1';
-          clone.style.outlineOffset = '2px';
-          setTimeout(() => {
-            clone.style.outline = '';
-            clone.style.outlineOffset = '';
-          }, 2000);
         }
       }
       
@@ -761,13 +748,7 @@ function getVisualEditorScript(): string {
         if (i === 0) p.textContent = 'Add description here...';
       });
       
-      // Add visual indicator
-      clone.style.outline = '3px solid #22c55e';
-      clone.style.outlineOffset = '2px';
-      setTimeout(() => {
-        clone.style.outline = '';
-        clone.style.outlineOffset = '';
-      }, 3000);
+      // Element added successfully - no highlight needed
       
       // Insert after the template (not at end)
       template.parentNode.insertBefore(clone, template.nextSibling);

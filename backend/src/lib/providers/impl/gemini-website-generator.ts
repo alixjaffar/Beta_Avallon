@@ -750,17 +750,28 @@ LOVABLE-LEVEL QUALITY BAR (MUST FOLLOW):
       const existingFiles = Object.keys(currentCode || {}).filter(f => f.endsWith('.html'));
       const promptLower = originalPrompt.toLowerCase();
       
-      // Detect simple text changes that should NEVER redesign
-      const isSimpleTextChange = 
-        (promptLower.includes('change') && promptLower.includes(' to ')) ||
+      // Detect if this is a STYLE change (colors, fonts, etc.) vs text change
+      const isStyleChange = 
+        promptLower.includes('color') || promptLower.includes('colour') ||
+        promptLower.includes('font') || promptLower.includes('background') ||
+        promptLower.includes('border') || promptLower.includes('padding') ||
+        promptLower.includes('margin') || promptLower.includes('size') ||
+        promptLower.includes('bigger') || promptLower.includes('smaller') ||
+        promptLower.includes('darker') || promptLower.includes('lighter') ||
+        promptLower.includes('green') || promptLower.includes('blue') ||
+        promptLower.includes('red') || promptLower.includes('black') ||
+        promptLower.includes('white') || promptLower.includes('style');
+      
+      // Detect simple text changes that should NEVER redesign (excluding style changes)
+      const isSimpleTextChange = !isStyleChange && (
+        (promptLower.includes('change') && promptLower.includes(' to ') && !promptLower.includes('color') && !promptLower.includes('colour')) ||
         (promptLower.includes('change') && promptLower.includes('instead')) ||
-        promptLower.includes('replace') ||
         promptLower.includes('update the text') ||
         promptLower.includes('rename') ||
         promptLower.match(/summer|winter|spring|fall|2024|2025|2026|2027/) !== null ||
         promptLower.includes('cohort') ||
-        promptLower.includes('modify') ||
-        promptLower.match(/(change|update|edit).*(name|text|title|date|year)/) !== null;
+        promptLower.match(/(change|update|edit).*(name|text|title|date|year)/) !== null
+      );
       
       // For simple text changes, use MINIMAL prompt
       if (isSimpleTextChange) {
@@ -785,6 +796,35 @@ OUTPUT FORMAT:
 MAKE THE CHANGE NOW:`;
       }
       
+      // For style changes (colors, fonts, etc.)
+      if (isStyleChange) {
+        return `🎨 STYLE EDIT - Change the styling of an existing website
+
+USER REQUEST: "${originalPrompt}"
+
+${currentCodeContext}
+
+TASK:
+1. Find the CSS styles that control what the user wants to change
+2. Update ONLY those specific CSS properties
+3. Keep ALL HTML structure exactly the same
+4. Keep ALL other styles exactly the same
+5. Output the complete modified file(s)
+
+For button color changes:
+- Find the button's CSS (in <style> tag or inline)
+- Change the background-color and/or color property
+- Keep hover states consistent
+
+OUTPUT FORMAT:
+=== FILE: filename.html ===
+\`\`\`html
+[complete modified file with style change]
+\`\`\`
+
+MAKE THE STYLE CHANGE FOR: "${originalPrompt}"`;
+      }
+      
       // For other modifications (adding elements, etc.)
       return `🔧 EDIT MODE - Modify the existing website
 
@@ -794,13 +834,12 @@ ${currentCodeContext}
 
 RULES:
 1. Make ONLY the requested change
-2. Keep ALL existing design, colors, fonts, layout EXACTLY the same
-3. Keep the header and footer EXACTLY the same
-4. Copy the style of existing similar elements for additions
-5. Output ONLY the modified file(s)
+2. Keep ALL existing design, structure, header, footer EXACTLY the same
+3. Copy the style of existing similar elements for additions
+4. Output ONLY the modified file(s)
 
 DO NOT:
-- Change colors, fonts, or design
+- Change unrelated elements
 - Change the logo or branding
 - Remove existing content
 - Re-output unchanged files
