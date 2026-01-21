@@ -513,10 +513,10 @@ export class GeminiWebsiteGenerator {
               ]
             },
               generationConfig: {
-                // Use very low temperature for modifications to prevent redesigning
-                temperature: isModification ? 0.1 : (isCloneOperation ? 0.3 : 0.6),
-                topP: isModification ? 0.8 : 0.95,
-              topK: isModification ? 10 : (isCloneOperation ? 20 : 32),
+                // Use ZERO temperature for modifications - we want EXACT code editing, no creativity
+                temperature: isModification ? 0.0 : (isCloneOperation ? 0.2 : 0.5),
+                topP: isModification ? 0.5 : 0.95,
+              topK: isModification ? 1 : (isCloneOperation ? 16 : 32),
                 maxOutputTokens: maxOutputTokens,
               candidateCount: 1,
               stopSequences: [],
@@ -588,10 +588,10 @@ export class GeminiWebsiteGenerator {
           const generativeModel = this.vertexAI.getGenerativeModel({
             model: model,
             generationConfig: {
-              // Use very low temperature for modifications to prevent redesigning
-              temperature: isModification ? 0.1 : (isCloneOperation ? 0.3 : 0.6),
-              topK: isModification ? 10 : (isCloneOperation ? 20 : 32),
-              topP: isModification ? 0.8 : 0.95,
+              // Use ZERO temperature for modifications - we want EXACT code editing, no creativity
+              temperature: isModification ? 0.0 : (isCloneOperation ? 0.2 : 0.5),
+              topK: isModification ? 1 : (isCloneOperation ? 16 : 32),
+              topP: isModification ? 0.5 : 0.95,
               maxOutputTokens: maxOutputTokens,
             },
           });
@@ -1012,89 +1012,92 @@ function showTab(i) {
       
       // ➕ CONTENT ADDITION - Adding new sections/elements
       if (isAddition) {
-        return `You are an EXPERT WEB DESIGNER adding new content to an existing site.
+        return `🔴 STOP. READ THE EXISTING CODE FIRST. 🔴
 
 📋 USER REQUEST: "${originalPrompt}"
 
 ${currentCodeContext}
 
-🎨 CONTENT ADDITION GUIDE:
+═══════════════════════════════════════════════════════════════════════════════
+🎯 YOUR EXACT STEPS:
+═══════════════════════════════════════════════════════════════════════════════
 
-**CRITICAL RULE:** Copy the EXACT styling from existing similar elements!
+STEP 1: FIND a similar existing element in the code above
+        - For "add team member" → find an existing team member card
+        - For "add testimonial" → find an existing testimonial
+        - For "add section" → find a similar existing section
 
-**Steps:**
-1. Analyze the existing design: colors, fonts, spacing, button styles
-2. Find a similar existing element to use as your template
-3. Create the new element using the SAME classes and styling
-4. Insert it in the logical location
+STEP 2: COPY that element's HTML EXACTLY (including all classes)
 
-**Section Templates (adapt to match existing style):**
+STEP 3: PASTE it after the existing elements
 
-**Team Member Card:**
-- Copy existing card structure exactly
-- Use same image dimensions/placeholder
-- Match text hierarchy (name: h3/h4, title: p/span)
-- Keep same hover effects
+STEP 4: CHANGE ONLY the text content inside (name, title, description)
 
-**Testimonial:**
-- Quote with citation
-- Star rating if site has them
-- Avatar/photo if site uses them
+STEP 5: OUTPUT the complete modified file
 
-**FAQ Item:**
-- Question as header
-- Collapsible answer
-- Same spacing as existing FAQs
+═══════════════════════════════════════════════════════════════════════════════
+❌ DO NOT:
+- Invent new CSS classes
+- Create new HTML structures
+- Use placeholder text like "Name 1", "Description here"
+- Generate content that looks different from existing elements
+- Create new files when you should edit existing ones
 
-**CTA Section:**
-- Compelling headline
-- Brief subtext
-- Primary action button matching site style
-
-**Pricing Card:**
-- Plan name, price, features list
-- CTA button
-- Highlight "popular" option if appropriate
+✅ DO:
+- Find existing element → Copy HTML exactly → Change text only
+═══════════════════════════════════════════════════════════════════════════════
 
 ${wantsStripe ? this.getStripeIntegrationInstructions() : ''}
 
-⚠️ MATCH THE EXISTING DESIGN EXACTLY. The new element should look like it was always there.
-
 📤 OUTPUT:
-=== FILE: [filename].html ===
+=== FILE: [the file you're editing].html ===
 \`\`\`html
-[Complete file with new content added - matching existing style perfectly]
+[Complete file - your addition should use IDENTICAL HTML structure to existing elements]
 \`\`\``;
       }
       
       // 🔧 GENERAL MODIFICATION - Catch-all for other changes
-      return `You are a PROFESSIONAL WEB DEVELOPER making precise modifications.
+      return `🔴 YOU ARE A CODE EDITOR, NOT A DESIGNER 🔴
 
 📋 USER REQUEST: "${originalPrompt}"
 
 ${currentCodeContext}
 
-🎯 MODIFICATION PRINCIPLES:
+═══════════════════════════════════════════════════════════════════════════════
+🎯 YOUR TASK IS SIMPLE:
+═══════════════════════════════════════════════════════════════════════════════
 
-1. **Understand First:** Read the existing code carefully before making changes
-2. **Minimal Impact:** Change ONLY what's needed to fulfill the request
-3. **Style Consistency:** Match existing design patterns exactly
-4. **Preserve Everything:** Keep all unrelated content, styles, and functionality
+1. READ the existing code above carefully
+2. FIND the specific part the user wants changed
+3. MAKE that ONE change
+4. KEEP everything else IDENTICAL
 
-**Common Tasks:**
-- Updating links: Change href attributes
-- Changing images: Update src attributes, maintain dimensions
-- Editing navigation: Modify nav items while keeping structure
-- Form changes: Update form fields, keep validation
+Think of it like editing a Google Doc:
+- User says "change the title" → Find the <h1> → Change ONLY the text inside
+- User says "add a button" → Find similar buttons → COPY the HTML → Add it
+- User says "change the color" → Find the CSS → Change that one color value
+
+═══════════════════════════════════════════════════════════════════════════════
+❌ NEVER DO THESE:
+- Replace the entire page with a new design
+- Invent new CSS that doesn't exist in the current code
+- Remove existing content
+- Create generic placeholder content
+- Change things the user didn't ask to change
+
+✅ ALWAYS DO THESE:
+- Output the SAME file you're editing (don't create new files unless asked)
+- Keep ALL existing HTML structure
+- Keep ALL existing CSS
+- Change ONLY the specific thing requested
+═══════════════════════════════════════════════════════════════════════════════
 
 ${wantsStripe ? this.getStripeIntegrationInstructions() : ''}
 
-⚠️ The user loves their current website design. They want a SPECIFIC change, not a redesign.
-
-📤 OUTPUT:
-=== FILE: [filename].html ===
+📤 OUTPUT THE MODIFIED FILE:
+=== FILE: [same filename as the one you're editing].html ===
 \`\`\`html
-[Complete file with the requested modification]
+[The complete file - should look 99% identical to original, with your ONE change]
 \`\`\``;
     }
     
@@ -2166,55 +2169,100 @@ Create beautiful, functional payment buttons that are ready to use!`;
                        indexHtml.includes('url(') ||
                        indexHtml.length > 10000;
     
-    // Calculate total size
+    // Calculate total size - be MORE generous to give AI more context
     const totalSize = files.reduce((sum, f) => sum + (currentCode[f]?.length || 0), 0);
     
-    // IMPORTANT: Always include ALL pages so AI can modify any of them
-    // Use aggressive truncation if needed to stay within limits
-    const maxPerFile = totalSize > 300000 ? 15000 : (totalSize > 150000 ? 25000 : 40000);
+    // Increase limits - AI needs to see the FULL code to edit it properly
+    const maxPerFile = totalSize > 500000 ? 30000 : (totalSize > 200000 ? 50000 : 80000);
     
     let context = `
-╔══════════════════════════════════════════════════════════════════════════════╗
-║ 🛑 STOP! THIS IS AN EXISTING WEBSITE - READ BEFORE PROCEEDING 🛑             ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║ THIS IS ${isImported ? 'AN IMPORTED' : 'AN EXISTING'} WEBSITE. THE USER LOVES HOW IT LOOKS.           ║
-║ DO NOT CREATE A NEW DESIGN. DO NOT CHANGE THE STYLING. DO NOT REPLACE IT.   ║
-║ ONLY MAKE THE EXACT CHANGE THE USER REQUESTED - NOTHING MORE.               ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════════════════════════════════════════╗
+║                    🚨🚨🚨 CRITICAL: READ THIS ENTIRE SECTION 🚨🚨🚨                    ║
+╠═══════════════════════════════════════════════════════════════════════════════════════╣
+║                                                                                       ║
+║   YOU ARE A CODE EDITOR. YOU ARE NOT A WEBSITE GENERATOR.                            ║
+║                                                                                       ║
+║   The code below is the user's ACTUAL CURRENT WEBSITE.                               ║
+║   They are paying customers who imported this design because they LOVE it.           ║
+║   Your job is to make a SURGICAL EDIT - like editing a Word document.                ║
+║                                                                                       ║
+║   If you generate new designs, the user will be ANGRY and leave.                     ║
+║                                                                                       ║
+╚═══════════════════════════════════════════════════════════════════════════════════════╝
 
-🚨 ABSOLUTE RULES - VIOLATION = FAILURE:
-1. DO NOT change the logo, brand name, or company name
-2. DO NOT change the color scheme
-3. DO NOT change the fonts
-4. DO NOT change the header/navigation structure
-5. DO NOT change the footer
-6. DO NOT create a new design - USE THE EXISTING ONE
+🔴 FAILURE CONDITIONS (do any of these = user will be furious):
+- Creating new card/section designs instead of copying existing ones
+- Changing colors that weren't requested to change
+- Changing fonts that weren't requested to change  
+- Removing the existing navigation, header, or footer
+- Generating placeholder content like "Name 1", "Description here"
+- Making a "team-page-2.html" when user asked to edit "team.html"
 
-📁 ALL EXISTING PAGES (${files.length} total): ${files.join(', ')}
-
-🎯 YOUR TASK:
-- Read the user's request carefully
-- Find the specific file/section they want to modify
-- Make ONLY that change
-- Keep EVERYTHING ELSE exactly the same
-- Output ONLY the modified file(s)
+🟢 SUCCESS CONDITIONS:
+- Find a similar existing element in the code below
+- COPY that exact HTML structure
+- Change ONLY the content (text, images) while keeping the HTML/CSS identical
+- Output the modified file with your surgical edit
 
 `;
+
+    // Extract and highlight repeatable elements (cards, list items, etc.)
+    let repeatableElements = '';
+    files.forEach((filename) => {
+      const html = currentCode[filename] || '';
+      // Look for common repeatable patterns
+      const cardPatterns = [
+        // Team member cards, testimonials, etc.
+        /<div[^>]*class="[^"]*(?:card|member|team|expert|testimonial|item)[^"]*"[^>]*>[\s\S]*?<\/div>\s*<\/div>/gi,
+        /<article[^>]*>[\s\S]*?<\/article>/gi,
+        /<li[^>]*class="[^"]*(?:member|item|card)[^"]*"[^>]*>[\s\S]*?<\/li>/gi,
+      ];
+      
+      cardPatterns.forEach(pattern => {
+        const matches = html.match(pattern);
+        if (matches && matches.length > 0) {
+          // Get first match as template
+          const template = matches[0];
+          if (template.length < 2000) { // Only include if not too long
+            repeatableElements += `\n📋 FOUND REPEATABLE ELEMENT in ${filename}:\n\`\`\`html\n${template}\n\`\`\`\nTo add another, COPY this HTML exactly and change the content.\n`;
+          }
+        }
+      });
+    });
     
-    // Include ALL pages so AI can modify any of them
+    if (repeatableElements) {
+      context += `
+═══════════════════════════════════════════════════════════════════════════════
+🔄 REPEATABLE ELEMENTS (COPY THESE EXACTLY WHEN ADDING NEW ITEMS):
+═══════════════════════════════════════════════════════════════════════════════
+${repeatableElements}
+`;
+    }
+
+    context += `
+═══════════════════════════════════════════════════════════════════════════════
+📁 EXISTING FILES (${files.length} total): ${files.join(', ')}
+═══════════════════════════════════════════════════════════════════════════════
+`;
+    
+    // Include ALL pages with FULL content when possible
     files.forEach((filename) => {
       const htmlContent = currentCode[filename];
       if (!htmlContent) return;
       
-      // Truncate if needed
+      // Only truncate if absolutely necessary
       const truncatedHtml = htmlContent.length > maxPerFile 
-        ? htmlContent.substring(0, maxPerFile) + `\n<!-- ... TRUNCATED [${htmlContent.length - maxPerFile} more chars] ... -->`
+        ? htmlContent.substring(0, maxPerFile) + `\n<!-- [TRUNCATED - ${htmlContent.length - maxPerFile} more chars - but you've seen the structure] -->`
         : htmlContent;
       
       context += `
-════════════════════════════════════════════════════════════
-📄 EXISTING FILE: ${filename} ${filename === 'index.html' ? '(MAIN TEMPLATE - COPY STYLES FROM HERE)' : ''}
-════════════════════════════════════════════════════════════
+
+▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+📄 FILE: ${filename} (${htmlContent.length} chars)
+   ${filename.includes('team') ? '⭐ THIS IS THE TEAM PAGE - COPY ITS STRUCTURE FOR NEW TEAM MEMBERS' : ''}
+   ${filename.includes('index') ? '⭐ THIS IS THE MAIN TEMPLATE - USE ITS HEADER/FOOTER/STYLES' : ''}
+▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+
 \`\`\`html
 ${truncatedHtml}
 \`\`\`
@@ -2222,15 +2270,21 @@ ${truncatedHtml}
     });
     
     context += `
-╔══════════════════════════════════════════════════════════════════════════════╗
-║ 📤 OUTPUT INSTRUCTIONS                                                        ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║ • Output ONLY the file(s) you are MODIFYING                                  ║
-║ • The system will MERGE your changes with existing files                     ║
-║ • DO NOT re-output files you aren't changing                                 ║
-║ • If modifying team.html, output team.html with your changes                 ║
-║ • If adding to index.html, output index.html with your additions             ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════════════════
+📤 OUTPUT FORMAT (MUST FOLLOW EXACTLY):
+═══════════════════════════════════════════════════════════════════════════════
+
+=== FILE: [filename].html ===
+\`\`\`html
+[The COMPLETE file - your edit should be the ONLY difference from the original]
+\`\`\`
+
+⚠️ REMEMBER: 
+- COPY the existing HTML structure
+- Change ONLY what the user asked
+- Your output should look 99% identical to the input
+═══════════════════════════════════════════════════════════════════════════════
 `;
     
     return context;
