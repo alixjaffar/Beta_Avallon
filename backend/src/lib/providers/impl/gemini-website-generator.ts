@@ -2377,32 +2377,91 @@ ${truncatedHtml}
     
     // ========== INSERTION MODE SUPPORT ==========
     // Check if the AI used the insertion format (just outputs what to add, not whole file)
-    const insertionMatch = cleanedContent.match(/===\s*INSERTION\s*===[\s\S]*?INSERT AFTER:\s*([^\n]+)[\s\S]*?NEW CONTENT:\s*\n?```(?:html)?\s*\n?([\s\S]*?)```/i);
+    
+    // Try multiple patterns for INSERTION format
+    let insertionMatch = cleanedContent.match(/===\s*INSERTION\s*===[\s\S]*?INSERT AFTER:\s*([^\n]+)[\s\S]*?NEW CONTENT:\s*\n?```(?:html)?\s*\n?([\s\S]*?)```/i);
+    
+    // Pattern 2: NEW CONTENT without code blocks (AI outputs HTML directly)
+    if (!insertionMatch) {
+      insertionMatch = cleanedContent.match(/===\s*INSERTION\s*===[\s\S]*?INSERT AFTER:\s*([^\n]+)\s*\n+NEW CONTENT:\s*\n?(<[\s\S]+)/i);
+    }
+    
+    // Pattern 3: Just INSERT AFTER and raw HTML (no NEW CONTENT label)
+    if (!insertionMatch) {
+      insertionMatch = cleanedContent.match(/INSERT AFTER:\s*([^\n]+)\s*\n+(<[^`][\s\S]+)/i);
+    }
+    
     if (insertionMatch && currentCode) {
-      const insertAfterMarker = insertionMatch[1].trim();
-      const newContent = insertionMatch[2].trim();
+      let insertAfterMarker = insertionMatch[1].trim();
+      let newContent = insertionMatch[2]?.trim() || '';
       
-      logInfo('Detected INSERTION mode', { insertAfterMarker: insertAfterMarker.substring(0, 50), newContentLength: newContent.length });
+      // Clean up newContent - remove any trailing code block markers
+      newContent = newContent.replace(/```\s*$/g, '').trim();
       
-      // Find which file contains the marker and insert the new content
-      for (const [filename, fileContent] of Object.entries(currentCode)) {
-        if (fileContent.includes(insertAfterMarker)) {
-          // Find the position to insert after
-          const insertPos = fileContent.indexOf(insertAfterMarker) + insertAfterMarker.length;
-          
-          // Find the end of the current element (look for closing tag)
-          let endPos = insertPos;
-          const afterMarker = fileContent.substring(insertPos);
-          const closingMatch = afterMarker.match(/^[^<]*(<\/\w+>)/);
-          if (closingMatch) {
-            endPos = insertPos + (closingMatch.index || 0) + closingMatch[1].length;
+      // If marker is too long (AI copied entire element), truncate to find a unique match
+      if (insertAfterMarker.length > 80) {
+        insertAfterMarker = insertAfterMarker.substring(0, 60);
+      }
+      
+      logInfo('Detected INSERTION mode', { 
+        insertAfterMarker: insertAfterMarker.substring(0, 50), 
+        newContentLength: newContent.length,
+        hasContent: newContent.length > 0 && newContent.includes('<')
+      });
+      
+      if (newContent.length > 0 && newContent.includes('<')) {
+        // Find which file contains the marker and insert the new content
+        for (const [filename, fileContent] of Object.entries(currentCode)) {
+          if (fileContent.includes(insertAfterMarker)) {
+            // Find the position to insert after
+            const insertPos = fileContent.indexOf(insertAfterMarker) + insertAfterMarker.length;
+            
+            // Find the end of the current element (look for common closing tags)
+            let endPos = insertPos;
+            const afterMarker = fileContent.substring(insertPos);
+            const closingPatterns = [
+              /^[^<]*(<\/figure>)/i,
+              /^[^<]*(<\/div>)/i,
+              /^[^<]*(<\/section>)/i,
+              /^[^<]*(<\/article>)/i,
+            ];
+            
+            for (const pattern of closingPatterns) {
+              const closingMatch = afterMarker.match(pattern);
+              if (closingMatch) {
+                endPos = insertPos + (closingMatch.index || 0) + closingMatch[1].length;
+                break;
+              }
+            }
+            
+            // Insert the new content
+            const modifiedContent = fileContent.substring(0, endPos) + '\n\n' + newContent + fileContent.substring(endPos);
+            files[filename] = modifiedContent;
+            logInfo('Applied INSERTION', { filename, insertPos: endPos, newContentLength: newContent.length });
+            return files;
           }
-          
-          // Insert the new content
-          const modifiedContent = fileContent.substring(0, endPos) + '\n' + newContent + fileContent.substring(endPos);
-          files[filename] = modifiedContent;
-          logInfo('Applied INSERTION', { filename, insertPos: endPos, newContentLength: newContent.length });
-          return files;
+        }
+        
+        // If exact marker not found, try partial match
+        for (const [filename, fileContent] of Object.entries(currentCode)) {
+          // Try finding a partial match
+          const shortMarker = insertAfterMarker.substring(0, 30);
+          if (fileContent.includes(shortMarker)) {
+            const insertPos = fileContent.indexOf(shortMarker) + shortMarker.length;
+            
+            // Find next closing tag
+            const afterMarker = fileContent.substring(insertPos);
+            const closingMatch = afterMarker.match(/<\/(?:figure|div|section|article)>/i);
+            let endPos = insertPos;
+            if (closingMatch && closingMatch.index !== undefined) {
+              endPos = insertPos + closingMatch.index + closingMatch[0].length;
+            }
+            
+            const modifiedContent = fileContent.substring(0, endPos) + '\n\n' + newContent + fileContent.substring(endPos);
+            files[filename] = modifiedContent;
+            logInfo('Applied INSERTION (partial match)', { filename, insertPos: endPos, newContentLength: newContent.length });
+            return files;
+          }
         }
       }
     }
