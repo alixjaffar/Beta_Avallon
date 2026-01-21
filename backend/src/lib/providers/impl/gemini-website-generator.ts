@@ -1012,13 +1012,11 @@ function showTab(i) {
       
       // ➕ CONTENT ADDITION - Adding new sections/elements
       if (isAddition) {
+        // Smart target file detection - works for ALL pages
+        const targetFile = this.detectTargetFile(promptLower, existingFiles, currentCode);
+        
         // Find a repeatable element from the current code to show AI
         let exampleElement = '';
-        const targetFile = existingFiles.find(f => 
-          promptLower.includes(f.replace('.html', '')) || 
-          (promptLower.includes('team') && f.includes('team')) ||
-          (promptLower.includes('expert') && (f.includes('team') || f.includes('expert')))
-        ) || existingFiles[0];
         
         if (targetFile && currentCode[targetFile]) {
           const html = currentCode[targetFile];
@@ -1079,10 +1077,8 @@ IMPORTANT: The output HTML must look IDENTICAL to the input, with just the new i
       }
       
       // 🔧 GENERAL MODIFICATION - Catch-all for other changes
-      // Find the target file to edit
-      const targetFile = existingFiles.find(f => 
-        promptLower.includes(f.replace('.html', ''))
-      ) || existingFiles[0] || 'index.html';
+      // Smart target file detection - works for ALL pages
+      const targetFile = this.detectTargetFile(promptLower, existingFiles, currentCode);
       
       return `🔴 PRECISION EDIT MODE 🔴
 
@@ -2158,6 +2154,68 @@ Create beautiful, functional payment buttons that are ready to use!`;
     }
     
     return url;
+  }
+
+  /**
+   * Smart target file detection - determines which file the user wants to edit
+   * Works for ALL pages by analyzing the prompt and existing files
+   */
+  private detectTargetFile(promptLower: string, existingFiles: string[], currentCode: Record<string, string>): string {
+    // Priority 1: Direct file mention (e.g., "in index.html", "on the team page")
+    for (const file of existingFiles) {
+      const baseName = file.replace('.html', '').toLowerCase();
+      // Check for exact mentions
+      if (promptLower.includes(file) || 
+          promptLower.includes(baseName + ' page') ||
+          promptLower.includes(baseName + ' html') ||
+          promptLower.includes('the ' + baseName) ||
+          promptLower.includes('in ' + baseName) ||
+          promptLower.includes('on ' + baseName) ||
+          promptLower.includes('to ' + baseName)) {
+        return file;
+      }
+    }
+    
+    // Priority 2: Keyword mapping (common page types)
+    const keywordMap: Record<string, string[]> = {
+      'index.html': ['home', 'homepage', 'main', 'landing', 'hero', 'bottom', 'top'],
+      'team.html': ['team', 'expert', 'member', 'staff', 'people', 'about us'],
+      'contact.html': ['contact', 'reach', 'email', 'phone', 'address', 'location'],
+      'about.html': ['about', 'story', 'mission', 'history', 'who we are'],
+      'services.html': ['service', 'offering', 'solution', 'what we do'],
+      'pricing.html': ['price', 'pricing', 'plan', 'cost', 'subscription'],
+      'apply.html': ['apply', 'application', 'join', 'signup', 'register'],
+      'faq.html': ['faq', 'question', 'help', 'support'],
+      'portfolio.html': ['portfolio', 'work', 'project', 'case study'],
+      'blog.html': ['blog', 'news', 'article', 'post'],
+    };
+    
+    for (const [targetFile, keywords] of Object.entries(keywordMap)) {
+      if (existingFiles.includes(targetFile)) {
+        for (const keyword of keywords) {
+          if (promptLower.includes(keyword)) {
+            return targetFile;
+          }
+        }
+      }
+    }
+    
+    // Priority 3: Check for partial filename matches
+    for (const file of existingFiles) {
+      const parts = file.replace('.html', '').split(/[-_]/);
+      for (const part of parts) {
+        if (part.length > 2 && promptLower.includes(part.toLowerCase())) {
+          return file;
+        }
+      }
+    }
+    
+    // Priority 4: Default to index.html if it exists, otherwise first file
+    if (existingFiles.includes('index.html')) {
+      return 'index.html';
+    }
+    
+    return existingFiles[0] || 'index.html';
   }
 
   private buildChatContext(chatHistory: any[]): string {
