@@ -993,6 +993,11 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
   const [currentPage, setCurrentPage] = useState<string>('index.html');
   const [viewport, setViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   
+  // Undo/Redo history state
+  const [contentHistory, setContentHistory] = useState<Record<string, string>[]>([site.websiteContent || {}]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+  const maxHistoryLength = 50; // Maximum number of states to keep
+  
   // Visual editor state
   const [selectedElement, setSelectedElement] = useState<SelectedElement | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -1041,6 +1046,71 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     { icon: 'palette', text: 'Make it darker' },
     { icon: 'image', text: 'Change hero image' },
   ];
+
+  // ============ UNDO/REDO FUNCTIONS ============
+  
+  // Push current state to history before making changes
+  const pushToHistory = useCallback((newContent: Record<string, string>) => {
+    setContentHistory(prev => {
+      // Remove any redo states (states after current index)
+      const newHistory = prev.slice(0, historyIndex + 1);
+      // Add new state
+      newHistory.push(newContent);
+      // Limit history length
+      if (newHistory.length > maxHistoryLength) {
+        newHistory.shift();
+        return newHistory;
+      }
+      return newHistory;
+    });
+    setHistoryIndex(prev => Math.min(prev + 1, maxHistoryLength - 1));
+  }, [historyIndex, maxHistoryLength]);
+
+  // Undo - go back in history
+  const handleUndo = useCallback(() => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      setHistoryIndex(newIndex);
+      setCurrentWebsiteContent(contentHistory[newIndex]);
+      setHasUnsavedChanges(true);
+      toast({
+        title: "Undone",
+        description: "Previous change has been reverted.",
+      });
+    } else {
+      toast({
+        title: "Nothing to undo",
+        description: "You're at the oldest state.",
+        variant: "destructive",
+      });
+    }
+  }, [historyIndex, contentHistory, toast]);
+
+  // Redo - go forward in history
+  const handleRedo = useCallback(() => {
+    if (historyIndex < contentHistory.length - 1) {
+      const newIndex = historyIndex + 1;
+      setHistoryIndex(newIndex);
+      setCurrentWebsiteContent(contentHistory[newIndex]);
+      setHasUnsavedChanges(true);
+      toast({
+        title: "Redone",
+        description: "Change has been reapplied.",
+      });
+    } else {
+      toast({
+        title: "Nothing to redo",
+        description: "You're at the newest state.",
+        variant: "destructive",
+      });
+    }
+  }, [historyIndex, contentHistory, toast]);
+
+  // Check if undo/redo is available
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex < contentHistory.length - 1;
+
+  // ============ END UNDO/REDO ============
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -1136,6 +1206,8 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
           ...currentWebsiteContent,
           [effectiveCurrentPage]: cleanedHtml
         };
+        // Push to history for undo/redo
+        pushToHistory(updatedContent);
         setCurrentWebsiteContent(updatedContent);
         setHasUnsavedChanges(false);
         
@@ -1375,6 +1447,8 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       
       // CRITICAL: Merge new/modified files with existing files to preserve all pages
       const mergedContent = { ...currentWebsiteContent, ...newContent };
+      // Push to history for undo/redo BEFORE updating
+      pushToHistory(mergedContent);
       setCurrentWebsiteContent(mergedContent);
       
       // Track which files were added vs modified
@@ -1506,7 +1580,7 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         description: `Your site is live at ${result.previewUrl}`,
       });
 
-      window.open(result.previewUrl, '_blank');
+        window.open(result.previewUrl, '_blank');
       
       // Update site with ALL deployment info including vercelProjectId for domain management
       onUpdate({ 
@@ -1706,6 +1780,8 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       [pageName]: html,
     };
     
+    // Push to history for undo/redo
+    pushToHistory(updatedContent);
     setCurrentWebsiteContent(updatedContent);
     setCurrentPage(pageName);
     
@@ -1738,6 +1814,8 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       updatedContent[page.filename] = page.html;
     }
     
+    // Push to history for undo/redo
+    pushToHistory(updatedContent);
     setCurrentWebsiteContent(updatedContent);
     
     // Set current page to the first imported page (usually index.html)
@@ -1893,6 +1971,8 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       [pageName]: newPageHtml,
     };
     
+    // Push to history for undo/redo
+    pushToHistory(updatedContent);
     setCurrentWebsiteContent(updatedContent);
     setCurrentPage(pageName);
     setShowAddPageModal(false);
@@ -2483,14 +2563,26 @@ Generated by Avallon - ${new Date().toISOString()}
         <div className="flex items-center gap-1 sm:gap-3 w-full sm:w-auto justify-end flex-wrap">
           <div className="hidden sm:flex items-center border-r border-panel-border pr-3 gap-1">
             <button 
-              className={`size-8 flex items-center justify-center rounded-md transition-colors ${isLight ? 'hover:bg-slate-200 text-slate-500 hover:text-slate-900' : 'hover:bg-panel-border text-gray-400 hover:text-white'}`}
-              title="Undo"
+              onClick={handleUndo}
+              disabled={!canUndo}
+              className={`size-8 flex items-center justify-center rounded-md transition-colors ${
+                canUndo 
+                  ? (isLight ? 'hover:bg-slate-200 text-slate-500 hover:text-slate-900' : 'hover:bg-panel-border text-gray-400 hover:text-white')
+                  : 'opacity-30 cursor-not-allowed text-gray-400'
+              }`}
+              title={canUndo ? `Undo (${historyIndex} states back available)` : "Nothing to undo"}
             >
               <span className="material-symbols-outlined text-[20px]">undo</span>
             </button>
             <button 
-              className={`size-8 flex items-center justify-center rounded-md transition-colors ${isLight ? 'hover:bg-slate-200 text-slate-500 hover:text-slate-900' : 'hover:bg-panel-border text-gray-400 hover:text-white'}`}
-              title="Redo"
+              onClick={handleRedo}
+              disabled={!canRedo}
+              className={`size-8 flex items-center justify-center rounded-md transition-colors ${
+                canRedo 
+                  ? (isLight ? 'hover:bg-slate-200 text-slate-500 hover:text-slate-900' : 'hover:bg-panel-border text-gray-400 hover:text-white')
+                  : 'opacity-30 cursor-not-allowed text-gray-400'
+              }`}
+              title={canRedo ? `Redo (${contentHistory.length - 1 - historyIndex} states forward available)` : "Nothing to redo"}
             >
               <span className="material-symbols-outlined text-[20px]">redo</span>
             </button>
