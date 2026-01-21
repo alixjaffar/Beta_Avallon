@@ -647,7 +647,7 @@ export class GeminiWebsiteGenerator {
         // Log success with model version for verification
       logInfo('🎯 SUCCESS: Using Gemini 3 Pro Preview', { model, contentLength: content.length });
         
-        return this.parseGeneratedCode(content);
+        return this.parseGeneratedCode(content, currentCode);
       } catch (error: any) {
         const errorMessage = error.message || error.response?.data?.error?.message || '';
         
@@ -1012,92 +1012,113 @@ function showTab(i) {
       
       // ➕ CONTENT ADDITION - Adding new sections/elements
       if (isAddition) {
-        return `🔴 STOP. READ THE EXISTING CODE FIRST. 🔴
+        // Find a repeatable element from the current code to show AI
+        let exampleElement = '';
+        const targetFile = existingFiles.find(f => 
+          promptLower.includes(f.replace('.html', '')) || 
+          (promptLower.includes('team') && f.includes('team')) ||
+          (promptLower.includes('expert') && (f.includes('team') || f.includes('expert')))
+        ) || existingFiles[0];
+        
+        if (targetFile && currentCode[targetFile]) {
+          const html = currentCode[targetFile];
+          // Try to find a card/member/item element
+          const patterns = [
+            /<figure[^>]*>[\s\S]*?<\/figure>/i,
+            /<article[^>]*>[\s\S]*?<\/article>/i,
+            /<div[^>]*class="[^"]*(?:wp-block-group|member|team|card|expert|item)[^"]*"[^>]*>[\s\S]*?(?:<\/div>\s*){2,4}/gi,
+          ];
+          
+          for (const pattern of patterns) {
+            const matches = html.match(pattern);
+            if (matches && matches.length > 0 && matches[0].length < 5000) {
+              exampleElement = matches[0];
+              break;
+            }
+          }
+        }
+        
+        return `🎯 INSERTION MODE - Add content by copying existing elements
 
 📋 USER REQUEST: "${originalPrompt}"
 
+═══════════════════════════════════════════════════════════════════════════════
+📋 HERE IS AN EXISTING ELEMENT FROM THE PAGE - COPY THIS STRUCTURE EXACTLY:
+═══════════════════════════════════════════════════════════════════════════════
+${exampleElement ? `\`\`\`html\n${exampleElement}\n\`\`\`` : '(No repeatable element found - look in the full code below)'}
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 YOUR TASK:
+═══════════════════════════════════════════════════════════════════════════════
+
+1. COPY the HTML structure shown above EXACTLY (same tags, same classes, same nesting)
+2. CHANGE only the text content (name, title, description, image URL)
+3. OUTPUT: The INSERTION snippet + WHERE to insert it
+
+DO NOT regenerate the whole file. DO NOT simplify the HTML. COPY EXACTLY.
+
 ${currentCodeContext}
 
+${wantsStripe ? this.getStripeIntegrationInstructions() : ''}
+
+📤 OUTPUT FORMAT:
+=== INSERTION ===
+INSERT AFTER: [copy the last few characters of the element this should go after]
+NEW CONTENT:
+\`\`\`html
+[Your new element - COPIED from the existing one with only text changed]
+\`\`\`
+
+OR if you must output the whole file:
+=== FILE: ${targetFile || 'team.html'} ===
+\`\`\`html
+[COMPLETE file with the existing content PRESERVED and new content ADDED]
+\`\`\`
+
+IMPORTANT: The output HTML must look IDENTICAL to the input, with just the new item added.`;
+      }
+      
+      // 🔧 GENERAL MODIFICATION - Catch-all for other changes
+      // Find the target file to edit
+      const targetFile = existingFiles.find(f => 
+        promptLower.includes(f.replace('.html', ''))
+      ) || existingFiles[0] || 'index.html';
+      
+      return `🔴 PRECISION EDIT MODE 🔴
+
+📋 REQUEST: "${originalPrompt}"
+
 ═══════════════════════════════════════════════════════════════════════════════
-🎯 YOUR EXACT STEPS:
+⚠️ CRITICAL INSTRUCTIONS - READ CAREFULLY
 ═══════════════════════════════════════════════════════════════════════════════
 
-STEP 1: FIND a similar existing element in the code above
-        - For "add team member" → find an existing team member card
-        - For "add testimonial" → find an existing testimonial
-        - For "add section" → find a similar existing section
+You MUST output the COMPLETE HTML file with your change.
+The output must be BYTE-FOR-BYTE identical to the input, except for the ONE thing you changed.
 
-STEP 2: COPY that element's HTML EXACTLY (including all classes)
+DO NOT:
+❌ Simplify the HTML
+❌ Remove CSS styles  
+❌ Remove images or their src attributes
+❌ Remove classes
+❌ Change the structure
+❌ "Clean up" the code
 
-STEP 3: PASTE it after the existing elements
-
-STEP 4: CHANGE ONLY the text content inside (name, title, description)
-
-STEP 5: OUTPUT the complete modified file
+DO:
+✅ Copy the ENTIRE file
+✅ Find the ONE thing to change
+✅ Change ONLY that one thing
+✅ Keep EVERYTHING else identical
 
 ═══════════════════════════════════════════════════════════════════════════════
-❌ DO NOT:
-- Invent new CSS classes
-- Create new HTML structures
-- Use placeholder text like "Name 1", "Description here"
-- Generate content that looks different from existing elements
-- Create new files when you should edit existing ones
 
-✅ DO:
-- Find existing element → Copy HTML exactly → Change text only
-═══════════════════════════════════════════════════════════════════════════════
+${currentCodeContext}
 
 ${wantsStripe ? this.getStripeIntegrationInstructions() : ''}
 
 📤 OUTPUT:
-=== FILE: [the file you're editing].html ===
+=== FILE: ${targetFile} ===
 \`\`\`html
-[Complete file - your addition should use IDENTICAL HTML structure to existing elements]
-\`\`\``;
-      }
-      
-      // 🔧 GENERAL MODIFICATION - Catch-all for other changes
-      return `🔴 YOU ARE A CODE EDITOR, NOT A DESIGNER 🔴
-
-📋 USER REQUEST: "${originalPrompt}"
-
-${currentCodeContext}
-
-═══════════════════════════════════════════════════════════════════════════════
-🎯 YOUR TASK IS SIMPLE:
-═══════════════════════════════════════════════════════════════════════════════
-
-1. READ the existing code above carefully
-2. FIND the specific part the user wants changed
-3. MAKE that ONE change
-4. KEEP everything else IDENTICAL
-
-Think of it like editing a Google Doc:
-- User says "change the title" → Find the <h1> → Change ONLY the text inside
-- User says "add a button" → Find similar buttons → COPY the HTML → Add it
-- User says "change the color" → Find the CSS → Change that one color value
-
-═══════════════════════════════════════════════════════════════════════════════
-❌ NEVER DO THESE:
-- Replace the entire page with a new design
-- Invent new CSS that doesn't exist in the current code
-- Remove existing content
-- Create generic placeholder content
-- Change things the user didn't ask to change
-
-✅ ALWAYS DO THESE:
-- Output the SAME file you're editing (don't create new files unless asked)
-- Keep ALL existing HTML structure
-- Keep ALL existing CSS
-- Change ONLY the specific thing requested
-═══════════════════════════════════════════════════════════════════════════════
-
-${wantsStripe ? this.getStripeIntegrationInstructions() : ''}
-
-📤 OUTPUT THE MODIFIED FILE:
-=== FILE: [same filename as the one you're editing].html ===
-\`\`\`html
-[The complete file - should look 99% identical to original, with your ONE change]
+[EXACT copy of the file above, with ONLY your one change]
 \`\`\``;
     }
     
@@ -2290,11 +2311,43 @@ ${truncatedHtml}
     return context;
   }
 
-  private parseGeneratedCode(content: string): Record<string, string> {
+  private parseGeneratedCode(content: string, currentCode?: Record<string, string>): Record<string, string> {
     const files: Record<string, string> = {};
     
     // Clean the content first - remove any leading/trailing markdown markers
     let cleanedContent = content.trim();
+    
+    // ========== INSERTION MODE SUPPORT ==========
+    // Check if the AI used the insertion format (just outputs what to add, not whole file)
+    const insertionMatch = cleanedContent.match(/===\s*INSERTION\s*===[\s\S]*?INSERT AFTER:\s*([^\n]+)[\s\S]*?NEW CONTENT:\s*\n?```(?:html)?\s*\n?([\s\S]*?)```/i);
+    if (insertionMatch && currentCode) {
+      const insertAfterMarker = insertionMatch[1].trim();
+      const newContent = insertionMatch[2].trim();
+      
+      logInfo('Detected INSERTION mode', { insertAfterMarker: insertAfterMarker.substring(0, 50), newContentLength: newContent.length });
+      
+      // Find which file contains the marker and insert the new content
+      for (const [filename, fileContent] of Object.entries(currentCode)) {
+        if (fileContent.includes(insertAfterMarker)) {
+          // Find the position to insert after
+          const insertPos = fileContent.indexOf(insertAfterMarker) + insertAfterMarker.length;
+          
+          // Find the end of the current element (look for closing tag)
+          let endPos = insertPos;
+          const afterMarker = fileContent.substring(insertPos);
+          const closingMatch = afterMarker.match(/^[^<]*(<\/\w+>)/);
+          if (closingMatch) {
+            endPos = insertPos + (closingMatch.index || 0) + closingMatch[1].length;
+          }
+          
+          // Insert the new content
+          const modifiedContent = fileContent.substring(0, endPos) + '\n' + newContent + fileContent.substring(endPos);
+          files[filename] = modifiedContent;
+          logInfo('Applied INSERTION', { filename, insertPos: endPos, newContentLength: newContent.length });
+          return files;
+        }
+      }
+    }
     
     // MULTI-PAGE SUPPORT: Try multiple patterns to find files
     
