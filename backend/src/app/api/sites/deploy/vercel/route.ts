@@ -183,6 +183,7 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
 
 /**
  * Fix navigation links in HTML files for multi-page sites
+ * Handles: relative paths, absolute paths, and links to original source domain
  */
 function fixNavigationLinks(files: Record<string, string>): Record<string, string> {
   const fixedFiles: Record<string, string> = {};
@@ -190,45 +191,115 @@ function fixNavigationLinks(files: Record<string, string>): Record<string, strin
     .filter(f => f.endsWith('.html'))
     .map(f => f.replace('.html', ''));
   
+  // Try to detect the original source domain from the HTML content
+  let sourceDomains: string[] = [];
+  for (const content of Object.values(files)) {
+    if (typeof content !== 'string') continue;
+    // Find canonical or og:url meta tags to detect source domain
+    const canonicalMatch = content.match(/href=["'](https?:\/\/[^"'\/]+)/i);
+    const ogUrlMatch = content.match(/content=["'](https?:\/\/[^"'\/]+)/i);
+    if (canonicalMatch) sourceDomains.push(canonicalMatch[1]);
+    if (ogUrlMatch) sourceDomains.push(ogUrlMatch[1]);
+  }
+  // Remove duplicates
+  sourceDomains = [...new Set(sourceDomains)];
+  
+  logInfo('Navigation fix: detected source domains', { sourceDomains, pageNames });
+  
   for (const [filename, content] of Object.entries(files)) {
-    if (!filename.endsWith('.html')) {
+    if (!filename.endsWith('.html') || typeof content !== 'string') {
       fixedFiles[filename] = content;
       continue;
     }
     
     let fixedContent = content;
     
-    // Fix href attributes - convert to relative .html links
+    // Step 1: Replace absolute URLs to source domain with relative paths
+    for (const domain of sourceDomains) {
+      // Replace domain links: https://example.com/page → page.html
+      const domainPattern = new RegExp(
+        `href=(["'])${domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(/[^"'#?]*)?([#?][^"']*)?\\1`,
+        'gi'
+      );
+      fixedContent = fixedContent.replace(domainPattern, (match, q, path, extra) => {
+        const cleanPath = (path || '').replace(/^\/+/, '').replace(/\/+$/, '').replace(/\.html$/, '');
+        if (cleanPath === '' || cleanPath === 'home' || cleanPath === 'home-page' || cleanPath === 'home-page-1') {
+          return `href=${q}index.html${extra || ''}${q}`;
+        }
+        if (pageNames.includes(cleanPath)) {
+          return `href=${q}${cleanPath}.html${extra || ''}${q}`;
+        }
+        // If it looks like a page path, add .html
+        if (cleanPath && !cleanPath.includes('.')) {
+          return `href=${q}${cleanPath}.html${extra || ''}${q}`;
+        }
+        return match;
+      });
+    }
+    
+    // Step 2: Fix relative href attributes - convert to .html links
     fixedContent = fixedContent.replace(
-      /href=(["'])([^"'#?]*)(#[^"']*)?(["'])/gi,
-      (match, q1, path, hash, q2) => {
-        // Skip external links, javascript, mailto, tel
-        if (path.startsWith('http') || path.startsWith('javascript:') || 
-            path.startsWith('mailto:') || path.startsWith('tel:') || 
-            path.startsWith('#') || path === '') {
+      /href=(["'])([^"']*)(["'])/gi,
+      (match, q1, fullPath, q2) => {
+        // Skip if already processed, external, or special links
+        if (fullPath.endsWith('.html') || fullPath.startsWith('http') || 
+            fullPath.startsWith('javascript:') || fullPath.startsWith('mailto:') || 
+            fullPath.startsWith('tel:') || fullPath.startsWith('#') || 
+            fullPath.startsWith('data:') || fullPath === '' ||
+            fullPath.includes('.css') || fullPath.includes('.js') ||
+            fullPath.includes('.png') || fullPath.includes('.jpg') ||
+            fullPath.includes('.svg') || fullPath.includes('.ico')) {
           return match;
         }
         
-        // Clean the path
-        let cleanPath = path.replace(/^\/+/, '').replace(/\/+$/, '').replace(/\.html$/, '');
+        // Extract path and hash/query
+        const [pathPart, ...rest] = fullPath.split(/([#?])/);
+        const extra = rest.join('');
         
-        // Check if it matches a page
-        if (pageNames.includes(cleanPath) || cleanPath === 'index' || cleanPath === '') {
-          const targetPage = cleanPath === '' ? 'index' : cleanPath;
-          return `href=${q1}${targetPage}.html${hash || ''}${q2}`;
+        // Clean the path
+        let cleanPath = pathPart.replace(/^\/+/, '').replace(/\/+$/, '');
+        
+        // Map common home page names
+        if (cleanPath === '' || cleanPath === 'home' || cleanPath === 'home-page' || cleanPath === 'home-page-1') {
+          return `href=${q1}index.html${extra}${q2}`;
         }
         
-        // If no extension and looks like a page, add .html
-        if (!path.includes('.') && cleanPath.length > 0) {
-          return `href=${q1}${cleanPath}.html${hash || ''}${q2}`;
+        // Check if it matches a known page
+        if (pageNames.includes(cleanPath)) {
+          return `href=${q1}${cleanPath}.html${extra}${q2}`;
+        }
+        
+        // If path has no extension and looks like a page, add .html
+        if (!cleanPath.includes('.') && cleanPath.length > 0 && cleanPath.length < 50) {
+          return `href=${q1}${cleanPath}.html${extra}${q2}`;
         }
         
         return match;
       }
     );
     
+    // Step 3: Fix window.location assignments (for JavaScript navigation)
+    fixedContent = fixedContent.replace(
+      /window\.location(?:\.href)?\s*=\s*(["'])([^"']+)\1/gi,
+      (match, q, path) => {
+        if (path.startsWith('http') || path.startsWith('#') || path.endsWith('.html')) {
+          return match;
+        }
+        const cleanPath = path.replace(/^\/+/, '').replace(/\/+$/, '');
+        if (cleanPath === '' || cleanPath === 'home') {
+          return `window.location.href=${q}index.html${q}`;
+        }
+        if (pageNames.includes(cleanPath) || (!cleanPath.includes('.') && cleanPath.length < 50)) {
+          return `window.location.href=${q}${cleanPath}.html${q}`;
+        }
+        return match;
+      }
+    );
+    
     fixedFiles[filename] = fixedContent;
   }
+  
+  logInfo('Navigation links fixed', { pagesProcessed: Object.keys(fixedFiles).filter(f => f.endsWith('.html')).length });
   
   return fixedFiles;
 }
