@@ -128,13 +128,34 @@ export class VercelProvider implements HostingProvider {
       // Build file list for direct static deployment
       const files: Array<{ file: string; data: string }> = [];
       
-      // Add vercel.json for static deployment with permissive headers and clean URLs
+      // Add vercel.json for static deployment with URL rewrites for navigation
       // Note: Vercel auto-detects static files
       const vercelConfig = {
         version: 2,
         public: true,
         cleanUrls: true,  // Allows /about to serve about.html
         trailingSlash: false,
+        rewrites: [
+          // Common page rewrites - handles /page and /page/ → page.html
+          { source: "/team", destination: "/team.html" },
+          { source: "/team/", destination: "/team.html" },
+          { source: "/contact", destination: "/contact.html" },
+          { source: "/contact/", destination: "/contact.html" },
+          { source: "/apply", destination: "/apply.html" },
+          { source: "/apply/", destination: "/apply.html" },
+          { source: "/about", destination: "/about.html" },
+          { source: "/about/", destination: "/about.html" },
+          { source: "/careers", destination: "/careers.html" },
+          { source: "/careers/", destination: "/careers.html" },
+          { source: "/services", destination: "/services.html" },
+          { source: "/services/", destination: "/services.html" },
+          { source: "/home-page-1", destination: "/home-page-1.html" },
+          { source: "/home-page-1/", destination: "/home-page-1.html" },
+          { source: "/home", destination: "/index.html" },
+          { source: "/home/", destination: "/index.html" },
+          // Catch-all for any other pages
+          { source: "/:path", destination: "/:path.html" },
+        ],
         headers: [
           {
             source: "/(.*)",
