@@ -183,7 +183,7 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
 
 /**
  * Fix navigation links in HTML files for multi-page sites
- * Handles: relative paths, absolute paths, and links to original source domain
+ * Uses aggressive string replacement to ensure all links work
  */
 function fixNavigationLinks(files: Record<string, string>): Record<string, string> {
   const fixedFiles: Record<string, string> = {};
@@ -191,54 +191,26 @@ function fixNavigationLinks(files: Record<string, string>): Record<string, strin
     .filter(f => f.endsWith('.html'))
     .map(f => f.replace('.html', ''));
   
-  // Try to detect the original source domain from the HTML content
-  let sourceDomains: string[] = [];
+  logInfo('Navigation fix starting', { pageNames, fileCount: Object.keys(files).length });
+  
+  // Collect all unique domains found in the HTML
+  const allDomains = new Set<string>();
   for (const content of Object.values(files)) {
     if (typeof content !== 'string') continue;
-    // Find domains in various places
-    const domainMatches = content.matchAll(/https?:\/\/(www\.)?([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/gi);
-    for (const match of domainMatches) {
-      const domain = match[0].split('/').slice(0, 3).join('/'); // Get just protocol + domain
-      sourceDomains.push(domain);
+    // Find all URLs in the content
+    const urlMatches = content.matchAll(/https?:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi);
+    for (const match of urlMatches) {
+      allDomains.add(match[0].toLowerCase());
     }
   }
-  // Get unique domains, prioritize ones that appear most
-  const domainCounts: Record<string, number> = {};
-  sourceDomains.forEach(d => { domainCounts[d] = (domainCounts[d] || 0) + 1; });
-  sourceDomains = Object.entries(domainCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([d]) => d);
   
-  logInfo('Navigation fix: detected source domains', { sourceDomains, pageNames });
+  // Filter to likely source domains (exclude CDNs, common services)
+  const excludeDomains = ['fonts.googleapis.com', 'cdnjs.cloudflare.com', 'cdn.', 'ajax.googleapis.com', 'unpkg.com', 'jsdelivr.net'];
+  const sourceDomains = Array.from(allDomains).filter(d => 
+    !excludeDomains.some(exc => d.includes(exc))
+  );
   
-  // Helper to convert a path to local .html file
-  const convertToLocalPath = (path: string): string | null => {
-    let cleanPath = path
-      .replace(/^\/+/, '')
-      .replace(/\/+$/, '')
-      .replace(/\.html$/, '')
-      .replace(/\/$/, '');
-    
-    // Map home variants
-    if (cleanPath === '' || cleanPath === 'home' || cleanPath === 'home-page' || 
-        cleanPath === 'home-page-1' || cleanPath === 'index') {
-      return 'index.html';
-    }
-    
-    // Check if it's a known page
-    if (pageNames.includes(cleanPath)) {
-      return `${cleanPath}.html`;
-    }
-    
-    // If it looks like a page (no extension, reasonable length)
-    if (!cleanPath.includes('.') && cleanPath.length > 0 && cleanPath.length < 50 && 
-        !cleanPath.includes('?') && !cleanPath.includes('#')) {
-      return `${cleanPath}.html`;
-    }
-    
-    return null;
-  };
+  logInfo('Navigation fix: source domains detected', { sourceDomains: sourceDomains.slice(0, 10) });
   
   for (const [filename, content] of Object.entries(files)) {
     if (!filename.endsWith('.html') || typeof content !== 'string') {
@@ -249,87 +221,106 @@ function fixNavigationLinks(files: Record<string, string>): Record<string, strin
     let fixedContent = content;
     let fixCount = 0;
     
-    // Step 1: Replace full domain URLs in href attributes
-    // Pattern: href="https://domain.com/page" or href='https://domain.com/page/'
+    // Log some sample hrefs before fixing
+    const hrefSamples = content.match(/href=["'][^"']{1,200}["']/gi)?.slice(0, 10) || [];
+    logInfo('Sample hrefs before fix', { filename, samples: hrefSamples });
+    
+    // STEP 1: Replace absolute URLs with domain to local paths
+    // Match: href="https://www.example.com/page" or href="https://example.com/page/"
     for (const domain of sourceDomains) {
       const escapedDomain = domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       
-      // Match href with this domain
-      const pattern = new RegExp(`(href\\s*=\\s*)(["'])(${escapedDomain})(/[^"']*)?\\2`, 'gi');
+      // Pattern to match href with full URL
+      const fullUrlPattern = new RegExp(
+        `href\\s*=\\s*(["'])${escapedDomain}(/[^"'#?]*)?([#?][^"']*)?\\1`,
+        'gi'
+      );
       
-      fixedContent = fixedContent.replace(pattern, (match, prefix, quote, dom, path) => {
-        const fullPath = path || '/';
-        const localPath = convertToLocalPath(fullPath);
-        if (localPath) {
-          fixCount++;
-          return `${prefix}${quote}${localPath}${quote}`;
+      fixedContent = fixedContent.replace(fullUrlPattern, (match, quote, path, extra) => {
+        const cleanPath = (path || '/')
+          .replace(/^\/+/, '')
+          .replace(/\/+$/, '')
+          .replace(/\.html$/, '');
+        
+        let targetPage = cleanPath;
+        if (cleanPath === '' || cleanPath === 'home' || cleanPath === 'home-page' || cleanPath === 'home-page-1') {
+          targetPage = 'index';
         }
-        return match;
+        
+        fixCount++;
+        logInfo('Fixed absolute URL', { from: match.substring(0, 100), to: `${targetPage}.html` });
+        return `href=${quote}${targetPage}.html${extra || ''}${quote}`;
       });
     }
     
-    // Step 2: Fix relative paths like /team, /contact, /apply
+    // STEP 2: Replace relative paths like /team/, /contact, /apply/
+    // This catches: href="/team" href="/team/" href="team" href="team/"
     fixedContent = fixedContent.replace(
-      /(href\s*=\s*)(["'])(\/?[a-zA-Z][a-zA-Z0-9_-]*\/?)(["'])/gi,
-      (match, prefix, q1, path, q2) => {
-        // Skip if already .html or has file extension
-        if (path.includes('.')) return match;
-        
-        const localPath = convertToLocalPath(path);
-        if (localPath) {
-          fixCount++;
-          return `${prefix}${q1}${localPath}${q2}`;
-        }
-        return match;
-      }
-    );
-    
-    // Step 3: Fix hrefs that are just "/" (home page)
-    fixedContent = fixedContent.replace(
-      /(href\s*=\s*)(["'])\/(["'])/gi,
-      (match, prefix, q1, q2) => {
+      /href\s*=\s*(["'])(\/?)(team|contact|apply|about|services|home|careers|blog|portfolio|gallery|faq|pricing|index|home-page-1|home-page)(\/?)(["'])/gi,
+      (match, q1, slash1, page, slash2, q2) => {
+        const targetPage = (page.toLowerCase() === 'home' || page.toLowerCase() === 'home-page' || page.toLowerCase() === 'home-page-1') 
+          ? 'index' 
+          : page.toLowerCase();
         fixCount++;
-        return `${prefix}${q1}index.html${q2}`;
+        return `href=${q1}${targetPage}.html${q2}`;
       }
     );
     
-    // Step 4: Fix onclick handlers with navigation
+    // STEP 3: Fix root path href="/"
     fixedContent = fixedContent.replace(
-      /onclick\s*=\s*(["'])[^"']*(?:window\.)?location(?:\.href)?\s*=\s*["']([^"']+)["'][^"']*\1/gi,
-      (match, q, path) => {
-        if (path.startsWith('http') || path.endsWith('.html') || path.startsWith('#')) {
+      /href\s*=\s*(["'])\/(["'])/gi,
+      (match, q1, q2) => {
+        fixCount++;
+        return `href=${q1}index.html${q2}`;
+      }
+    );
+    
+    // STEP 4: Fix any remaining relative paths that look like pages
+    // Match: href="/something" or href="something" where something is alphanumeric
+    fixedContent = fixedContent.replace(
+      /href\s*=\s*(["'])(\/?[a-zA-Z][a-zA-Z0-9_-]{1,30})\/?(\1)/gi,
+      (match, q1, path, q2) => {
+        // Skip if already has extension or is a known non-page
+        if (path.includes('.') || path.startsWith('#') || path.startsWith('javascript') || 
+            path.startsWith('mailto') || path.startsWith('tel') || path.startsWith('http')) {
           return match;
         }
-        const localPath = convertToLocalPath(path);
-        if (localPath) {
-          fixCount++;
-          return `onclick=${q}window.location.href='${localPath}'${q}`;
-        }
-        return match;
+        
+        const cleanPath = path.replace(/^\/+/, '').replace(/\/+$/, '');
+        const targetPage = (cleanPath === 'home' || cleanPath === 'home-page' || cleanPath === 'home-page-1') 
+          ? 'index' 
+          : cleanPath;
+        
+        fixCount++;
+        return `href=${q1}${targetPage}.html${q1}`;
       }
     );
     
-    // Step 5: Fix window.location in inline scripts
+    // STEP 5: Fix JavaScript navigation
     fixedContent = fixedContent.replace(
       /window\.location(?:\.href)?\s*=\s*(["'])([^"']+)\1/gi,
       (match, q, path) => {
         if (path.startsWith('http') || path.endsWith('.html') || path.startsWith('#')) {
           return match;
         }
-        const localPath = convertToLocalPath(path);
-        if (localPath) {
+        const cleanPath = path.replace(/^\/+/, '').replace(/\/+$/, '');
+        if (cleanPath && cleanPath.length < 50 && !cleanPath.includes('.')) {
+          const targetPage = (cleanPath === '' || cleanPath === 'home') ? 'index' : cleanPath;
           fixCount++;
-          return `window.location.href=${q}${localPath}${q}`;
+          return `window.location.href=${q}${targetPage}.html${q}`;
         }
         return match;
       }
     );
     
-    logInfo('Fixed navigation links in file', { filename, fixCount });
+    // Log sample hrefs after fixing
+    const hrefSamplesAfter = fixedContent.match(/href=["'][^"']{1,200}["']/gi)?.slice(0, 10) || [];
+    logInfo('Sample hrefs after fix', { filename, samples: hrefSamplesAfter, fixCount });
+    
     fixedFiles[filename] = fixedContent;
   }
   
-  logInfo('Navigation links fixed', { 
+  logInfo('Navigation links fix complete', { 
     pagesProcessed: Object.keys(fixedFiles).filter(f => f.endsWith('.html')).length,
     pageNames 
   });
