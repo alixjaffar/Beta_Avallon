@@ -17,6 +17,10 @@ const DeployToVercelSchema = z.object({
 /**
  * Download external images and embed them locally in the deployment
  * This prevents broken images when the original website is deleted
+ * 
+ * Limits:
+ * - Max 500KB per image
+ * - Max 7MB total for all images (to stay under Vercel's 10MB limit)
  */
 async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
   updatedFiles: Record<string, string>;
@@ -26,6 +30,10 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
   const imageMapping: Record<string, string> = {};
   let imageIndex = 0;
   
+  const MAX_IMAGE_SIZE = 500 * 1024; // 500KB per image
+  const MAX_TOTAL_SIZE = 7 * 1024 * 1024; // 7MB total for images
+  let totalSize = 0;
+  
   // Extract all image URLs from HTML files
   const imageUrls = new Set<string>();
   
@@ -33,7 +41,6 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
   const imageUrlPattern = /(?:src=["']|url\(["']?)(https?:\/\/[^"'\s)]+\.(?:jpg|jpeg|png|gif|webp|svg|ico)[^"'\s)]*)/gi;
   const bgImagePattern = /background(?:-image)?:\s*url\(["']?(https?:\/\/[^"'\s)]+)["']?\)/gi;
   const unsplashPattern = /(?:src=["']|url\(["']?)(https?:\/\/images\.unsplash\.com\/[^"'\s)]+)/gi;
-  const genericImgSrcPattern = /src=["'](https?:\/\/[^"'\s]+?)["']/gi;
   
   for (const content of Object.values(files)) {
     if (typeof content !== 'string') continue;
@@ -66,9 +73,15 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
     return { updatedFiles: files, imageFiles: {} };
   }
   
-  // Download images
+  // Download images with size limits
   const downloadImage = async (url: string): Promise<void> => {
     try {
+      // Check if we've hit the total size limit
+      if (totalSize >= MAX_TOTAL_SIZE) {
+        logInfo('Image skipped - total size limit reached', { url: url.substring(0, 60), totalSize });
+        return;
+      }
+      
       if (url.startsWith('data:') || !url.startsWith('http')) return;
       if (url.length > 2000) return;
       
@@ -77,7 +90,7 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
         },
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(8000),
       });
       
       if (!response.ok) return;
@@ -85,8 +98,27 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
       const contentType = response.headers.get('content-type') || '';
       if (contentType.includes('text/html') || contentType.includes('application/json')) return;
       
+      // Check content-length header first if available
+      const contentLength = response.headers.get('content-length');
+      if (contentLength && parseInt(contentLength) > MAX_IMAGE_SIZE) {
+        logInfo('Image skipped - too large (header)', { url: url.substring(0, 60), size: contentLength });
+        return;
+      }
+      
       const buffer = Buffer.from(await response.arrayBuffer());
+      
+      // Skip images that are too small (likely broken) or too large
       if (buffer.byteLength < 100) return;
+      if (buffer.byteLength > MAX_IMAGE_SIZE) {
+        logInfo('Image skipped - too large', { url: url.substring(0, 60), size: buffer.byteLength });
+        return;
+      }
+      
+      // Check if adding this image would exceed total limit
+      if (totalSize + buffer.byteLength > MAX_TOTAL_SIZE) {
+        logInfo('Image skipped - would exceed total limit', { url: url.substring(0, 60), imageSize: buffer.byteLength, totalSize });
+        return;
+      }
       
       // Determine extension
       let extension = 'jpg';
@@ -106,21 +138,29 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
       const filename = `images/image_${imageIndex++}.${extension}`;
       imageMapping[url] = filename;
       imageFiles[filename] = buffer;
+      totalSize += buffer.byteLength;
       
-      logInfo('Image downloaded', { url: url.substring(0, 80), filename });
+      logInfo('Image downloaded', { url: url.substring(0, 60), filename, size: buffer.byteLength, totalSize });
     } catch (error: any) {
-      logInfo('Image download skipped', { url: url.substring(0, 80), error: error.message });
+      logInfo('Image download skipped', { url: url.substring(0, 60), error: error.message });
     }
   };
   
   // Download in batches of 5
   const urls = Array.from(imageUrls);
   for (let i = 0; i < urls.length; i += 5) {
+    // Stop if we've hit the size limit
+    if (totalSize >= MAX_TOTAL_SIZE) break;
+    
     const batch = urls.slice(i, i + 5);
     await Promise.all(batch.map(downloadImage));
   }
   
-  logInfo('Image download complete', { total: imageUrls.size, downloaded: Object.keys(imageFiles).length });
+  logInfo('Image download complete', { 
+    total: imageUrls.size, 
+    downloaded: Object.keys(imageFiles).length,
+    totalSizeMB: (totalSize / 1024 / 1024).toFixed(2)
+  });
   
   // Update HTML to use local paths
   const updatedFiles: Record<string, string> = {};
