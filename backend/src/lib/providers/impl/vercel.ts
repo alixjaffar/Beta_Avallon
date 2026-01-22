@@ -128,11 +128,13 @@ export class VercelProvider implements HostingProvider {
       // Build file list for direct static deployment
       const files: Array<{ file: string; data: string }> = [];
       
-      // Add vercel.json for static deployment with permissive headers for Stripe
-      // Note: Vercel auto-detects static files, so we just need headers config
+      // Add vercel.json for static deployment with permissive headers and clean URLs
+      // Note: Vercel auto-detects static files
       const vercelConfig = {
         version: 2,
         public: true,
+        cleanUrls: true,  // Allows /about to serve about.html
+        trailingSlash: false,
         headers: [
           {
             source: "/(.*)",
@@ -156,10 +158,18 @@ export class VercelProvider implements HostingProvider {
       
       if (input.files && Object.keys(input.files).length > 0) {
         for (const [filePath, content] of Object.entries(input.files)) {
-          files.push({
-            file: filePath,
-            data: Buffer.from(content).toString('base64'),
-          });
+          // Handle both string and Buffer content (images)
+          if (Buffer.isBuffer(content)) {
+            files.push({
+              file: filePath,
+              data: content.toString('base64'),
+            });
+          } else {
+            files.push({
+              file: filePath,
+              data: Buffer.from(content as string).toString('base64'),
+            });
+          }
         }
         logInfo('Deploying files to Vercel', { 
           fileCount: files.length,

@@ -1,5 +1,6 @@
 // API endpoint for deploying websites to GitHub and Vercel
 // CHANGELOG: 2026-01-07 - Added proper CORS handling
+// CHANGELOG: 2026-01-22 - Added image downloading and navigation link fixing
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 import { z } from "zod";
@@ -12,6 +13,185 @@ import { getCorsHeaders } from "@/lib/cors";
 const DeployToVercelSchema = z.object({
   siteId: z.string().min(1, "Site ID is required"),
 });
+
+/**
+ * Download external images and embed them locally in the deployment
+ * This prevents broken images when the original website is deleted
+ */
+async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
+  updatedFiles: Record<string, string>;
+  imageFiles: Record<string, Buffer>;
+}> {
+  const imageFiles: Record<string, Buffer> = {};
+  const imageMapping: Record<string, string> = {};
+  let imageIndex = 0;
+  
+  // Extract all image URLs from HTML files
+  const imageUrls = new Set<string>();
+  
+  // Patterns to find images
+  const imageUrlPattern = /(?:src=["']|url\(["']?)(https?:\/\/[^"'\s)]+\.(?:jpg|jpeg|png|gif|webp|svg|ico)[^"'\s)]*)/gi;
+  const bgImagePattern = /background(?:-image)?:\s*url\(["']?(https?:\/\/[^"'\s)]+)["']?\)/gi;
+  const unsplashPattern = /(?:src=["']|url\(["']?)(https?:\/\/images\.unsplash\.com\/[^"'\s)]+)/gi;
+  const genericImgSrcPattern = /src=["'](https?:\/\/[^"'\s]+?)["']/gi;
+  
+  for (const content of Object.values(files)) {
+    if (typeof content !== 'string') continue;
+    
+    let match;
+    
+    // Find images with extensions
+    const pattern1 = new RegExp(imageUrlPattern.source, 'gi');
+    while ((match = pattern1.exec(content)) !== null) {
+      const url = match[1].split('?')[0] + (match[1].includes('?') ? '?' + match[1].split('?')[1].split('"')[0].split("'")[0] : '');
+      imageUrls.add(url.replace(/["')]+$/, ''));
+    }
+    
+    // Find background images
+    const pattern2 = new RegExp(bgImagePattern.source, 'gi');
+    while ((match = pattern2.exec(content)) !== null) {
+      imageUrls.add(match[1].replace(/["')]+$/, ''));
+    }
+    
+    // Find Unsplash images
+    const pattern3 = new RegExp(unsplashPattern.source, 'gi');
+    while ((match = pattern3.exec(content)) !== null) {
+      imageUrls.add(match[1].replace(/["')]+$/, ''));
+    }
+  }
+  
+  logInfo('Found external images to download', { count: imageUrls.size });
+  
+  if (imageUrls.size === 0) {
+    return { updatedFiles: files, imageFiles: {} };
+  }
+  
+  // Download images
+  const downloadImage = async (url: string): Promise<void> => {
+    try {
+      if (url.startsWith('data:') || !url.startsWith('http')) return;
+      if (url.length > 2000) return;
+      
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+        },
+        signal: AbortSignal.timeout(10000),
+      });
+      
+      if (!response.ok) return;
+      
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('text/html') || contentType.includes('application/json')) return;
+      
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.byteLength < 100) return;
+      
+      // Determine extension
+      let extension = 'jpg';
+      const urlExt = url.match(/\.(jpg|jpeg|png|gif|webp|svg|ico)/i);
+      if (urlExt) {
+        extension = urlExt[1].toLowerCase();
+      } else if (contentType.includes('png')) {
+        extension = 'png';
+      } else if (contentType.includes('gif')) {
+        extension = 'gif';
+      } else if (contentType.includes('webp')) {
+        extension = 'webp';
+      } else if (contentType.includes('svg')) {
+        extension = 'svg';
+      }
+      
+      const filename = `images/image_${imageIndex++}.${extension}`;
+      imageMapping[url] = filename;
+      imageFiles[filename] = buffer;
+      
+      logInfo('Image downloaded', { url: url.substring(0, 80), filename });
+    } catch (error: any) {
+      logInfo('Image download skipped', { url: url.substring(0, 80), error: error.message });
+    }
+  };
+  
+  // Download in batches of 5
+  const urls = Array.from(imageUrls);
+  for (let i = 0; i < urls.length; i += 5) {
+    const batch = urls.slice(i, i + 5);
+    await Promise.all(batch.map(downloadImage));
+  }
+  
+  logInfo('Image download complete', { total: imageUrls.size, downloaded: Object.keys(imageFiles).length });
+  
+  // Update HTML to use local paths
+  const updatedFiles: Record<string, string> = {};
+  for (const [filename, content] of Object.entries(files)) {
+    if (!filename.endsWith('.html') || typeof content !== 'string') {
+      updatedFiles[filename] = content;
+      continue;
+    }
+    
+    let newContent = content;
+    for (const [originalUrl, localPath] of Object.entries(imageMapping)) {
+      const escapedUrl = originalUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      newContent = newContent.replace(new RegExp(escapedUrl, 'g'), localPath);
+    }
+    updatedFiles[filename] = newContent;
+  }
+  
+  return { updatedFiles, imageFiles };
+}
+
+/**
+ * Fix navigation links in HTML files for multi-page sites
+ */
+function fixNavigationLinks(files: Record<string, string>): Record<string, string> {
+  const fixedFiles: Record<string, string> = {};
+  const pageNames = Object.keys(files)
+    .filter(f => f.endsWith('.html'))
+    .map(f => f.replace('.html', ''));
+  
+  for (const [filename, content] of Object.entries(files)) {
+    if (!filename.endsWith('.html')) {
+      fixedFiles[filename] = content;
+      continue;
+    }
+    
+    let fixedContent = content;
+    
+    // Fix href attributes - convert to relative .html links
+    fixedContent = fixedContent.replace(
+      /href=(["'])([^"'#?]*)(#[^"']*)?(["'])/gi,
+      (match, q1, path, hash, q2) => {
+        // Skip external links, javascript, mailto, tel
+        if (path.startsWith('http') || path.startsWith('javascript:') || 
+            path.startsWith('mailto:') || path.startsWith('tel:') || 
+            path.startsWith('#') || path === '') {
+          return match;
+        }
+        
+        // Clean the path
+        let cleanPath = path.replace(/^\/+/, '').replace(/\/+$/, '').replace(/\.html$/, '');
+        
+        // Check if it matches a page
+        if (pageNames.includes(cleanPath) || cleanPath === 'index' || cleanPath === '') {
+          const targetPage = cleanPath === '' ? 'index' : cleanPath;
+          return `href=${q1}${targetPage}.html${hash || ''}${q2}`;
+        }
+        
+        // If no extension and looks like a page, add .html
+        if (!path.includes('.') && cleanPath.length > 0) {
+          return `href=${q1}${cleanPath}.html${hash || ''}${q2}`;
+        }
+        
+        return match;
+      }
+    );
+    
+    fixedFiles[filename] = fixedContent;
+  }
+  
+  return fixedFiles;
+}
 
 export async function OPTIONS(req: NextRequest) {
   return new NextResponse(null, {
@@ -41,8 +221,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Get website files from websiteContent
-    const files = site.websiteContent?.files || site.websiteContent || {};
-    if (!files || Object.keys(files).length === 0) {
+    const rawFiles = site.websiteContent?.files || site.websiteContent || {};
+    if (!rawFiles || Object.keys(rawFiles).length === 0) {
       return NextResponse.json({ error: "No website files found" }, { status: 400, headers: corsHeaders });
     }
 
@@ -50,9 +230,22 @@ export async function POST(req: NextRequest) {
     let previewUrl: string;
 
     try {
-      // Files for Vercel deployment (vercel.json is added by the provider)
-      const vercelFiles = {
-        ...files,
+      logInfo('Processing files for deployment', { fileCount: Object.keys(rawFiles).length });
+      
+      // Step 1: Fix navigation links for multi-page sites
+      const filesWithFixedNav = fixNavigationLinks(rawFiles);
+      
+      // Step 2: Download external images and embed locally
+      const { updatedFiles, imageFiles } = await downloadAndEmbedImages(filesWithFixedNav);
+      
+      logInfo('Files processed', { 
+        htmlFiles: Object.keys(updatedFiles).filter(f => f.endsWith('.html')).length,
+        imageFiles: Object.keys(imageFiles).length 
+      });
+      
+      // Step 3: Build final file set with images
+      const vercelFiles: Record<string, string | Buffer> = {
+        ...updatedFiles,
         'package.json': JSON.stringify({
           name: site.slug,
           version: '1.0.0',
@@ -63,8 +256,13 @@ export async function POST(req: NextRequest) {
           dependencies: {}
         }, null, 2)
       };
+      
+      // Add image files (as Buffer)
+      for (const [imagePath, imageBuffer] of Object.entries(imageFiles)) {
+        vercelFiles[imagePath] = imageBuffer;
+      }
 
-      // Step 1: Try GitHub (optional - don't fail if it doesn't work)
+      // Step 4: Try GitHub (optional - don't fail if it doesn't work)
       try {
         logInfo('Attempting to deploy to GitHub', { siteId, siteName: site.name });
         const github = new GitHubClient();
@@ -75,17 +273,18 @@ export async function POST(req: NextRequest) {
         // Extract repo name from URL
         const repoName = repoUrl.replace('https://github.com/', '');
         
-        // Add vercel.json for instant static deployment (no build step)
+        // Add vercel.json for instant static deployment
         const vercelConfig = {
           version: 2,
           public: true,
+          cleanUrls: true,
           builds: [{ src: "**/*", use: "@vercel/static" }],
           routes: [{ handle: "filesystem" }]
         };
         
-        // Files for GitHub (includes vercel.json)
-        const githubFiles = {
-          ...files,
+        // Files for GitHub (text files only - images handled separately)
+        const githubTextFiles: Record<string, string> = {
+          ...updatedFiles,
           'vercel.json': JSON.stringify(vercelConfig, null, 2),
           'package.json': JSON.stringify({
             name: site.slug,
@@ -98,8 +297,8 @@ export async function POST(req: NextRequest) {
           }, null, 2)
         };
         
-        // Push files to GitHub
-        await github.pushFiles(repoName, githubFiles, `Initial commit - Generated by Avallon for ${site.name}`);
+        // Push text files to GitHub
+        await github.pushFiles(repoName, githubTextFiles, `Initial commit - Generated by Avallon for ${site.name}`);
         logInfo('Successfully deployed to GitHub', { repoUrl });
       } catch (githubError: any) {
         // GitHub is optional - log and continue
@@ -107,7 +306,7 @@ export async function POST(req: NextRequest) {
         repoUrl = undefined;
       }
 
-      // Step 2: Deploy to Vercel (required)
+      // Step 5: Deploy to Vercel (required)
       logInfo('Deploying to Vercel', { siteId, fileCount: Object.keys(vercelFiles).length });
       const vercel = new VercelProvider();
       const projectName = site.slug;
