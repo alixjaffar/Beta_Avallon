@@ -14,7 +14,7 @@ export type CreateProjectResult = {
 export type CreateDeploymentInput = {
   projectId: string;
   gitUrl?: string;
-  files?: Record<string, string>; // filepath -> content
+  files?: Record<string, string | Buffer>; // filepath -> content (string for text, Buffer for binary)
   env?: Record<string, string>;
 };
 
