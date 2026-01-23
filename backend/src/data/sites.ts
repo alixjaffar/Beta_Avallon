@@ -1,9 +1,6 @@
-// CHANGELOG: 2026-01-22 - Switched to Firebase Firestore for persistent storage
+// CHANGELOG: 2026-01-22 - Switched to PostgreSQL with Prisma for persistent storage
 import { logInfo, logError } from "@/lib/log";
-import { db } from "@/lib/firebase-admin";
-
-// Firestore collection name
-const SITES_COLLECTION = 'sites';
+import { prisma } from "@/lib/db";
 
 // Type definition for Site
 export type Site = {
@@ -19,8 +16,8 @@ export type Site = {
   chatHistory: any[] | null;
   websiteContent: any | null;
   customDomain?: string | null;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: Date | string;
+  updatedAt: Date | string;
 };
 
 export type CreateSiteInput = {
@@ -38,93 +35,73 @@ export type CreateSiteInput = {
 
 export async function createSite(input: CreateSiteInput): Promise<Site> {
   try {
-    // Check if Firestore is available
-    if (!db) {
-      throw new Error('Firestore not initialized - check FIREBASE_PRIVATE_KEY environment variable');
+    // Generate a unique slug if it already exists
+    let slug = input.slug;
+    let slugExists = true;
+    let attempts = 0;
+    
+    while (slugExists && attempts < 10) {
+      try {
+        const existing = await prisma.site.findUnique({ where: { slug } });
+        if (!existing) {
+          slugExists = false;
+        } else {
+          slug = `${input.slug}-${Date.now()}`;
+          attempts++;
+        }
+      } catch (e) {
+        slugExists = false;
+      }
     }
     
-    const siteId = `site_${Date.now()}`;
+    const site = await prisma.site.create({
+      data: {
+        ownerId: input.ownerId,
+        name: input.name,
+        slug: slug,
+        status: input.status,
+        repoUrl: input.repoUrl || null,
+        previewUrl: input.previewUrl || null,
+        vercelProjectId: input.vercelProjectId || null,
+        vercelDeploymentId: input.vercelDeploymentId || null,
+        chatHistory: input.chatHistory || [],
+        websiteContent: input.websiteContent || null,
+      },
+    });
     
-    const newSite: Site = {
-      id: siteId,
-      ownerId: input.ownerId,
-      name: input.name,
-      slug: input.slug,
-      status: input.status,
-      repoUrl: input.repoUrl || null,
-      previewUrl: input.previewUrl || null,
-      vercelProjectId: input.vercelProjectId || null,
-      vercelDeploymentId: input.vercelDeploymentId || null,
-      chatHistory: input.chatHistory || [],
-      websiteContent: input.websiteContent || null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    
-    // Save to Firestore
-    await db.collection(SITES_COLLECTION).doc(siteId).set(newSite);
-    
-    logInfo('Site created in Firestore', { siteId: newSite.id, name: newSite.name });
-    return newSite;
+    logInfo('Site created in PostgreSQL', { siteId: site.id, name: site.name });
+    return site as Site;
   } catch (error: any) {
-    logError('Error creating site in Firestore:', error);
-    // Provide more helpful error message
-    if (error.code === 7 || error.message?.includes('PERMISSION_DENIED')) {
-      throw new Error('Firestore permission denied - check Firebase credentials and Firestore rules');
-    }
-    if (error.message?.includes('FIREBASE_PRIVATE_KEY')) {
-      throw new Error('Firebase not configured - please set FIREBASE_PRIVATE_KEY environment variable');
-    }
+    logError('Error creating site in PostgreSQL:', error);
     throw error;
   }
 }
 
 export async function listSitesByUser(userId: string): Promise<Site[]> {
   try {
-    const snapshot = await db.collection(SITES_COLLECTION)
-      .where('ownerId', '==', userId)
-      .orderBy('createdAt', 'desc')
-      .get();
+    const sites = await prisma.site.findMany({
+      where: { ownerId: userId },
+      orderBy: { createdAt: 'desc' },
+    });
     
-    const sites = snapshot.docs.map(doc => doc.data() as Site);
-    
-    logInfo('Sites listed from Firestore', { userId, count: sites.length });
-    return sites;
-  } catch (error: any) {
-    // If index doesn't exist yet, fall back to unordered query
-    if (error.code === 9 || error.message?.includes('index')) {
-      logInfo('Firestore index not ready, using unordered query', { userId });
-      try {
-        const snapshot = await db.collection(SITES_COLLECTION)
-          .where('ownerId', '==', userId)
-          .get();
-        
-        const sites = snapshot.docs.map(doc => doc.data() as Site);
-        // Sort in memory
-        sites.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        
-        logInfo('Sites listed from Firestore (unordered)', { userId, count: sites.length });
-        return sites;
-      } catch (innerError) {
-        logError('Error listing sites from Firestore (fallback):', innerError);
-        return [];
-      }
-    }
-    logError('Error listing sites from Firestore:', error);
+    logInfo('Sites listed from PostgreSQL', { userId, count: sites.length });
+    return sites as Site[];
+  } catch (error) {
+    logError('Error listing sites from PostgreSQL:', error);
     return [];
   }
 }
 
 export async function getSiteById(id: string, userId: string): Promise<Site | null> {
   try {
-    const doc = await db.collection(SITES_COLLECTION).doc(id).get();
+    const site = await prisma.site.findUnique({
+      where: { id },
+    });
     
-    if (!doc.exists) {
-      logInfo('Site not found in Firestore', { siteId: id });
+    if (!site) {
+      logInfo('Site not found in PostgreSQL', { siteId: id });
       return null;
     }
-    
-    const site = doc.data() as Site;
     
     // Verify ownership (unless in development)
     if (site.ownerId !== userId && process.env.NODE_ENV !== 'development') {
@@ -132,10 +109,10 @@ export async function getSiteById(id: string, userId: string): Promise<Site | nu
       return null;
     }
     
-    logInfo('Site retrieved from Firestore', { siteId: id, found: true });
-    return site;
+    logInfo('Site retrieved from PostgreSQL', { siteId: id, found: true });
+    return site as Site;
   } catch (error) {
-    logError('Error getting site from Firestore:', error);
+    logError('Error getting site from PostgreSQL:', error);
     return null;
   }
 }
@@ -152,15 +129,15 @@ export async function updateSite(id: string, userId: string, data: {
   websiteContent?: any | null;
 }): Promise<Site | null> {
   try {
-    const docRef = db.collection(SITES_COLLECTION).doc(id);
-    const doc = await docRef.get();
+    // First check if the site exists and belongs to the user
+    const existingSite = await prisma.site.findUnique({
+      where: { id },
+    });
     
-    if (!doc.exists) {
-      logError('Site not found for update in Firestore', { siteId: id });
+    if (!existingSite) {
+      logError('Site not found for update in PostgreSQL', { siteId: id });
       return null;
     }
-    
-    const existingSite = doc.data() as Site;
     
     // Verify ownership (unless in development)
     if (existingSite.ownerId !== userId && process.env.NODE_ENV !== 'development') {
@@ -168,50 +145,48 @@ export async function updateSite(id: string, userId: string, data: {
       return null;
     }
     
-    const updateData = {
-      ...data,
-      updatedAt: new Date().toISOString(),
-    };
+    const site = await prisma.site.update({
+      where: { id },
+      data: {
+        ...data,
+        updatedAt: new Date(),
+      },
+    });
     
-    await docRef.update(updateData);
-    
-    const updatedSite: Site = {
-      ...existingSite,
-      ...updateData,
-    };
-    
-    logInfo('Site updated in Firestore', { siteId: id });
-    return updatedSite;
+    logInfo('Site updated in PostgreSQL', { siteId: id });
+    return site as Site;
   } catch (error) {
-    logError('Error updating site in Firestore:', error);
+    logError('Error updating site in PostgreSQL:', error);
     return null;
   }
 }
 
 export async function deleteSite(id: string, userId: string): Promise<Site | null> {
   try {
-    const docRef = db.collection(SITES_COLLECTION).doc(id);
-    const doc = await docRef.get();
+    // First check if the site exists and belongs to the user
+    const existingSite = await prisma.site.findUnique({
+      where: { id },
+    });
     
-    if (!doc.exists) {
-      logError('Site not found for deletion in Firestore', { siteId: id });
+    if (!existingSite) {
+      logError('Site not found for deletion in PostgreSQL', { siteId: id });
       return null;
     }
-    
-    const site = doc.data() as Site;
     
     // Verify ownership
-    if (site.ownerId !== userId) {
-      logError('Site deletion denied - owner mismatch', { siteId: id, ownerId: site.ownerId, requestedUser: userId });
+    if (existingSite.ownerId !== userId) {
+      logError('Site deletion denied - owner mismatch', { siteId: id, ownerId: existingSite.ownerId, requestedUser: userId });
       return null;
     }
     
-    await docRef.delete();
+    const site = await prisma.site.delete({
+      where: { id },
+    });
     
-    logInfo('Site deleted from Firestore', { siteId: id });
-    return site;
+    logInfo('Site deleted from PostgreSQL', { siteId: id });
+    return site as Site;
   } catch (error) {
-    logError('Error deleting site from Firestore:', error);
+    logError('Error deleting site from PostgreSQL:', error);
     return null;
   }
 }
