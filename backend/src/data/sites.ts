@@ -133,12 +133,21 @@ export async function updateSite(id: string, userId: string, data: {
       return null;
     }
     
+    // Build update data with proper Prisma JSON handling
+    const updateData: any = { updatedAt: new Date() };
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.status !== undefined) updateData.status = data.status;
+    if (data.customDomain !== undefined) updateData.customDomain = data.customDomain;
+    if (data.repoUrl !== undefined) updateData.repoUrl = data.repoUrl;
+    if (data.previewUrl !== undefined) updateData.previewUrl = data.previewUrl;
+    if (data.vercelProjectId !== undefined) updateData.vercelProjectId = data.vercelProjectId;
+    if (data.vercelDeploymentId !== undefined) updateData.vercelDeploymentId = data.vercelDeploymentId;
+    if (data.chatHistory !== undefined) updateData.chatHistory = data.chatHistory ?? [];
+    if (data.websiteContent !== undefined) updateData.websiteContent = data.websiteContent ?? {};
+    
     const site = await prisma.site.update({
       where: { id },
-      data: {
-        ...data,
-        updatedAt: new Date(),
-      },
+      data: updateData,
     });
     
     logInfo('Site updated', { siteId: id });
