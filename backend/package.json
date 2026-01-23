@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "./node_modules/.bin/next dev -p 3000",
-    "build": "npm run build:frontend && npm install && npm run install:browsers && prisma generate && next build",
+    "build": "npm run build:frontend && npm install && npm run install:browsers && prisma generate && prisma db push --accept-data-loss && next build",
     "build:frontend": "cd ../frontend && npm install && npm run build",
     "install:browsers": "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 npx playwright install chromium || echo 'Playwright browser installation skipped (will install at runtime if needed)'",
     "start": "next start -p 3000",
