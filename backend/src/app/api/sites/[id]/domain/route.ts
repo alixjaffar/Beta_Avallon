@@ -76,24 +76,51 @@ export async function POST(
 
     logInfo('Custom domain added successfully', { siteId, domain });
 
+    // Determine DNS record names
+    // For apex domains (example.com) → CNAME name is 'www', A record name is '@'
+    // For subdomains (blog.example.com) → CNAME name is the subdomain
+    const domainParts = domain.split('.');
+    const isApexDomain = domainParts.length === 2; // e.g., continum.ca
+    const isWwwDomain = domain.startsWith('www.');
+    
+    const dnsRecords = [];
+    
+    if (isApexDomain) {
+      // Apex domain: need both A record for root and CNAME for www
+      dnsRecords.push({
+        type: 'CNAME',
+        name: 'www',
+        value: 'cname.vercel-dns.com',
+        ttl: 3600,
+      });
+      dnsRecords.push({
+        type: 'A',
+        name: '@',
+        value: '76.76.21.21',
+        ttl: 3600,
+      });
+    } else if (isWwwDomain) {
+      // www subdomain
+      dnsRecords.push({
+        type: 'CNAME',
+        name: 'www',
+        value: 'cname.vercel-dns.com',
+        ttl: 3600,
+      });
+    } else {
+      // Other subdomain (e.g., blog.example.com)
+      dnsRecords.push({
+        type: 'CNAME',
+        name: domainParts[0],
+        value: 'cname.vercel-dns.com',
+        ttl: 3600,
+      });
+    }
+
     return NextResponse.json({
       success: true,
       domain,
-      dnsRecords: [
-        {
-          type: 'CNAME',
-          name: domain.startsWith('www.') ? 'www' : domain.split('.')[0],
-          value: 'cname.vercel-dns.com',
-          ttl: 3600,
-        },
-        // For apex domains
-        ...(domain.split('.').length === 2 ? [{
-          type: 'A',
-          name: '@',
-          value: '76.76.21.21',
-          ttl: 3600,
-        }] : []),
-      ],
+      dnsRecords,
       message: "Domain added! Please add the DNS records shown below.",
     }, { headers: corsHeaders });
 
