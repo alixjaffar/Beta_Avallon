@@ -15,6 +15,41 @@ const DeployToVercelSchema = z.object({
 });
 
 /**
+ * CRITICAL: Remove editor-injected scripts that break navigation on published sites
+ * The visual editor injects a script with e.preventDefault() for in-editor navigation
+ * This MUST be removed before publishing or links won't work
+ */
+function cleanEditorScripts(html: string): string {
+  if (!html || typeof html !== 'string') return html;
+  
+  // Remove the navigation script that prevents links from working
+  // Pattern 1: The exact navigation script structure
+  html = html.replace(/<script>\s*\(function\(\)\s*\{\s*document\.querySelectorAll\(['"]a\[href\]['"]\)[\s\S]*?<\/script>/gi, '');
+  
+  // Pattern 2: Any script with querySelectorAll + preventDefault combo
+  html = html.replace(/<script>[\s\S]*?querySelectorAll\(['"]a\[href\]['"]\)[\s\S]*?preventDefault[\s\S]*?<\/script>/gi, '');
+  
+  // Pattern 3: Any script with postMessage navigate type
+  html = html.replace(/<script>[\s\S]*?window\.parent\.postMessage\(\s*\{\s*type:\s*['"]navigate['"][\s\S]*?<\/script>/gi, '');
+  
+  // Pattern 4: Visual editor scripts
+  html = html.replace(/<script>\s*\(function\(\)\s*\{\s*let selectedElement[\s\S]*?<\/script>/gi, '');
+  html = html.replace(/<script>[\s\S]*?avallon-selection-overlay[\s\S]*?<\/script>/gi, '');
+  html = html.replace(/<script>[\s\S]*?avallon-hover-overlay[\s\S]*?<\/script>/gi, '');
+  
+  // Remove avallon overlay divs
+  html = html.replace(/<div[^>]*id="avallon-[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '');
+  
+  // Remove contenteditable attributes
+  html = html.replace(/\s+contenteditable="[^"]*"/gi, '');
+  
+  // Clean empty script tags
+  html = html.replace(/<script>\s*<\/script>/gi, '');
+  
+  return html;
+}
+
+/**
  * Download external images and embed them locally in the deployment
  * This prevents broken images when the original website is deleted
  * 
@@ -293,8 +328,19 @@ export async function POST(req: NextRequest) {
     try {
       logInfo('Processing files for deployment', { fileCount: Object.keys(rawFiles).length });
       
+      // Step 0: CRITICAL - Clean editor-injected scripts that break navigation
+      const cleanedFiles: Record<string, string> = {};
+      for (const [filename, content] of Object.entries(rawFiles)) {
+        if (filename.endsWith('.html') && typeof content === 'string') {
+          cleanedFiles[filename] = cleanEditorScripts(content);
+        } else {
+          cleanedFiles[filename] = content;
+        }
+      }
+      logInfo('Cleaned editor scripts from HTML files');
+      
       // Step 1: Fix navigation links for multi-page sites
-      const filesWithFixedNav = fixNavigationLinks(rawFiles);
+      const filesWithFixedNav = fixNavigationLinks(cleanedFiles);
       
       // Step 2: Download external images and embed locally
       const { updatedFiles, imageFiles } = await downloadAndEmbedImages(filesWithFixedNav);
