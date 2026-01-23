@@ -17,10 +17,7 @@ const DeployToVercelSchema = z.object({
 /**
  * Download external images and embed them locally in the deployment
  * This prevents broken images when the original website is deleted
- * 
- * Limits:
- * - Max 500KB per image
- * - Max 7MB total for all images (to stay under Vercel's 10MB limit)
+ * Downloads ALL images regardless of size
  */
 async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
   updatedFiles: Record<string, string>;
@@ -29,9 +26,6 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
   const imageFiles: Record<string, Buffer> = {};
   const imageMapping: Record<string, string> = {};
   let imageIndex = 0;
-  
-  const MAX_IMAGE_SIZE = 500 * 1024; // 500KB per image
-  const MAX_TOTAL_SIZE = 7 * 1024 * 1024; // 7MB total for images
   let totalSize = 0;
   
   // Extract all image URLs from HTML files
@@ -73,15 +67,9 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
     return { updatedFiles: files, imageFiles: {} };
   }
   
-  // Download images with size limits
+  // Download ALL images - no size limits
   const downloadImage = async (url: string): Promise<void> => {
     try {
-      // Check if we've hit the total size limit
-      if (totalSize >= MAX_TOTAL_SIZE) {
-        logInfo('Image skipped - total size limit reached', { url: url.substring(0, 60), totalSize });
-        return;
-      }
-      
       if (url.startsWith('data:') || !url.startsWith('http')) return;
       if (url.length > 2000) return;
       
@@ -90,7 +78,7 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
         },
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(30000), // 30 second timeout for large images
       });
       
       if (!response.ok) return;
@@ -98,27 +86,10 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
       const contentType = response.headers.get('content-type') || '';
       if (contentType.includes('text/html') || contentType.includes('application/json')) return;
       
-      // Check content-length header first if available
-      const contentLength = response.headers.get('content-length');
-      if (contentLength && parseInt(contentLength) > MAX_IMAGE_SIZE) {
-        logInfo('Image skipped - too large (header)', { url: url.substring(0, 60), size: contentLength });
-        return;
-      }
-      
       const buffer = Buffer.from(await response.arrayBuffer());
       
-      // Skip images that are too small (likely broken) or too large
+      // Skip images that are too small (likely broken)
       if (buffer.byteLength < 100) return;
-      if (buffer.byteLength > MAX_IMAGE_SIZE) {
-        logInfo('Image skipped - too large', { url: url.substring(0, 60), size: buffer.byteLength });
-        return;
-      }
-      
-      // Check if adding this image would exceed total limit
-      if (totalSize + buffer.byteLength > MAX_TOTAL_SIZE) {
-        logInfo('Image skipped - would exceed total limit', { url: url.substring(0, 60), imageSize: buffer.byteLength, totalSize });
-        return;
-      }
       
       // Determine extension
       let extension = 'jpg';
@@ -146,13 +117,10 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
     }
   };
   
-  // Download in batches of 5
+  // Download in batches of 3 (smaller batches for large images)
   const urls = Array.from(imageUrls);
-  for (let i = 0; i < urls.length; i += 5) {
-    // Stop if we've hit the size limit
-    if (totalSize >= MAX_TOTAL_SIZE) break;
-    
-    const batch = urls.slice(i, i + 5);
+  for (let i = 0; i < urls.length; i += 3) {
+    const batch = urls.slice(i, i + 3);
     await Promise.all(batch.map(downloadImage));
   }
   
