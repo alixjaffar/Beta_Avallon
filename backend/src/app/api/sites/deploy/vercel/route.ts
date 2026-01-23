@@ -333,7 +333,7 @@ export async function POST(req: NextRequest) {
       for (const [filename, content] of Object.entries(rawFiles)) {
         if (filename.endsWith('.html') && typeof content === 'string') {
           cleanedFiles[filename] = cleanEditorScripts(content);
-        } else {
+        } else if (typeof content === 'string') {
           cleanedFiles[filename] = content;
         }
       }
