@@ -38,6 +38,11 @@ export type CreateSiteInput = {
 
 export async function createSite(input: CreateSiteInput): Promise<Site> {
   try {
+    // Check if Firestore is available
+    if (!db) {
+      throw new Error('Firestore not initialized - check FIREBASE_PRIVATE_KEY environment variable');
+    }
+    
     const siteId = `site_${Date.now()}`;
     
     const newSite: Site = {
@@ -61,8 +66,15 @@ export async function createSite(input: CreateSiteInput): Promise<Site> {
     
     logInfo('Site created in Firestore', { siteId: newSite.id, name: newSite.name });
     return newSite;
-  } catch (error) {
+  } catch (error: any) {
     logError('Error creating site in Firestore:', error);
+    // Provide more helpful error message
+    if (error.code === 7 || error.message?.includes('PERMISSION_DENIED')) {
+      throw new Error('Firestore permission denied - check Firebase credentials and Firestore rules');
+    }
+    if (error.message?.includes('FIREBASE_PRIVATE_KEY')) {
+      throw new Error('Firebase not configured - please set FIREBASE_PRIVATE_KEY environment variable');
+    }
     throw error;
   }
 }

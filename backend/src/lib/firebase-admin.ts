@@ -8,15 +8,47 @@ import { NextRequest } from 'next/server';
 
 // Initialize Firebase Admin (only once)
 if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL || "firebase-adminsdk-fbsvc@avallon-e0121.iam.gserviceaccount.com";
+  
+  // Check if private key is set
+  if (!privateKey) {
+    console.warn('⚠️ FIREBASE_PRIVATE_KEY not set - Firebase features will be limited');
+    console.warn('Please set FIREBASE_PRIVATE_KEY in your environment variables');
+  }
+  
+  try {
+    // Process the private key - handle both escaped and unescaped newlines
+    let processedKey = privateKey || '';
+    if (processedKey) {
+      // Replace literal \n with actual newlines
+      processedKey = processedKey.replace(/\\n/g, '\n');
+      // Also handle double-escaped newlines
+      processedKey = processedKey.replace(/\\\\n/g, '\n');
+    }
+    
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: "avallon-e0121",
+        clientEmail: clientEmail,
+        privateKey: processedKey,
+      }),
       projectId: "avallon-e0121",
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL || "firebase-adminsdk-fbsvc@avallon-e0121.iam.gserviceaccount.com",
-      // For development, use the project ID. In production, use the actual private key
-      privateKey: (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, '\n'),
-    }),
-    projectId: "avallon-e0121",
-  });
+    });
+    
+    console.log('✅ Firebase Admin initialized successfully');
+  } catch (error) {
+    console.error('❌ Firebase Admin initialization failed:', error);
+    // Initialize with application default credentials as fallback
+    try {
+      admin.initializeApp({
+        projectId: "avallon-e0121",
+      });
+      console.log('✅ Firebase Admin initialized with default credentials');
+    } catch (fallbackError) {
+      console.error('❌ Firebase Admin fallback initialization also failed:', fallbackError);
+    }
+  }
 }
 
 const auth = admin.auth();
