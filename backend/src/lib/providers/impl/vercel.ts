@@ -125,18 +125,16 @@ export class VercelProvider implements HostingProvider {
     }
 
     try {
-      // Build file list for direct static deployment
-      const files: Array<{ file: string; data: string }> = [];
+      // Build file list for deployment
+      const filesToUpload: Array<{ file: string; content: Buffer }> = [];
       
       // Add vercel.json for static deployment with URL rewrites for navigation
-      // Note: Vercel auto-detects static files
       const vercelConfig = {
         version: 2,
         public: true,
-        cleanUrls: true,  // Allows /about to serve about.html
+        cleanUrls: true,
         trailingSlash: false,
         rewrites: [
-          // Common page rewrites - handles /page and /page/ → page.html
           { source: "/team", destination: "/team.html" },
           { source: "/team/", destination: "/team.html" },
           { source: "/contact", destination: "/contact.html" },
@@ -153,84 +151,141 @@ export class VercelProvider implements HostingProvider {
           { source: "/home-page-1/", destination: "/home-page-1.html" },
           { source: "/home", destination: "/index.html" },
           { source: "/home/", destination: "/index.html" },
-          // Catch-all for any other pages
           { source: "/:path", destination: "/:path.html" },
         ],
         headers: [
           {
             source: "/(.*)",
             headers: [
-              {
-                key: "X-Frame-Options",
-                value: "SAMEORIGIN"
-              },
-              {
-                key: "X-Content-Type-Options",
-                value: "nosniff"
-              }
+              { key: "X-Frame-Options", value: "SAMEORIGIN" },
+              { key: "X-Content-Type-Options", value: "nosniff" }
             ]
           }
         ]
       };
-      files.push({
+      filesToUpload.push({
         file: 'vercel.json',
-        data: Buffer.from(JSON.stringify(vercelConfig, null, 2)).toString('base64'),
+        content: Buffer.from(JSON.stringify(vercelConfig, null, 2)),
       });
       
       if (input.files && Object.keys(input.files).length > 0) {
         for (const [filePath, content] of Object.entries(input.files)) {
-          // Handle both string and Buffer content (images)
-          if (Buffer.isBuffer(content)) {
-            files.push({
-              file: filePath,
-              data: content.toString('base64'),
-            });
-          } else {
-            files.push({
-              file: filePath,
-              data: Buffer.from(content as string).toString('base64'),
-            });
-          }
+          const buffer = Buffer.isBuffer(content) ? content : Buffer.from(content as string);
+          filesToUpload.push({ file: filePath, content: buffer });
         }
-        logInfo('Deploying files to Vercel', { 
-          fileCount: files.length,
-          files: files.map(f => f.file)
+        logInfo('Preparing files for Vercel deployment', { 
+          fileCount: filesToUpload.length,
+          files: filesToUpload.map(f => f.file)
         });
       } else {
-        // Create minimal static site as fallback
-        files.push({
+        filesToUpload.push({
           file: 'index.html',
-          data: Buffer.from('<html><body><h1>Welcome</h1></body></html>').toString('base64'),
+          content: Buffer.from('<html><body><h1>Welcome</h1></body></html>'),
         });
       }
 
-      // Use v13 API - Vercel will detect vercel.json and use static builder
-      const deploymentData = {
-        name: input.projectId,
-        files: files.map(f => ({
-          file: f.file,
-          data: f.data,
-          encoding: 'base64' as const,
-        })),
-        target: 'production',
-        project: input.projectId,
-        projectSettings: {
-          framework: null,
-          buildCommand: '',
-          outputDirectory: '',
-        },
-      };
-
-      logInfo('Creating Vercel static deployment', { 
-        projectId: input.projectId, 
-        fileCount: files.length,
+      // Calculate total size to decide deployment strategy
+      const totalSize = filesToUpload.reduce((sum, f) => sum + f.content.length, 0);
+      const totalBase64Size = Math.ceil(totalSize * 1.37); // Base64 overhead
+      
+      logInfo('Deployment size analysis', { 
+        rawSizeMB: (totalSize / 1024 / 1024).toFixed(2),
+        estimatedBase64SizeMB: (totalBase64Size / 1024 / 1024).toFixed(2),
+        fileCount: filesToUpload.length
       });
 
-      const response = await axios.post(
-        `${VERCEL_API_BASE}/v13/deployments${this.getTeamParam()}`,
-        deploymentData,
-        { headers: this.getHeaders() }
-      );
+      // If small enough, use inline deployment (faster)
+      // Otherwise, upload files first then create deployment with SHA references
+      let response;
+      
+      if (totalBase64Size < 8 * 1024 * 1024) { // Under 8MB base64, use inline
+        const deploymentData = {
+          name: input.projectId,
+          files: filesToUpload.map(f => ({
+            file: f.file,
+            data: f.content.toString('base64'),
+            encoding: 'base64' as const,
+          })),
+          target: 'production',
+          project: input.projectId,
+          projectSettings: {
+            framework: null,
+            buildCommand: '',
+            outputDirectory: '',
+          },
+        };
+
+        logInfo('Using inline deployment (small payload)', { projectId: input.projectId });
+        
+        response = await axios.post(
+          `${VERCEL_API_BASE}/v13/deployments${this.getTeamParam()}`,
+          deploymentData,
+          { headers: this.getHeaders() }
+        );
+      } else {
+        // Large deployment: upload files individually first
+        logInfo('Using chunked upload (large payload)', { projectId: input.projectId });
+        
+        const crypto = await import('crypto');
+        const fileReferences: Array<{ file: string; sha: string; size: number }> = [];
+        
+        // Upload files in batches of 3
+        for (let i = 0; i < filesToUpload.length; i += 3) {
+          const batch = filesToUpload.slice(i, i + 3);
+          
+          await Promise.all(batch.map(async ({ file, content }) => {
+            const sha = crypto.createHash('sha1').update(content).digest('hex');
+            
+            try {
+              // Upload file to Vercel
+              await axios.post(
+                `${VERCEL_API_BASE}/v2/files${this.getTeamParam()}`,
+                content,
+                {
+                  headers: {
+                    ...this.getHeaders(),
+                    'Content-Type': 'application/octet-stream',
+                    'x-vercel-digest': sha,
+                  },
+                }
+              );
+              
+              logInfo('File uploaded to Vercel', { file, sha: sha.substring(0, 8), size: content.length });
+            } catch (uploadError: any) {
+              // File might already exist (409), that's fine
+              if (uploadError.response?.status !== 409) {
+                logInfo('File upload warning', { file, error: uploadError.message });
+              }
+            }
+            
+            fileReferences.push({ file, sha, size: content.length });
+          }));
+        }
+        
+        // Create deployment with file references
+        const deploymentData = {
+          name: input.projectId,
+          files: fileReferences,
+          target: 'production',
+          project: input.projectId,
+          projectSettings: {
+            framework: null,
+            buildCommand: '',
+            outputDirectory: '',
+          },
+        };
+
+        logInfo('Creating deployment with file references', { 
+          projectId: input.projectId, 
+          fileCount: fileReferences.length 
+        });
+        
+        response = await axios.post(
+          `${VERCEL_API_BASE}/v13/deployments${this.getTeamParam()}`,
+          deploymentData,
+          { headers: this.getHeaders() }
+        );
+      }
 
       const deployment = response.data;
       logInfo('Vercel deployment created', { 
