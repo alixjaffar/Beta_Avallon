@@ -15,6 +15,7 @@ model User {
   n8nUserId     String? // n8n user ID
   credits       Int            @default(15) // Credits for AI website generation (free plan gets 15 credits)
   createdAt     DateTime       @default(now())
+  sites         Site[]
   agents        Agent[]
   domains       Domain[]
   emailAccounts EmailAccount[]
@@ -24,25 +25,22 @@ model User {
 
 model Site {
   id                 String   @id @default(cuid())
-  ownerId            String   // User identifier (can be clerkId, email hash, or User.id)
+  ownerId            String
+  owner              User     @relation(fields: [ownerId], references: [id])
   name               String
   slug               String   @unique
-  status             String   @default("draft") // draft | building | live | deployed
+  status             String   @default("draft") // draft | building | live
   repoUrl            String?
   previewUrl         String?
   customDomain       String?
   vercelProjectId    String? // Vercel project ID
   vercelDeploymentId String? // Latest deployment ID
-  websiteContent     Json?   // Stores the website HTML content { "index.html": "...", "about.html": "..." }
-  chatHistory        Json?   // Stores the AI chat history for the site
   domains            Domain[]
   // New spec-first architecture
   projectId          String?  @unique
   project            Project? @relation(fields: [projectId], references: [id])
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
-
-  @@index([ownerId])
 }
 
 // New models for spec-first architecture

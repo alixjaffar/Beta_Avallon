@@ -23,6 +23,11 @@ yarn-error.log*
 # ==================================
 # SENSITIVE DATA FILES - DO NOT COMMIT
 # ==================================
+# Firebase service account keys
+*firebase*.json
+*-adminsdk-*.json
+serviceAccount*.json
+
 # User and agent data
 signups.json
 agents.json
