@@ -201,16 +201,30 @@ function fixNavigationLinks(files: Record<string, string>): Record<string, strin
   
   // Collect unique source domains (the original website's domain)
   const domainCounts: Record<string, number> = {};
+  
+  // Domains to exclude - these are third-party services, not the source website
+  const excludedDomains = [
+    'googleapis', 'cloudflare', 'jsdelivr', 'unpkg', 'fonts.', 'cdn.',
+    'app.dover.com', 'dover.com', 'linkedin.com', 'twitter.com', 'facebook.com',
+    'instagram.com', 'youtube.com', 'github.com', 'google.com', 'gstatic.com',
+    'gravatar.com', 'wp.com', 'wordpress.com', 'calendly.com', 'typeform.com',
+    'hubspot.com', 'mailchimp.com', 'stripe.com', 'paypal.com', 'shopify.com',
+    'squarespace.com', 'wix.com', 'webflow.com', 'notion.so', 'airtable.com',
+    'zapier.com', 'intercom.com', 'crisp.chat', 'drift.com', 'zendesk.com',
+    'freshdesk.com', 'tawk.to', 'hotjar.com', 'segment.com', 'mixpanel.com',
+    'amplitude.com', 'heap.io', 'fullstory.com', 'mouseflow.com', 'crazyegg.com',
+    'optimizely.com', 'vwo.com', 'unbounce.com', 'leadpages.com', 'clickfunnels.com'
+  ];
+  
   for (const content of Object.values(files)) {
     if (typeof content !== 'string') continue;
     // Find domains in href attributes
     const hrefMatches = content.matchAll(/href=["'](https?:\/\/[^"'\/]+)/gi);
     for (const match of hrefMatches) {
       const domain = match[1].toLowerCase();
-      // Exclude common CDNs
-      if (!domain.includes('googleapis') && !domain.includes('cloudflare') && 
-          !domain.includes('jsdelivr') && !domain.includes('unpkg') &&
-          !domain.includes('fonts.') && !domain.includes('cdn.')) {
+      // Exclude CDNs and third-party services
+      const isExcluded = excludedDomains.some(excluded => domain.includes(excluded));
+      if (!isExcluded) {
         domainCounts[domain] = (domainCounts[domain] || 0) + 1;
       }
     }
