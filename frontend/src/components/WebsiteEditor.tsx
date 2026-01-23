@@ -1289,6 +1289,13 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     html = html.replace(/<script>[\s\S]*?avallon-hover-overlay[\s\S]*?<\/script>/gi, '');
     html = html.replace(/<script>[\s\S]*?avallon-handle[\s\S]*?<\/script>/gi, '');
     
+    // CRITICAL: Remove the navigation script that prevents links from working!
+    // This script intercepts clicks and calls e.preventDefault()
+    html = html.replace(/<script>\s*\(function\(\)\s*\{\s*document\.querySelectorAll\('a\[href\]'\)[\s\S]*?<\/script>/gi, '');
+    // Also catch variations
+    html = html.replace(/<script>[\s\S]*?querySelectorAll\(['"]a\[href\]['"]\)[\s\S]*?preventDefault[\s\S]*?<\/script>/gi, '');
+    html = html.replace(/<script>[\s\S]*?window\.parent\.postMessage\(\{\s*type:\s*['"]navigate['"][\s\S]*?<\/script>/gi, '');
+    
     // Remove inline styles that contain pointer-events: none and cursor: default on body
     html = html.replace(/<style>\s*\*\s*\{\s*cursor:\s*default[^}]*\}[\s\S]*?<\/style>/gi, '');
     
