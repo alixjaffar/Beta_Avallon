@@ -17,7 +17,9 @@ const DeployToVercelSchema = z.object({
 /**
  * Download external images and embed them locally in the deployment
  * This prevents broken images when the original website is deleted
- * Downloads ALL images regardless of size
+ * 
+ * Note: Vercel has a 10MB API limit. Base64 encoding adds ~33% overhead.
+ * We limit total image size to 6MB raw (becomes ~8MB base64) to leave room for HTML.
  */
 async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
   updatedFiles: Record<string, string>;
@@ -27,6 +29,9 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
   const imageMapping: Record<string, string> = {};
   let imageIndex = 0;
   let totalSize = 0;
+  
+  // Limit to stay under Vercel's 10MB API limit (base64 adds ~33% overhead)
+  const MAX_TOTAL_SIZE = 6 * 1024 * 1024; // 6MB raw = ~8MB base64
   
   // Extract all image URLs from HTML files
   const imageUrls = new Set<string>();
@@ -67,9 +72,15 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
     return { updatedFiles: files, imageFiles: {} };
   }
   
-  // Download ALL images - no size limits
+  // Download images with size limit to stay under Vercel's API limit
   const downloadImage = async (url: string): Promise<void> => {
     try {
+      // Check if we've hit the total size limit
+      if (totalSize >= MAX_TOTAL_SIZE) {
+        logInfo('Image skipped - total size limit reached', { url: url.substring(0, 60), totalSizeMB: (totalSize / 1024 / 1024).toFixed(2) });
+        return;
+      }
+      
       if (url.startsWith('data:') || !url.startsWith('http')) return;
       if (url.length > 2000) return;
       
@@ -90,6 +101,17 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
       
       // Skip images that are too small (likely broken)
       if (buffer.byteLength < 100) return;
+      
+      // Check if adding this image would exceed the limit
+      if (totalSize + buffer.byteLength > MAX_TOTAL_SIZE) {
+        logInfo('Image skipped - would exceed size limit', { 
+          url: url.substring(0, 60), 
+          imageSize: buffer.byteLength, 
+          totalSize,
+          limitMB: MAX_TOTAL_SIZE / 1024 / 1024
+        });
+        return;
+      }
       
       // Determine extension
       let extension = 'jpg';
@@ -120,6 +142,11 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
   // Download in batches of 3 (smaller batches for large images)
   const urls = Array.from(imageUrls);
   for (let i = 0; i < urls.length; i += 3) {
+    // Stop if we've hit the size limit
+    if (totalSize >= MAX_TOTAL_SIZE) {
+      logInfo('Stopping image downloads - size limit reached', { totalSizeMB: (totalSize / 1024 / 1024).toFixed(2) });
+      break;
+    }
     const batch = urls.slice(i, i + 3);
     await Promise.all(batch.map(downloadImage));
   }
