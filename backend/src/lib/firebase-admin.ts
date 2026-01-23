@@ -156,5 +156,8 @@ export async function deleteUser(uid: string): Promise<boolean> {
   }
 }
 
-// Export admin instance for advanced use
-export { auth, admin };
+// Initialize Firestore
+const db = admin.firestore();
+
+// Export admin instance and Firestore for use across the app
+export { auth, admin, db };

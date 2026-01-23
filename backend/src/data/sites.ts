@@ -1,44 +1,27 @@
-// CHANGELOG: 2025-01-15 - Enhanced file-based storage with better persistence
+// CHANGELOG: 2026-01-22 - Switched to Firebase Firestore for persistent storage
 import { logInfo, logError } from "@/lib/log";
+import { db } from "@/lib/firebase-admin";
 
-// Enhanced file-based storage for development
-import * as fs from 'fs';
-import * as path from 'path';
+// Firestore collection name
+const SITES_COLLECTION = 'sites';
 
-const SITES_FILE = path.join(process.cwd(), 'sites.json');
-let sites: any[] = [];
-
-// Load sites from file with better error handling
-function loadSites() {
-  try {
-    if (fs.existsSync(SITES_FILE)) {
-      const data = fs.readFileSync(SITES_FILE, 'utf8');
-      sites = JSON.parse(data);
-      logInfo('Sites loaded from file', { count: sites.length });
-    } else {
-      sites = [];
-      logInfo('No sites file found, starting with empty array');
-    }
-  } catch (error) {
-    logError('Error loading sites:', error);
-    sites = [];
-  }
-}
-
-// Save sites to file with atomic write
-function saveSites() {
-  try {
-    const tempFile = SITES_FILE + '.tmp';
-    fs.writeFileSync(tempFile, JSON.stringify(sites, null, 2));
-    fs.renameSync(tempFile, SITES_FILE);
-    logInfo('Sites saved to file', { count: sites.length });
-  } catch (error) {
-    logError('Error saving sites:', error);
-  }
-}
-
-// Initialize sites on module load
-loadSites();
+// Type definition for Site
+export type Site = {
+  id: string;
+  ownerId: string;
+  name: string;
+  slug: string;
+  status: string;
+  repoUrl: string | null;
+  previewUrl: string | null;
+  vercelProjectId: string | null;
+  vercelDeploymentId: string | null;
+  chatHistory: any[] | null;
+  websiteContent: any | null;
+  customDomain?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type CreateSiteInput = {
   ownerId: string;
@@ -53,11 +36,12 @@ export type CreateSiteInput = {
   websiteContent?: any | null;
 };
 
-export async function createSite(input: CreateSiteInput) {
+export async function createSite(input: CreateSiteInput): Promise<Site> {
   try {
-    // Use enhanced file-based storage
-    const newSite = {
-      id: `site_${Date.now()}`,
+    const siteId = `site_${Date.now()}`;
+    
+    const newSite: Site = {
+      id: siteId,
       ownerId: input.ownerId,
       name: input.name,
       slug: input.slug,
@@ -72,47 +56,74 @@ export async function createSite(input: CreateSiteInput) {
       updatedAt: new Date().toISOString(),
     };
     
-    sites.push(newSite);
-    saveSites();
-    logInfo('Site created in file storage', { siteId: newSite.id, name: newSite.name });
+    // Save to Firestore
+    await db.collection(SITES_COLLECTION).doc(siteId).set(newSite);
+    
+    logInfo('Site created in Firestore', { siteId: newSite.id, name: newSite.name });
     return newSite;
   } catch (error) {
-    logError('Error creating site:', error);
+    logError('Error creating site in Firestore:', error);
     throw error;
   }
 }
 
-export async function listSitesByUser(userId: string) {
+export async function listSitesByUser(userId: string): Promise<Site[]> {
   try {
-    // Reload sites from file to ensure we have latest data
-    loadSites();
-    const userSites = sites.filter(site => site.ownerId === userId);
-    logInfo('Sites listed from file storage', { userId, count: userSites.length });
-    return userSites;
-  } catch (error) {
-    logError('Error listing sites:', error);
-    // Return empty array on error instead of throwing
+    const snapshot = await db.collection(SITES_COLLECTION)
+      .where('ownerId', '==', userId)
+      .orderBy('createdAt', 'desc')
+      .get();
+    
+    const sites = snapshot.docs.map(doc => doc.data() as Site);
+    
+    logInfo('Sites listed from Firestore', { userId, count: sites.length });
+    return sites;
+  } catch (error: any) {
+    // If index doesn't exist yet, fall back to unordered query
+    if (error.code === 9 || error.message?.includes('index')) {
+      logInfo('Firestore index not ready, using unordered query', { userId });
+      try {
+        const snapshot = await db.collection(SITES_COLLECTION)
+          .where('ownerId', '==', userId)
+          .get();
+        
+        const sites = snapshot.docs.map(doc => doc.data() as Site);
+        // Sort in memory
+        sites.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        
+        logInfo('Sites listed from Firestore (unordered)', { userId, count: sites.length });
+        return sites;
+      } catch (innerError) {
+        logError('Error listing sites from Firestore (fallback):', innerError);
+        return [];
+      }
+    }
+    logError('Error listing sites from Firestore:', error);
     return [];
   }
 }
 
-export async function getSiteById(id: string, userId: string) {
+export async function getSiteById(id: string, userId: string): Promise<Site | null> {
   try {
-    // First try to find by exact match
-    let site = sites.find(site => site.id === id && site.ownerId === userId);
+    const doc = await db.collection(SITES_COLLECTION).doc(id).get();
     
-    // In development, fallback to finding by ID only
-    if (!site && process.env.NODE_ENV === 'development') {
-      site = sites.find(site => site.id === id);
-      if (site) {
-        logInfo('Site found by ID only (dev mode)', { siteId: id, actualOwner: site.ownerId, requestedUser: userId });
-      }
+    if (!doc.exists) {
+      logInfo('Site not found in Firestore', { siteId: id });
+      return null;
     }
     
-    logInfo('Site retrieved from file storage', { siteId: id, found: !!site });
+    const site = doc.data() as Site;
+    
+    // Verify ownership (unless in development)
+    if (site.ownerId !== userId && process.env.NODE_ENV !== 'development') {
+      logInfo('Site found but owner mismatch', { siteId: id, ownerId: site.ownerId, requestedUser: userId });
+      return null;
+    }
+    
+    logInfo('Site retrieved from Firestore', { siteId: id, found: true });
     return site;
   } catch (error) {
-    logError('Error getting site by ID:', error);
+    logError('Error getting site from Firestore:', error);
     return null;
   }
 }
@@ -120,89 +131,75 @@ export async function getSiteById(id: string, userId: string) {
 export async function updateSite(id: string, userId: string, data: {
   name?: string;
   status?: string;
-  customDomain?: string;
+  customDomain?: string | null;
   repoUrl?: string | null;
   previewUrl?: string | null;
   vercelProjectId?: string | null;
   vercelDeploymentId?: string | null;
   chatHistory?: any[] | null;
   websiteContent?: any | null;
-}) {
+}): Promise<Site | null> {
   try {
-    // Reload sites from file to ensure we have latest data
-    loadSites();
+    const docRef = db.collection(SITES_COLLECTION).doc(id);
+    const doc = await docRef.get();
     
-    // First try to find by exact match
-    let siteIndex = sites.findIndex(site => site.id === id && site.ownerId === userId);
-    
-    // In development, fallback to finding by ID only
-    if (siteIndex === -1 && process.env.NODE_ENV === 'development') {
-      siteIndex = sites.findIndex(site => site.id === id);
-      if (siteIndex !== -1) {
-        logInfo('Site found by ID only for update (dev mode)', { siteId: id, actualOwner: sites[siteIndex].ownerId, requestedUser: userId });
-      }
-    }
-    
-    if (siteIndex === -1) {
-      logError('Site not found for update', { siteId: id, userId, totalSites: sites.length, siteIds: sites.map(s => s.id).slice(0, 5) });
+    if (!doc.exists) {
+      logError('Site not found for update in Firestore', { siteId: id });
       return null;
     }
     
-    sites[siteIndex] = { 
-      ...sites[siteIndex], 
-      ...data, 
-      updatedAt: new Date().toISOString() 
+    const existingSite = doc.data() as Site;
+    
+    // Verify ownership (unless in development)
+    if (existingSite.ownerId !== userId && process.env.NODE_ENV !== 'development') {
+      logError('Site update denied - owner mismatch', { siteId: id, ownerId: existingSite.ownerId, requestedUser: userId });
+      return null;
+    }
+    
+    const updateData = {
+      ...data,
+      updatedAt: new Date().toISOString(),
     };
-    saveSites();
-    logInfo('Site updated in file storage', { siteId: id });
-    return sites[siteIndex];
+    
+    await docRef.update(updateData);
+    
+    const updatedSite: Site = {
+      ...existingSite,
+      ...updateData,
+    };
+    
+    logInfo('Site updated in Firestore', { siteId: id });
+    return updatedSite;
   } catch (error) {
-    logError('Error updating site:', error);
+    logError('Error updating site in Firestore:', error);
     return null;
   }
 }
 
-export async function deleteSite(id: string, userId: string) {
+export async function deleteSite(id: string, userId: string): Promise<Site | null> {
   try {
-    const siteIndex = sites.findIndex(site => site.id === id && site.ownerId === userId);
-    if (siteIndex === -1) {
-      logError('Site not found for deletion', { siteId: id, userId });
+    const docRef = db.collection(SITES_COLLECTION).doc(id);
+    const doc = await docRef.get();
+    
+    if (!doc.exists) {
+      logError('Site not found for deletion in Firestore', { siteId: id });
       return null;
     }
     
-    const deletedSite = sites.splice(siteIndex, 1)[0];
+    const site = doc.data() as Site;
     
-    // Also delete the generated website files
-    try {
-      const fs = require('fs');
-      const path = require('path');
-      const generatedDir = path.join(process.cwd(), 'generated-websites');
-      
-      // Find and delete project directories that match this site
-      if (fs.existsSync(generatedDir)) {
-        const projects = fs.readdirSync(generatedDir);
-        for (const project of projects) {
-          if (project.startsWith('project_')) {
-            // Check if this project belongs to this site by checking previewUrl pattern
-            const projectPath = path.join(generatedDir, project);
-            if (deletedSite.previewUrl && deletedSite.previewUrl.includes(project)) {
-              fs.rmSync(projectPath, { recursive: true, force: true });
-              logInfo('Deleted project directory', { project, siteId: id });
-            }
-          }
-        }
-      }
-    } catch (fileError) {
-      logError('Error deleting project files:', fileError);
-      // Continue even if file deletion fails
+    // Verify ownership
+    if (site.ownerId !== userId) {
+      logError('Site deletion denied - owner mismatch', { siteId: id, ownerId: site.ownerId, requestedUser: userId });
+      return null;
     }
     
-    saveSites();
-    logInfo('Site deleted from file storage', { siteId: id });
-    return deletedSite;
+    await docRef.delete();
+    
+    logInfo('Site deleted from Firestore', { siteId: id });
+    return site;
   } catch (error) {
-    logError('Error deleting site:', error);
+    logError('Error deleting site from Firestore:', error);
     return null;
   }
 }
-
