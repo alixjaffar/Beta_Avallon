@@ -13,6 +13,8 @@ interface ImportWebsiteModalProps {
   onClose: () => void;
   onImport: (html: string, pageName?: string) => void;
   onMultiPageImport?: (pages: ImportedPage[]) => void;
+  onInjectToAllPages?: (code: { html: string; css: string; js: string }) => void;
+  existingPages?: string[];
   isLight?: boolean;
 }
 
@@ -86,12 +88,17 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
   onClose,
   onImport,
   onMultiPageImport,
+  onInjectToAllPages,
+  existingPages = [],
   isLight = false,
 }) => {
   const [activeTab, setActiveTab] = useState<'paste' | 'url' | 'folder'>('url'); // Default to URL tab
   const [pastedContent, setPastedContent] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [pageName, setPageName] = useState('index.html');
+  
+  // Folder import mode: 'newPage' (create new page) or 'injectAll' (add to all existing pages)
+  const [folderImportMode, setFolderImportMode] = useState<'newPage' | 'injectAll'>('newPage');
   
   // Update default page name when switching tabs
   const handleTabChange = (tab: 'paste' | 'url' | 'folder') => {
@@ -519,6 +526,41 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
     
     // Collect JSON config files (might contain settings)
     const jsonFiles = uploadedFiles.filter(f => f.name.endsWith('.json') && !f.name.includes('package'));
+    
+    // Handle "Inject to All Pages" mode
+    if (folderImportMode === 'injectAll' && onInjectToAllPages) {
+      // Collect all CSS content
+      const cssContent = cssFiles.map(f => 
+        `/* === ${f.name} === */\n${f.content}`
+      ).join('\n\n');
+      
+      // Collect all JS content
+      const jsContent = jsFiles.map(f => 
+        `// === ${f.name} ===\n${f.content}`
+      ).join('\n\n');
+      
+      // Get HTML body content (extract just the body content, not full document)
+      let htmlContent = '';
+      if (mainHtml) {
+        const bodyMatch = mainHtml.content.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+        if (bodyMatch) {
+          htmlContent = bodyMatch[1].trim();
+        } else {
+          // If no body tag, use the whole content
+          htmlContent = mainHtml.content;
+        }
+      }
+      
+      // Call the inject callback
+      onInjectToAllPages({
+        html: htmlContent,
+        css: cssContent,
+        js: jsContent
+      });
+      
+      handleClose();
+      return;
+    }
     
     // If multiple HTML files exist, import them all as separate pages
     if (htmlFiles.length > 1) {
@@ -970,6 +1012,44 @@ ${jsContent}
             </div>
           )}
 
+              {/* Import Mode Selection */}
+              {uploadedFiles.length > 0 && existingPages.length > 0 && (
+                <div className={`p-4 rounded-lg border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-surface-dark border-panel-border'}`}>
+                  <label className={`block text-sm font-medium mb-3 ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
+                    How do you want to import this?
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setFolderImportMode('newPage')}
+                      className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-all border-2 ${
+                        folderImportMode === 'newPage'
+                          ? (isLight ? 'bg-primary text-white border-primary' : 'bg-primary text-white border-primary')
+                          : (isLight ? 'bg-white text-slate-600 border-slate-200 hover:border-primary' : 'bg-panel-border text-gray-400 border-panel-border hover:border-primary')
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-lg block mb-1">add_circle</span>
+                      Create New Page
+                    </button>
+                    <button
+                      onClick={() => setFolderImportMode('injectAll')}
+                      className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-all border-2 ${
+                        folderImportMode === 'injectAll'
+                          ? (isLight ? 'bg-amber-500 text-white border-amber-500' : 'bg-amber-500 text-white border-amber-500')
+                          : (isLight ? 'bg-white text-slate-600 border-slate-200 hover:border-amber-500' : 'bg-panel-border text-gray-400 border-panel-border hover:border-amber-500')
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-lg block mb-1">select_all</span>
+                      Add to All Pages ({existingPages.length})
+                    </button>
+                  </div>
+                  {folderImportMode === 'injectAll' && (
+                    <p className={`text-xs mt-2 ${isLight ? 'text-amber-600' : 'text-amber-400'}`}>
+                      ⚡ The widget/code will be injected into all {existingPages.length} existing pages
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Info Box */}
               <div className={`p-4 rounded-lg text-sm ${isLight ? 'bg-purple-50 text-purple-700' : 'bg-purple-500/10 text-purple-400'}`}>
                 <div className="flex items-start gap-2">
@@ -979,7 +1059,7 @@ ${jsContent}
                     <ul className="list-disc list-inside space-y-1 text-xs opacity-80">
                       <li>Upload your complete code folder</li>
                       <li>Auto-detects HTML, CSS, and JS files</li>
-                      <li>Combines everything into a single page</li>
+                      <li>{folderImportMode === 'injectAll' ? 'Injects into all existing pages' : 'Combines everything into a single page'}</li>
                       <li>Supports React/JSX components</li>
                     </ul>
                   </div>
@@ -988,7 +1068,8 @@ ${jsContent}
             </div>
           )}
 
-          {/* Page Name - More prominent for folder uploads */}
+          {/* Page Name - More prominent for folder uploads - Hide when injecting to all */}
+          {!(activeTab === 'folder' && folderImportMode === 'injectAll') && (
           <div className={`mt-6 p-4 rounded-lg ${
             activeTab === 'folder' 
               ? (isLight ? 'bg-amber-50 border border-amber-200' : 'bg-amber-500/10 border border-amber-500/30')
@@ -1018,6 +1099,7 @@ ${jsContent}
               </p>
             )}
           </div>
+          )}
 
           {/* Advanced Options */}
           <div className="mt-6">
