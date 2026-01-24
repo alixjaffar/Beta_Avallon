@@ -353,6 +353,40 @@ export async function POST(req: NextRequest) {
       }
       logInfo('Cleaned editor scripts from HTML files');
       
+      // Step 0.5: Inject custom scripts/widgets
+      const customScripts = rawFiles._customScripts as Array<{ code: string; applyTo: string }> | undefined;
+      if (customScripts && customScripts.length > 0) {
+        logInfo('Injecting custom scripts', { count: customScripts.length });
+        
+        for (const [filename, content] of Object.entries(cleanedFiles)) {
+          if (!filename.endsWith('.html') || typeof content !== 'string') continue;
+          
+          // Find scripts that apply to this page
+          const scriptsForPage = customScripts.filter(script => 
+            script.applyTo === 'all' || script.applyTo === filename
+          );
+          
+          if (scriptsForPage.length === 0) continue;
+          
+          // Combine all script codes
+          const scriptBlock = scriptsForPage.map(s => s.code).join('\n');
+          
+          // Inject before </body> or </html>
+          if (content.includes('</body>')) {
+            cleanedFiles[filename] = content.replace('</body>', `\n<!-- Custom Widgets -->\n${scriptBlock}\n</body>`);
+          } else if (content.includes('</html>')) {
+            cleanedFiles[filename] = content.replace('</html>', `\n<!-- Custom Widgets -->\n${scriptBlock}\n</html>`);
+          } else {
+            cleanedFiles[filename] = content + `\n<!-- Custom Widgets -->\n${scriptBlock}`;
+          }
+          
+          logInfo('Injected scripts into page', { filename, scriptCount: scriptsForPage.length });
+        }
+      }
+      
+      // Remove _customScripts from files (it's metadata, not a file)
+      delete cleanedFiles._customScripts;
+      
       // Step 1: Fix navigation links for multi-page sites
       const filesWithFixedNav = fixNavigationLinks(cleanedFiles);
       
