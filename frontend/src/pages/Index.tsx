@@ -37,7 +37,7 @@ const Index = () => {
           <nav className="hidden md:flex items-center gap-8">
               <a className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary transition-colors cursor-pointer" onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}>Product</a>
               <a className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary transition-colors cursor-pointer" onClick={() => navigate('/auth')}>Pricing</a>
-              <a className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary transition-colors" href="#">Docs</a>
+              <a className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary transition-colors" href="https://docs.avallon.ca" target="_blank" rel="noopener noreferrer">Docs</a>
           </nav>
           <div className="flex items-center gap-4">
               {/* Theme Toggle */}

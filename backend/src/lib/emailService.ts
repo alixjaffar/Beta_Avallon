@@ -250,7 +250,7 @@ class EmailService {
 
             <div style="background-color: #e8f4fd; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
               <p style="margin: 0 0 15px 0; font-weight: bold;">Ready to create your first website?</p>
-              <a href="https://beta-avallon.onrender.com/dashboard" 
+              <a href="https://avallon.ca/dashboard" 
                  style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
                 Go to Dashboard
               </a>
