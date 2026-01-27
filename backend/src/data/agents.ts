@@ -96,28 +96,48 @@ export async function createAgent(input: CreateAgentInput) {
 
 export async function updateAgent(id: string, data: { n8nId?: string | null; status?: string; name?: string }) {
   try {
+    // First check if this is a file-based agent (starts with 'agent_')
+    if (id.startsWith('agent_')) {
+      const agentIndex = agents.findIndex(a => a.id === id);
+      if (agentIndex !== -1) {
+        agents[agentIndex] = {
+          ...agents[agentIndex],
+          ...data,
+          updatedAt: new Date().toISOString(),
+        };
+        saveAgents();
+        logInfo('Agent updated in file storage', { agentId: id });
+        return agents[agentIndex];
+      }
+    }
+    
+    // Try database
     try {
       return await prisma.agent.update({
         where: { id },
         data,
       });
     } catch (dbError: any) {
-      // If database fails or table doesn't exist, use file-based storage
-      const isDatabaseError = dbError.message?.includes('Can\'t reach database') || 
+      // If database fails, record not found, or table doesn't exist, use file-based storage
+      const shouldFallback = dbError.message?.includes('Can\'t reach database') || 
                               dbError.code === 'P1001' ||
+                              dbError.code === 'P2025' || // Record not found
                               dbError.message?.includes('does not exist') ||
+                              dbError.message?.includes('not found') ||
                               dbError.message?.includes('table') ||
                               dbError.code === 'P2021' ||
                               dbError.code === 'P2003';
       
-      if (isDatabaseError) {
-        logInfo('Database unavailable or table missing, using file-based storage for agent update', { 
+      if (shouldFallback) {
+        logInfo('Falling back to file-based storage for agent update', { 
           error: dbError.message,
           code: dbError.code 
         });
         const agentIndex = agents.findIndex(a => a.id === id);
         if (agentIndex === -1) {
-          throw new Error('Agent not found');
+          // Agent not in file storage either - create it
+          logInfo('Agent not found in file storage, skipping update', { agentId: id });
+          return null;
         }
         agents[agentIndex] = {
           ...agents[agentIndex],
@@ -138,8 +158,20 @@ export async function updateAgent(id: string, data: { n8nId?: string | null; sta
 
 export async function listAgentsByUser(userId: string) {
   try {
+    // Get file-based agents first
+    const fileAgents = agents
+      .filter(a => a.ownerId === userId)
+      .map(a => ({
+        id: a.id,
+        name: a.name,
+        n8nId: a.n8nId,
+        status: a.status,
+        createdAt: a.createdAt,
+      }));
+    
+    // Try to get database agents
     try {
-      return await prisma.agent.findMany({
+      const dbAgents = await prisma.agent.findMany({
         where: { ownerId: userId },
         orderBy: { createdAt: 'desc' },
         select: {
@@ -150,30 +182,36 @@ export async function listAgentsByUser(userId: string) {
           createdAt: true,
         },
       });
+      
+      // Combine both, avoiding duplicates
+      const allAgents = [...dbAgents];
+      for (const fileAgent of fileAgents) {
+        if (!allAgents.some(a => a.id === fileAgent.id)) {
+          allAgents.push(fileAgent);
+        }
+      }
+      
+      return allAgents.sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
     } catch (dbError: any) {
-      // If database fails or table doesn't exist, use file-based storage
-      const isDatabaseError = dbError.message?.includes('Can\'t reach database') || 
+      // If database fails, return file-based agents only
+      const shouldFallback = dbError.message?.includes('Can\'t reach database') || 
                               dbError.code === 'P1001' ||
+                              dbError.code === 'P2025' ||
                               dbError.message?.includes('does not exist') ||
                               dbError.message?.includes('table') ||
                               dbError.code === 'P2021' ||
                               dbError.code === 'P2003';
       
-      if (isDatabaseError) {
-        logInfo('Database unavailable or table missing, using file-based storage for agent list', { 
+      if (shouldFallback) {
+        logInfo('Falling back to file-based storage for agent list', { 
           error: dbError.message,
           code: dbError.code 
         });
-        return agents
-          .filter(a => a.ownerId === userId)
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-          .map(a => ({
-            id: a.id,
-            name: a.name,
-            n8nId: a.n8nId,
-            status: a.status,
-            createdAt: a.createdAt,
-          }));
+        return fileAgents.sort((a, b) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
       }
       throw dbError;
     }
@@ -185,21 +223,31 @@ export async function listAgentsByUser(userId: string) {
 
 export async function getAgentById(id: string, userId: string) {
   try {
+    // First check file storage for file-based agents (starts with 'agent_')
+    if (id.startsWith('agent_')) {
+      const fileAgent = agents.find(a => a.id === id && a.ownerId === userId);
+      if (fileAgent) {
+        return fileAgent;
+      }
+    }
+    
+    // Try database
     try {
       return await prisma.agent.findFirst({
         where: { id, ownerId: userId },
       });
     } catch (dbError: any) {
       // If database fails or table doesn't exist, use file-based storage
-      const isDatabaseError = dbError.message?.includes('Can\'t reach database') || 
+      const shouldFallback = dbError.message?.includes('Can\'t reach database') || 
                               dbError.code === 'P1001' ||
+                              dbError.code === 'P2025' ||
                               dbError.message?.includes('does not exist') ||
                               dbError.message?.includes('table') ||
                               dbError.code === 'P2021' ||
                               dbError.code === 'P2003';
       
-      if (isDatabaseError) {
-        logInfo('Database unavailable or table missing, using file-based storage for agent lookup', { 
+      if (shouldFallback) {
+        logInfo('Falling back to file-based storage for agent lookup', { 
           error: dbError.message,
           code: dbError.code 
         });
