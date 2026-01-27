@@ -32,13 +32,6 @@ const Index = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-              <img src="/favicon.svg" alt="Avallon Logo" className="w-8 h-8" onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.style.display = 'none';
-                const fallback = target.nextElementSibling as HTMLElement;
-                if (fallback) fallback.style.display = 'inline';
-              }} />
-              <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white" style={{display: 'none'}}>A</span>
               <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Avallon</span>
             </div>
           <nav className="hidden md:flex items-center gap-8">
@@ -326,10 +319,6 @@ const Index = () => {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-12">
             <div className="col-span-2">
               <div className="flex items-center gap-2 mb-4">
-                <img src="/favicon.svg" alt="Avallon Logo" className="w-7 h-7" onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.style.display = 'none';
-                }} />
                 <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Avallon</span>
               </div>
               <p className="text-slate-500 dark:text-slate-400 text-sm max-w-xs">
@@ -365,7 +354,7 @@ const Index = () => {
             </div>
           </div>
           <div className="border-t border-slate-100 dark:border-white/5 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-slate-400 dark:text-slate-500 text-sm">© 2024 Avallon Inc. All rights reserved.</p>
+            <p className="text-slate-400 dark:text-slate-500 text-sm">© 2026 Powered by Avallon. All rights reserved.</p>
             <div className="flex gap-6">
               <a className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" href="#">
                 <span className="sr-only">Twitter</span>

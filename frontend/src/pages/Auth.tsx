@@ -548,7 +548,6 @@ const Auth = () => {
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="w-full max-w-md">
           <div className="flex items-center justify-center mb-8">
-            <Command className="w-8 h-8 text-primary mr-2" />
             <h1 className="text-3xl font-bold">Avallon</h1>
           </div>
 
@@ -655,7 +654,6 @@ const Auth = () => {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center mb-8">
-          <Command className="w-8 h-8 text-primary mr-2" />
           <h1 className="text-3xl font-bold">Avallon</h1>
         </div>
 
