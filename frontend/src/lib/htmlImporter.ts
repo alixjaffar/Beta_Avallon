@@ -673,6 +673,36 @@ function fixCommonIssues(html: string): string {
   // DO NOT remove all external scripts - many are needed for hero animations, sliders, etc.
   // Only remove known problematic ones (already handled by removeTrackingScripts)
   
+  // =====================================================
+  // WordPress Cleanup - Remove WP-specific artifacts
+  // =====================================================
+  
+  // Remove WordPress script references (wp-includes, wp-content paths)
+  html = html.replace(/<script[^>]*src="[^"]*\/wp-includes\/[^"]*"[^>]*><\/script>/gi, '');
+  html = html.replace(/<script[^>]*src="[^"]*\/wp-content\/[^"]*"[^>]*><\/script>/gi, '');
+  html = html.replace(/<script[^>]*src="[^"]*wp-emoji[^"]*"[^>]*><\/script>/gi, '');
+  
+  // Remove WordPress preload links
+  html = html.replace(/<link[^>]*rel="modulepreload"[^>]*href="[^"]*\/wp-includes\/[^"]*"[^>]*\/?>/gi, '');
+  html = html.replace(/<link[^>]*href="[^"]*\/wp-includes\/[^"]*"[^>]*rel="modulepreload"[^>]*\/?>/gi, '');
+  html = html.replace(/<link[^>]*rel="preload"[^>]*href="[^"]*\/wp-includes\/[^"]*"[^>]*\/?>/gi, '');
+  
+  // Remove WordPress inline scripts
+  html = html.replace(/<script[^>]*>[\s\S]*?wp-emoji[\s\S]*?<\/script>/gi, '');
+  html = html.replace(/<script[^>]*id="wp-[^"]*"[^>]*>[\s\S]*?<\/script>/gi, '');
+  
+  // Remove data-wp attributes
+  html = html.replace(/\s+data-wp-[a-z-]+="[^"]*"/gi, '');
+  
+  // =====================================================
+  // Fix Invalid Script Tags (image URLs as script src)
+  // This is a common bug where image URLs end up in script tags
+  // =====================================================
+  
+  // Remove script tags with image URLs (common import bug)
+  html = html.replace(/<script[^>]*src="[^"]*(?:picsum\.photos|unsplash\.com|placeholder\.com|placehold\.co|via\.placeholder|placekitten|lorempixel)[^"]*"[^>]*><\/script>/gi, '');
+  html = html.replace(/<script[^>]*src="[^"]*\.(?:jpg|jpeg|png|gif|webp|svg|ico)(?:\?[^"]*)?["'][^>]*><\/script>/gi, '');
+  
   // Fix WordPress navigation and other elements that require JS to display
   html = fixWordPressElements(html);
   

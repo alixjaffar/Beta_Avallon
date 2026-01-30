@@ -46,6 +46,46 @@ function cleanEditorScripts(html: string): string {
   // Clean empty script tags
   html = html.replace(/<script>\s*<\/script>/gi, '');
   
+  // =====================================================
+  // WordPress Import Cleanup - Remove WP-specific artifacts
+  // =====================================================
+  
+  // Remove WordPress script references (wp-includes, wp-content paths)
+  html = html.replace(/<script[^>]*src="[^"]*\/wp-includes\/[^"]*"[^>]*><\/script>/gi, '');
+  html = html.replace(/<script[^>]*src="[^"]*\/wp-content\/[^"]*"[^>]*><\/script>/gi, '');
+  html = html.replace(/<script[^>]*src="[^"]*wp-emoji[^"]*"[^>]*><\/script>/gi, '');
+  
+  // Remove WordPress preload links
+  html = html.replace(/<link[^>]*rel="modulepreload"[^>]*href="[^"]*\/wp-includes\/[^"]*"[^>]*\/?>/gi, '');
+  html = html.replace(/<link[^>]*href="[^"]*\/wp-includes\/[^"]*"[^>]*rel="modulepreload"[^>]*\/?>/gi, '');
+  html = html.replace(/<link[^>]*rel="preload"[^>]*href="[^"]*\/wp-includes\/[^"]*"[^>]*\/?>/gi, '');
+  
+  // Remove WordPress inline scripts (wp-emoji, interactivity, etc.)
+  html = html.replace(/<script[^>]*>[\s\S]*?wp-emoji[\s\S]*?<\/script>/gi, '');
+  html = html.replace(/<script[^>]*id="wp-[^"]*"[^>]*>[\s\S]*?<\/script>/gi, '');
+  
+  // Remove WordPress JSON-LD that references WP paths
+  html = html.replace(/<script[^>]*type="application\/ld\+json"[^>]*>[\s\S]*?wordpress[\s\S]*?<\/script>/gi, '');
+  
+  // =====================================================
+  // Fix Invalid Script Tags (image URLs as script src)
+  // =====================================================
+  
+  // Remove script tags with image URLs (common import bug)
+  // Pattern: <script src="https://picsum.photos/..."> or <script src="https://images.unsplash.com/...">
+  html = html.replace(/<script[^>]*src="[^"]*(?:picsum\.photos|unsplash\.com|placeholder\.com|placehold\.co|via\.placeholder|placekitten|lorempixel)[^"]*"[^>]*><\/script>/gi, '');
+  html = html.replace(/<script[^>]*src="[^"]*\.(?:jpg|jpeg|png|gif|webp|svg|ico)(?:\?[^"]*)?["'][^>]*><\/script>/gi, '');
+  
+  // =====================================================
+  // Remove broken/orphaned elements
+  // =====================================================
+  
+  // Remove data-wp attributes (cleanup WordPress artifacts)
+  html = html.replace(/\s+data-wp-[a-z-]+="[^"]*"/gi, '');
+  
+  // Remove empty style blocks
+  html = html.replace(/<style>\s*<\/style>/gi, '');
+  
   return html;
 }
 
