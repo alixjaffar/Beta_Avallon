@@ -46,43 +46,6 @@ function cleanEditorScripts(html: string): string {
   // Clean empty script tags
   html = html.replace(/<script>\s*<\/script>/gi, '');
   
-  // =====================================================
-  // WordPress Full-Width Fix (MINIMAL & TARGETED)
-  // Fixes dark sections not spanning full viewport width
-  // =====================================================
-  const hasWordPressClasses = html.includes('wp-block-group') || html.includes('has-background');
-  
-  if (hasWordPressClasses) {
-    const fullWidthCSS = `
-<style data-avallon-fullwidth-fix="true">
-/* Fix sections with backgrounds not spanning full width */
-.wp-block-group.has-background,
-.wp-block-group[class*="-background-color"] {
-  width: 100vw;
-  position: relative;
-  left: 50%;
-  right: 50%;
-  margin-left: -50vw;
-  margin-right: -50vw;
-  padding-left: calc((100vw - 1200px) / 2);
-  padding-right: calc((100vw - 1200px) / 2);
-  box-sizing: border-box;
-}
-@media (max-width: 1200px) {
-  .wp-block-group.has-background,
-  .wp-block-group[class*="-background-color"] {
-    padding-left: 1.5rem;
-    padding-right: 1.5rem;
-  }
-}
-html, body { overflow-x: hidden; }
-</style>
-`;
-    if (html.includes('</head>')) {
-      html = html.replace('</head>', fullWidthCSS + '</head>');
-    }
-  }
-  
   return html;
 }
 
