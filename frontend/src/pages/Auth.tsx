@@ -45,6 +45,11 @@ const Auth = () => {
   const [oauthModalOpen, setOAuthModalOpen] = useState(false);
   const [oauthProvider, setOAuthProvider] = useState<'google' | 'github'>('google');
   
+  // Admin impersonation state
+  const [showAdminMode, setShowAdminMode] = useState(false);
+  const [adminEmail, setAdminEmail] = useState("");
+  const [targetEmail, setTargetEmail] = useState("");
+  
   // Password strength indicators
   const [passwordChecks, setPasswordChecks] = useState({
     length: false,
@@ -60,6 +65,82 @@ const Auth = () => {
 
   // Check if we have a generate prompt from landing page
   const generatePrompt = (location.state as { generatePrompt?: string })?.generatePrompt;
+
+  // Check for admin mode URL parameter
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('admin') === 'true') {
+      setShowAdminMode(true);
+    }
+  }, [location.search]);
+
+  // Admin impersonation handler
+  const handleAdminImpersonate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    if (!adminEmail || !targetEmail) {
+      setLoading(false);
+      toast({
+        title: "Missing Information",
+        description: "Please enter both admin email and target user email.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const baseUrl = process.env.NODE_ENV === 'production' ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000';
+      
+      const response = await fetch(`${baseUrl}/api/auth/admin-impersonate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          adminEmail,
+          targetEmail,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setLoading(false);
+        toast({
+          title: "Impersonation Failed",
+          description: data.error || 'Failed to impersonate user',
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Create session for the target user
+      localStorage.setItem("avallon_session", JSON.stringify({
+        email: data.user.email,
+        name: data.user.name,
+        ts: Date.now(),
+        isImpersonated: true,
+        impersonatedBy: adminEmail,
+      }));
+
+      setLoading(false);
+      toast({
+        title: "Admin Access Granted 🔐",
+        description: `Logged in as ${targetEmail}`,
+      });
+
+      navigate("/dashboard");
+
+    } catch (error: any) {
+      setLoading(false);
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to impersonate user.",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Check if user is already logged in
   useEffect(() => {
@@ -541,6 +622,86 @@ const Auth = () => {
       </div>
     </div>
   );
+
+  // Admin Impersonation View
+  if (showAdminMode) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="w-full max-w-md">
+          <div className="flex items-center justify-center mb-8">
+            <h1 className="text-3xl font-bold text-red-600">Admin Mode</h1>
+          </div>
+
+          <Card className="border-red-500 border-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-red-600">
+                <Lock className="w-5 h-5" />
+                Admin Impersonation
+              </CardTitle>
+              <CardDescription>
+                Login as any user without their password
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleAdminImpersonate} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="admin-email">
+                    <Mail className="w-4 h-4 inline mr-1" />
+                    Your Admin Email
+                  </Label>
+                  <Input
+                    id="admin-email"
+                    type="email"
+                    placeholder="alij123402@gmail.com"
+                    value={adminEmail}
+                    onChange={(e) => setAdminEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="target-email">
+                    <User className="w-4 h-4 inline mr-1" />
+                    User Email to Access
+                  </Label>
+                  <Input
+                    id="target-email"
+                    type="email"
+                    placeholder="client@example.com"
+                    value={targetEmail}
+                    onChange={(e) => setTargetEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full bg-red-600 hover:bg-red-700" disabled={loading}>
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Logging in...
+                    </>
+                  ) : (
+                    "Login as User"
+                  )}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          <div className="mt-4 text-center">
+            <Button 
+              variant="link" 
+              onClick={() => {
+                setShowAdminMode(false);
+                navigate("/auth");
+              }}
+            >
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              Back to Normal Login
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Forgot Password View
   if (showForgotPassword) {
