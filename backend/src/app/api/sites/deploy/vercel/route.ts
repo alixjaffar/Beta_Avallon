@@ -46,6 +46,29 @@ function cleanEditorScripts(html: string): string {
   // Clean empty script tags
   html = html.replace(/<script>\s*<\/script>/gi, '');
   
+  // =====================================================
+  // FIX: Remove hardcoded viewport widths from WordPress sections
+  // These are calculated based on editor viewport and break on other screen sizes
+  // =====================================================
+  
+  // Remove hardcoded width from full-width sections (alignfull, has-background)
+  // Pattern: style="...width: 1315px;..." -> remove just the width part
+  html = html.replace(
+    /(<div[^>]*class="[^"]*(?:alignfull|has-background|wp-block-group)[^"]*"[^>]*style="[^"]*)(width:\s*\d{3,}(?:\.\d+)?px;?\s*)/gi,
+    '$1'
+  );
+  
+  // Also remove hardcoded heights from these sections
+  html = html.replace(
+    /(<div[^>]*class="[^"]*(?:alignfull|has-background|wp-block-group)[^"]*"[^>]*style="[^"]*)(height:\s*\d{3,}(?:\.\d+)?px;?\s*)/gi,
+    '$1'
+  );
+  
+  // Clean up any resulting empty style attributes or double semicolons
+  html = html.replace(/style="\s*;+\s*"/gi, '');
+  html = html.replace(/style="([^"]*);\s*;+/gi, 'style="$1;');
+  html = html.replace(/style=";\s*/gi, 'style="');
+  
   return html;
 }
 
