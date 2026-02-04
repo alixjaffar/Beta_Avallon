@@ -258,11 +258,12 @@ function getVisualEditorScript(): string {
   let isResizing = false;
   let dragStart = { x: 0, y: 0 };
   let elementStart = { x: 0, y: 0, width: 0, height: 0 };
+  let dragOffset = { x: 0, y: 0 }; // Offset from mouse to element top-left for precise positioning
   let resizeHandle = null;
   let dropIndicator = null;
   let dragClone = null;
   let dropTarget = null;
-  let dropPosition = null; // 'before' or 'after'
+  let dropPosition = null; // 'before', 'after', or 'free'
   
   // Create selection overlay
   function createOverlay() {
@@ -475,8 +476,8 @@ function getVisualEditorScript(): string {
     window.parent.postMessage({ type: 'elementSelected', data: data }, '*');
   }
   
-  // Track if we're in free-position mode (Alt key held)
-  let isFreePositionMode = false;
+  // Track if we're in SIBLING REORDER mode (Alt key held) - FREE POSITION is now default
+  let isSiblingReorderMode = false;
   let coordsTooltip = null;
   let containerHighlight = null;
   
@@ -488,10 +489,13 @@ function getVisualEditorScript(): string {
     if (tag === 'html' || tag === 'body' || tag === 'head') return;
     
     isDragging = true;
-    isFreePositionMode = e.altKey; // Hold Alt for free positioning mode
+    isSiblingReorderMode = e.altKey; // Hold Alt for sibling reorder mode (free position is default)
     dragStart = { x: e.clientX, y: e.clientY };
     const rect = selectedElement.getBoundingClientRect();
     elementStart = { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+    
+    // Calculate offset from mouse to element top-left for precise positioning
+    dragOffset = { x: e.clientX - rect.left, y: e.clientY - rect.top };
     
     // Hide drag handle and overlay during drag
     if (window.dragHandleEl) window.dragHandleEl.style.display = 'none';
@@ -510,8 +514,8 @@ function getVisualEditorScript(): string {
     coordsTooltip.style.cssText = 'position:fixed;background:#1e1e2e;color:#fff;padding:4px 8px;border-radius:4px;font-size:11px;font-family:monospace;z-index:100004;pointer-events:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
     document.body.appendChild(coordsTooltip);
     
-    // Create container highlight for free position mode
-    if (isFreePositionMode) {
+    // Create container highlight for free position mode (default)
+    if (!isSiblingReorderMode) {
       containerHighlight = document.createElement('div');
       containerHighlight.id = 'avallon-container-highlight';
       containerHighlight.style.cssText = 'position:absolute;border:2px dashed #22c55e;background:rgba(34,197,94,0.05);z-index:99997;pointer-events:none;border-radius:4px;';
@@ -541,15 +545,15 @@ function getVisualEditorScript(): string {
   }
   
   function handleMouseMove(e) {
-    // Update free position mode based on Alt key (can toggle during drag)
+    // Update sibling reorder mode based on Alt key (can toggle during drag)
     if (isDragging) {
-      isFreePositionMode = e.altKey;
+      isSiblingReorderMode = e.altKey;
     }
     
     if (isDragging && selectedElement && dragClone) {
-      // Move the drag clone
-      dragClone.style.left = (e.clientX - elementStart.width / 2) + 'px';
-      dragClone.style.top = (e.clientY - 20) + 'px';
+      // Move the drag clone - follow mouse exactly using offset
+      dragClone.style.left = (e.clientX - dragOffset.x) + 'px';
+      dragClone.style.top = (e.clientY - dragOffset.y) + 'px';
       
       // Find potential drop target/container
       dragClone.style.display = 'none'; // Hide clone to get element underneath
@@ -559,8 +563,8 @@ function getVisualEditorScript(): string {
       dragClone.style.display = 'block';
       if (coordsTooltip) coordsTooltip.style.display = 'block';
       
-      if (isFreePositionMode) {
-        // FREE POSITION MODE: Place element at exact X/Y within a container
+      if (!isSiblingReorderMode) {
+        // FREE POSITION MODE (DEFAULT): Place element at exact X/Y within a container
         if (elementBelow && elementBelow !== selectedElement && !elementBelow.id?.startsWith('avallon-') && !elementBelow.className?.includes?.('avallon-')) {
           // Find the nearest container element
           let container = elementBelow;
@@ -577,10 +581,10 @@ function getVisualEditorScript(): string {
             dropTarget = container;
             dropPosition = 'free'; // Special marker for free positioning
             
-            // Calculate position relative to container
+            // Calculate position relative to container - use exact mouse position minus offset for precise placement
             const containerRect = container.getBoundingClientRect();
-            const relX = Math.round(e.clientX - containerRect.left);
-            const relY = Math.round(e.clientY - containerRect.top);
+            const relX = Math.round(e.clientX - containerRect.left - dragOffset.x);
+            const relY = Math.round(e.clientY - containerRect.top - dragOffset.y);
             
             // Store calculated position for drop
             dropTarget._freeX = relX;
@@ -588,7 +592,7 @@ function getVisualEditorScript(): string {
             
             // Update coordinates tooltip
             if (coordsTooltip) {
-              coordsTooltip.textContent = 'X: ' + relX + 'px, Y: ' + relY + 'px (Free Mode)';
+              coordsTooltip.textContent = 'X: ' + relX + 'px, Y: ' + relY + 'px';
               coordsTooltip.style.left = (e.clientX + 15) + 'px';
               coordsTooltip.style.top = (e.clientY - 30) + 'px';
             }
@@ -613,12 +617,12 @@ function getVisualEditorScript(): string {
           if (containerHighlight) containerHighlight.style.display = 'none';
         }
       } else {
-        // SIBLING REORDER MODE (original behavior)
+        // SIBLING REORDER MODE (Alt key held)
         if (containerHighlight) containerHighlight.style.display = 'none';
         
         // Update coordinates tooltip for sibling mode
         if (coordsTooltip) {
-          coordsTooltip.textContent = 'Hold Alt for free position mode';
+          coordsTooltip.textContent = 'Snap Mode (release Alt for free position)';
           coordsTooltip.style.left = (e.clientX + 15) + 'px';
           coordsTooltip.style.top = (e.clientY - 30) + 'px';
         }
@@ -777,7 +781,7 @@ function getVisualEditorScript(): string {
       
       dropTarget = null;
       dropPosition = null;
-      isFreePositionMode = false;
+      isSiblingReorderMode = false;
     }
     
     if (isResizing && selectedElement) {
@@ -3796,6 +3800,72 @@ Generated by Avallon - ${new Date().toISOString()}
                           </div>
                         </div>
                         
+                        {/* Background Image */}
+                        <div className="space-y-3 pt-3 border-t border-panel-border">
+                          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                            <span className="material-symbols-outlined text-[14px]">wallpaper</span>
+                            Background Image
+                          </h3>
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              placeholder="Enter image URL..."
+                              className="w-full px-3 py-2 bg-surface-dark border border-panel-border rounded-lg text-sm text-white placeholder-gray-500"
+                              onBlur={(e) => {
+                                if (e.target.value.trim()) {
+                                  updateElementStyle('backgroundImage', `url("${e.target.value.trim()}")`);
+                                  updateElementStyle('backgroundSize', 'cover');
+                                  updateElementStyle('backgroundPosition', 'center');
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  (e.target as HTMLInputElement).blur();
+                                }
+                              }}
+                            />
+                            <div className="flex gap-2">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    const reader = new FileReader();
+                                    reader.onload = (event) => {
+                                      if (event.target?.result) {
+                                        updateElementStyle('backgroundImage', `url("${event.target.result}")`);
+                                        updateElementStyle('backgroundSize', 'cover');
+                                        updateElementStyle('backgroundPosition', 'center');
+                                      }
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                }}
+                                className="hidden"
+                                id="bg-image-upload"
+                              />
+                              <label
+                                htmlFor="bg-image-upload"
+                                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-surface-dark hover:bg-panel-border border border-panel-border text-gray-300 text-sm font-medium transition-colors cursor-pointer"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">upload</span>
+                                Upload
+                              </label>
+                              <button
+                                onClick={() => {
+                                  updateElementStyle('backgroundImage', 'none');
+                                }}
+                                className="flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-sm transition-colors"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">close</span>
+                                Clear
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-gray-500">Add a background image while keeping your text and content visible.</p>
+                          </div>
+                        </div>
+                        
                         {/* Border Radius */}
                         <div className="space-y-3 pt-3 border-t border-panel-border">
                           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Border</h3>
@@ -4030,7 +4100,7 @@ Generated by Avallon - ${new Date().toISOString()}
                           {/* Quick tip for free positioning */}
                           <div className="bg-primary/10 border border-primary/20 rounded-lg p-2">
                             <p className="text-[10px] text-primary/80">
-                              <strong>Tip:</strong> Hold <kbd className="px-1 py-0.5 bg-primary/20 rounded text-[9px]">Alt</kbd> while dragging to freely position elements anywhere on the canvas.
+                              <strong>Tip:</strong> Drag elements freely anywhere. Hold <kbd className="px-1 py-0.5 bg-primary/20 rounded text-[9px]">Alt</kbd> to snap/reorder within containers.
                             </p>
                           </div>
                         </div>
