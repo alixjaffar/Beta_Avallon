@@ -362,9 +362,10 @@ export async function ensureUserHasCredits(
       return { success: true, credits: existingCredits };
     }
     
-    // New user - give them 15 credits (free plan default)
+    // New user - give them default credits (free plan)
+    const initialCredits = defaultCredits; // Use the minCredits parameter if provided
     const creditEntry = {
-      credits: 15,
+      credits: initialCredits,
       lastUpdated: new Date().toISOString(),
     };
     
@@ -373,8 +374,8 @@ export async function ensureUserHasCredits(
     allCredits[email] = creditEntry;
     saveUserCredits(allCredits);
     
-    logInfo('Initialized user credits (stored under both userId and email)', { email, userId, credits: 15 });
-    return { success: true, credits: 15 };
+    logInfo('Initialized user credits (stored under both userId and email)', { email, userId, credits: initialCredits });
+    return { success: true, credits: initialCredits };
   } catch (error: any) {
     logError('Failed to ensure user has credits', error, { userId, email });
     return { success: false, credits: defaultCredits };

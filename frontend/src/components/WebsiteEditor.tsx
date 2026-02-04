@@ -958,6 +958,87 @@ function getVisualEditorScript(): string {
     }
   }, true);
   
+  // =====================================================
+  // ARROW KEY MOVEMENT FOR PRECISE POSITIONING
+  // =====================================================
+  document.addEventListener('keydown', function(e) {
+    if (!selectedElement) return;
+    
+    // Only handle arrow keys
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+    
+    // Don't interfere with text editing in inputs/textareas
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Determine step size: 1px default, 10px with Shift
+    const step = e.shiftKey ? 10 : 1;
+    
+    // Get current computed position
+    const style = window.getComputedStyle(selectedElement);
+    const position = style.position;
+    
+    // If element is not positioned, make it relative so we can move it
+    if (position === 'static') {
+      selectedElement.style.position = 'relative';
+    }
+    
+    // Get current values (default to 0 if not set)
+    let top = parseInt(style.top) || 0;
+    let left = parseInt(style.left) || 0;
+    let marginTop = parseInt(style.marginTop) || 0;
+    let marginLeft = parseInt(style.marginLeft) || 0;
+    
+    // Prefer margin for elements that are in flow, position for absolute/fixed
+    const useMargin = position === 'static' || position === 'relative';
+    
+    switch (e.key) {
+      case 'ArrowUp':
+        if (useMargin) {
+          selectedElement.style.marginTop = (marginTop - step) + 'px';
+        } else {
+          selectedElement.style.top = (top - step) + 'px';
+        }
+        break;
+      case 'ArrowDown':
+        if (useMargin) {
+          selectedElement.style.marginTop = (marginTop + step) + 'px';
+        } else {
+          selectedElement.style.top = (top + step) + 'px';
+        }
+        break;
+      case 'ArrowLeft':
+        if (useMargin) {
+          selectedElement.style.marginLeft = (marginLeft - step) + 'px';
+        } else {
+          selectedElement.style.left = (left - step) + 'px';
+        }
+        break;
+      case 'ArrowRight':
+        if (useMargin) {
+          selectedElement.style.marginLeft = (marginLeft + step) + 'px';
+        } else {
+          selectedElement.style.left = (left + step) + 'px';
+        }
+        break;
+    }
+    
+    // Update overlay to follow element
+    updateOverlay(selectedElement);
+    
+    // Notify parent of the change
+    window.parent.postMessage({
+      type: 'elementMoved',
+      data: {
+        xpath: getXPath(selectedElement),
+        styles: getComputedStyles(selectedElement),
+        movedBy: 'keyboard'
+      }
+    }, '*');
+  });
+  
   // Initialize
   createOverlay();
   
@@ -1786,10 +1867,87 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     // The HTML has already been fully processed by ImportWebsiteModal
     // (with CSS inlined, URLs converted, etc.)
     
+    let finalHtml = html;
+    
+    // =====================================================
+    // AUTO-INJECT HEADER/NAV FROM EXISTING PAGES
+    // If we have existing pages with a header/nav, inject it into new pages
+    // =====================================================
+    const existingPages = Object.keys(currentWebsiteContent).filter(
+      key => key.endsWith('.html') && !key.startsWith('_')
+    );
+    
+    // Only inject header if this is a NEW page (not index.html) and we have existing pages
+    if (pageName !== 'index.html' && existingPages.length > 0) {
+      // Get the reference page (prefer index.html)
+      const referencePage = currentWebsiteContent['index.html'] || currentWebsiteContent[existingPages[0]];
+      
+      if (typeof referencePage === 'string') {
+        // Extract header from reference page
+        const headerMatch = referencePage.match(/<header[^>]*>[\s\S]*?<\/header>/i);
+        const navMatch = referencePage.match(/<nav[^>]*>[\s\S]*?<\/nav>/i);
+        
+        // Also extract the <head> content (styles, fonts, etc.)
+        const headMatch = referencePage.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
+        
+        // Check if the imported HTML already has a header
+        const hasHeader = /<header[^>]*>/i.test(finalHtml);
+        const hasNav = /<nav[^>]*>/i.test(finalHtml);
+        
+        // If imported page doesn't have header/nav but reference does, inject it
+        if (!hasHeader && (headerMatch || navMatch)) {
+          const headerContent = headerMatch?.[0] || navMatch?.[0] || '';
+          
+          if (headerContent) {
+            // Find where to inject - after <body> tag
+            if (finalHtml.includes('<body')) {
+              // Inject after <body...>
+              finalHtml = finalHtml.replace(/(<body[^>]*>)/i, `$1\n${headerContent}\n`);
+            }
+          }
+        }
+        
+        // Extract and inject footer if missing
+        const footerMatch = referencePage.match(/<footer[^>]*>[\s\S]*?<\/footer>/i);
+        const hasFooter = /<footer[^>]*>/i.test(finalHtml);
+        
+        if (!hasFooter && footerMatch) {
+          // Inject footer before </body>
+          if (finalHtml.includes('</body>')) {
+            finalHtml = finalHtml.replace('</body>', `\n${footerMatch[0]}\n</body>`);
+          }
+        }
+        
+        // Merge styles from reference page's <head> to maintain consistency
+        if (headMatch) {
+          const refHeadContent = headMatch[1];
+          
+          // Extract style tags from reference
+          const styleMatches = refHeadContent.match(/<style[^>]*>[\s\S]*?<\/style>/gi) || [];
+          // Extract link tags (CSS) from reference
+          const linkMatches = refHeadContent.match(/<link[^>]*rel=["']stylesheet["'][^>]*>/gi) || [];
+          
+          // Check what the imported page already has
+          const importedStyles = finalHtml.match(/<style[^>]*>[\s\S]*?<\/style>/gi) || [];
+          
+          // If imported page has very few styles, add reference styles
+          if (importedStyles.length < 2 && (styleMatches.length > 0 || linkMatches.length > 0)) {
+            const additionalStyles = [...linkMatches, ...styleMatches].join('\n');
+            
+            if (finalHtml.includes('</head>')) {
+              finalHtml = finalHtml.replace('</head>', `\n<!-- Inherited styles from main site -->\n${additionalStyles}\n</head>`);
+            } else if (finalHtml.includes('<body')) {
+              finalHtml = finalHtml.replace('<body', `<head>\n${additionalStyles}\n</head>\n<body`);
+            }
+          }
+        }
+      }
+    }
+    
     // Update the website content
     const updatedContent = {
       ...currentWebsiteContent,
-      [pageName]: html,
+      [pageName]: finalHtml,
     };
     
     // Push to history for undo/redo
@@ -1800,18 +1958,25 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     // Auto-save to backend
     const saved = await autoSaveContent(updatedContent);
     
+    // Check if header was injected
+    const headerInjected = pageName !== 'index.html' && existingPages.length > 0;
+    
     // Add a message to chat
     const importMessage: ChatMessage = {
       id: Date.now().toString(),
       role: 'assistant',
-      content: `✅ Successfully imported website to "${pageName}"!${saved ? ' (Auto-saved)' : ''}\n\nAll external CSS stylesheets have been fetched and embedded inline. Images, fonts, and other resources have been converted to absolute URLs.\n\nYou can now:\n• Use the Visual Editor to make changes\n• Use AI Assist to modify sections\n• Click "Publish" to deploy your website\n• Click "Download" to get files for self-hosting`,
+      content: `✅ Successfully imported website to "${pageName}"!${saved ? ' (Auto-saved)' : ''}${headerInjected ? '\n\n🔗 The header/navigation from your existing pages has been automatically added for consistency.' : ''}\n\nAll external CSS stylesheets have been fetched and embedded inline. Images, fonts, and other resources have been converted to absolute URLs.\n\nYou can now:\n• Use the Visual Editor to make changes\n• Use AI Assist to modify sections\n• Click "Publish" to deploy your website\n• Click "Download" to get files for self-hosting`,
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, importMessage]);
     
     toast({
       title: "Website Imported & Saved!",
-      description: saved ? `Ready to publish or download for self-hosting.` : `Click Save to persist changes.`,
+      description: saved 
+        ? headerInjected 
+          ? `Header/nav added from existing pages. Ready to publish!` 
+          : `Ready to publish or download for self-hosting.`
+        : `Click Save to persist changes.`,
     });
     
     setShowImportModal(false);
