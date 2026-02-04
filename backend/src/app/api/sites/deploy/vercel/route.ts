@@ -410,61 +410,6 @@ export async function POST(req: NextRequest) {
       // Remove _customScripts from files (it's metadata, not a file)
       delete cleanedFiles._customScripts;
       
-      // Step 0.6: Apply WordPress full-width fix if enabled
-      const wpFullWidthFix = rawFiles._wpFullWidthFix as boolean | undefined;
-      if (wpFullWidthFix) {
-        logInfo('Applying WordPress full-width layout fix');
-        
-        const fullWidthCSS = `
-<style data-avallon-fullwidth-fix="true">
-/* Avallon: Full-width section fix for imported WordPress sites */
-.wp-block-group.has-background,
-.wp-block-group[class*="-background-color"],
-.wp-block-cover,
-.wp-block-cover.alignfull,
-.alignfull {
-  width: 100vw;
-  position: relative;
-  left: 50%;
-  right: 50%;
-  margin-left: -50vw;
-  margin-right: -50vw;
-  padding-left: calc((100vw - 1200px) / 2);
-  padding-right: calc((100vw - 1200px) / 2);
-  box-sizing: border-box;
-}
-@media (max-width: 1200px) {
-  .wp-block-group.has-background,
-  .wp-block-group[class*="-background-color"],
-  .wp-block-cover,
-  .wp-block-cover.alignfull,
-  .alignfull {
-    padding-left: 1.5rem;
-    padding-right: 1.5rem;
-  }
-}
-html, body { overflow-x: hidden; }
-</style>
-`;
-        
-        for (const [filename, content] of Object.entries(cleanedFiles)) {
-          if (!filename.endsWith('.html') || typeof content !== 'string') continue;
-          
-          // Inject CSS before </head>
-          if (content.includes('</head>')) {
-            cleanedFiles[filename] = content.replace('</head>', `${fullWidthCSS}\n</head>`);
-          } else if (content.includes('<body')) {
-            // If no </head>, inject before <body>
-            cleanedFiles[filename] = content.replace(/<body/i, `${fullWidthCSS}\n<body`);
-          }
-        }
-        
-        logInfo('Applied full-width fix to all HTML pages');
-      }
-      
-      // Remove _wpFullWidthFix from files (it's metadata, not a file)
-      delete cleanedFiles._wpFullWidthFix;
-      
       // Step 1: Fix navigation links for multi-page sites
       const filesWithFixedNav = fixNavigationLinks(cleanedFiles);
       
