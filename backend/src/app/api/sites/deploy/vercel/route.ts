@@ -345,13 +345,19 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { siteId } = DeployToVercelSchema.parse(body);
 
-    logInfo('Starting deployment to GitHub and Vercel', { siteId });
+    logInfo('Starting deployment to GitHub and Vercel', { siteId, userId: user.id });
 
     // Get the site with its files
     const site = await getSiteById(siteId, user.id);
     if (!site) {
-      return NextResponse.json({ error: "Site not found" }, { status: 404, headers: corsHeaders });
+      logError('Site not found during deployment', new Error(`Site ${siteId} not found for user ${user.id}`));
+      return NextResponse.json({ 
+        error: "Site not found", 
+        details: "The site may not exist or you may not have access to it. If you just created this site, please try refreshing the page." 
+      }, { status: 404, headers: corsHeaders });
     }
+    
+    logInfo('Site found for deployment', { siteId: site.id, siteName: site.name, ownerId: site.ownerId });
 
     // Get website files from websiteContent
     const rawFiles = site.websiteContent?.files || site.websiteContent || {};

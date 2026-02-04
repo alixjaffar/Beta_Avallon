@@ -1,6 +1,46 @@
 // CHANGELOG: 2026-01-23 - Switched to PostgreSQL with Prisma for persistent storage
+// CHANGELOG: 2026-02-04 - Added file-based fallback for database issues
 import { logInfo, logError } from "@/lib/log";
 import { prisma } from "@/lib/db";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'fs';
+import { join } from 'path';
+
+// File-based storage as fallback
+const SITES_DIR = join(process.cwd(), 'data', 'sites');
+
+function ensureSitesDir() {
+  if (!existsSync(SITES_DIR)) {
+    mkdirSync(SITES_DIR, { recursive: true });
+  }
+}
+
+function getSiteFilePath(id: string): string {
+  return join(SITES_DIR, `${id}.json`);
+}
+
+function loadSiteFromFile(id: string): Site | null {
+  try {
+    const filePath = getSiteFilePath(id);
+    if (existsSync(filePath)) {
+      const data = readFileSync(filePath, 'utf-8');
+      return JSON.parse(data) as Site;
+    }
+  } catch (error) {
+    logError('Error loading site from file', error as Error);
+  }
+  return null;
+}
+
+function saveSiteToFile(site: Site): void {
+  try {
+    ensureSitesDir();
+    const filePath = getSiteFilePath(site.id);
+    writeFileSync(filePath, JSON.stringify(site, null, 2));
+    logInfo('Site saved to file backup', { siteId: site.id });
+  } catch (error) {
+    logError('Error saving site to file', error as Error);
+  }
+}
 
 // Type definition for Site
 export type Site = {
@@ -61,11 +101,38 @@ export async function createSite(input: CreateSiteInput): Promise<Site> {
       },
     });
     
+    // Save to file as backup
+    saveSiteToFile(site as Site);
+    
     logInfo('Site created in PostgreSQL', { siteId: site.id, name: site.name });
     return site as Site;
   } catch (error: any) {
-    logError('Error creating site:', error);
-    throw new Error(`Failed to create site: ${error.message}`);
+    logError('Error creating site in database', error);
+    
+    // Try file-based creation as fallback
+    try {
+      const fileBasedId = `site_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const fileSite: Site = {
+        id: fileBasedId,
+        ownerId: input.ownerId,
+        name: input.name,
+        slug: input.slug,
+        status: input.status,
+        repoUrl: input.repoUrl || null,
+        previewUrl: input.previewUrl || null,
+        vercelProjectId: input.vercelProjectId || null,
+        vercelDeploymentId: input.vercelDeploymentId || null,
+        chatHistory: input.chatHistory || [],
+        websiteContent: input.websiteContent || null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      saveSiteToFile(fileSite);
+      logInfo('Site created in file storage (DB unavailable)', { siteId: fileSite.id });
+      return fileSite;
+    } catch (fileError) {
+      throw new Error(`Failed to create site: ${error.message}`);
+    }
   }
 }
 
@@ -76,11 +143,33 @@ export async function listSitesByUser(userId: string): Promise<Site[]> {
       orderBy: { createdAt: 'desc' },
     });
     
+    // Also save these sites to file as backup
+    for (const site of sites) {
+      saveSiteToFile(site as Site);
+    }
+    
     logInfo('Sites listed', { userId, count: sites.length });
     return sites as Site[];
   } catch (error: any) {
-    logError('Error listing sites:', error);
-    return [];
+    logError('Database error listing sites, trying file fallback', error);
+    
+    // Try to load from files if database fails
+    try {
+      ensureSitesDir();
+      const files = readdirSync(SITES_DIR).filter((f: string) => f.endsWith('.json'));
+      const sites: Site[] = [];
+      for (const file of files) {
+        const site = loadSiteFromFile(file.replace('.json', ''));
+        if (site && site.ownerId === userId) {
+          sites.push(site);
+        }
+      }
+      logInfo('Sites listed from file backup', { userId, count: sites.length });
+      return sites.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    } catch (fileError) {
+      logError('Error listing sites from files', fileError as Error);
+      return [];
+    }
   }
 }
 
@@ -91,7 +180,19 @@ export async function getSiteById(id: string, userId: string): Promise<Site | nu
     });
     
     if (!site) {
-      logInfo('Site not found', { siteId: id });
+      // Try file-based fallback
+      logInfo('Site not in database, checking file storage', { siteId: id });
+      const fileSite = loadSiteFromFile(id);
+      if (fileSite) {
+        // Verify ownership
+        if (fileSite.ownerId !== userId && process.env.NODE_ENV !== 'development') {
+          logInfo('Site access denied - owner mismatch (file)', { siteId: id });
+          return null;
+        }
+        logInfo('Site loaded from file backup', { siteId: id });
+        return fileSite;
+      }
+      logInfo('Site not found in database or file storage', { siteId: id });
       return null;
     }
     
@@ -101,9 +202,23 @@ export async function getSiteById(id: string, userId: string): Promise<Site | nu
       return null;
     }
     
+    // Save to file as backup
+    saveSiteToFile(site as Site);
+    
     return site as Site;
   } catch (error: any) {
-    logError('Error getting site:', error);
+    logError('Database error getting site, trying file fallback', error);
+    
+    // Try file-based fallback on database error
+    const fileSite = loadSiteFromFile(id);
+    if (fileSite) {
+      if (fileSite.ownerId !== userId && process.env.NODE_ENV !== 'development') {
+        return null;
+      }
+      logInfo('Site loaded from file backup after DB error', { siteId: id });
+      return fileSite;
+    }
+    
     return null;
   }
 }
@@ -150,10 +265,23 @@ export async function updateSite(id: string, userId: string, data: {
       data: updateData,
     });
     
+    // Save to file as backup
+    saveSiteToFile(site as Site);
+    
     logInfo('Site updated', { siteId: id });
     return site as Site;
   } catch (error: any) {
-    logError('Error updating site:', error);
+    logError('Error updating site in database', error);
+    
+    // Try to update file backup if database fails
+    const fileSite = loadSiteFromFile(id);
+    if (fileSite && (fileSite.ownerId === userId || process.env.NODE_ENV === 'development')) {
+      const updatedSite = { ...fileSite, ...data, updatedAt: new Date().toISOString() };
+      saveSiteToFile(updatedSite as Site);
+      logInfo('Site updated in file backup (DB unavailable)', { siteId: id });
+      return updatedSite as Site;
+    }
+    
     return null;
   }
 }
