@@ -891,6 +891,94 @@ function getVisualEditorScript(): string {
       }, '*');
     }
     
+    // =====================================================
+    // ADD NEW ELEMENTS
+    // =====================================================
+    if (e.data.type === 'addElement') {
+      const { elementType, content, styles } = e.data;
+      let newElement;
+      
+      // Find a good container to add the element to
+      let container = selectedElement?.parentElement || document.querySelector('main') || document.querySelector('section') || document.body;
+      
+      switch (elementType) {
+        case 'text':
+          newElement = document.createElement('p');
+          newElement.textContent = content || 'New text block - click to edit';
+          newElement.style.cssText = 'font-size:16px;color:#333;margin:10px;padding:10px;position:absolute;left:50px;top:50px;min-width:100px;';
+          break;
+        case 'heading':
+          newElement = document.createElement('h2');
+          newElement.textContent = content || 'New Heading';
+          newElement.style.cssText = 'font-size:32px;font-weight:bold;color:#111;margin:10px;padding:10px;position:absolute;left:50px;top:50px;';
+          break;
+        case 'image':
+          newElement = document.createElement('img');
+          newElement.src = content || 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=400&h=300&fit=crop';
+          newElement.alt = 'New image';
+          newElement.style.cssText = 'width:300px;height:200px;object-fit:cover;border-radius:8px;position:absolute;left:50px;top:50px;';
+          break;
+        case 'button':
+          newElement = document.createElement('button');
+          newElement.textContent = content || 'Click Me';
+          newElement.style.cssText = 'background:#6366f1;color:white;padding:12px 24px;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;position:absolute;left:50px;top:50px;';
+          break;
+        case 'container':
+          newElement = document.createElement('div');
+          newElement.style.cssText = 'width:300px;height:200px;background:rgba(99,102,241,0.1);border:2px dashed #6366f1;border-radius:8px;position:absolute;left:50px;top:50px;display:flex;align-items:center;justify-content:center;';
+          newElement.innerHTML = '<span style="color:#6366f1;font-size:14px;">Container - drag elements here</span>';
+          break;
+        case 'card':
+          newElement = document.createElement('div');
+          newElement.style.cssText = 'width:300px;background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.1);overflow:hidden;position:absolute;left:50px;top:50px;';
+          newElement.innerHTML = '<img src="https://images.unsplash.com/photo-1497366216548-37526070297c?w=400&h=200&fit=crop" style="width:100%;height:150px;object-fit:cover;"><div style="padding:16px;"><h3 style="margin:0 0 8px 0;font-size:18px;font-weight:600;color:#111;">Card Title</h3><p style="margin:0;font-size:14px;color:#666;">Card description goes here. Click to edit.</p></div>';
+          break;
+        case 'icon':
+          newElement = document.createElement('span');
+          newElement.className = 'material-symbols-outlined';
+          newElement.textContent = content || 'star';
+          newElement.style.cssText = 'font-size:48px;color:#6366f1;position:absolute;left:50px;top:50px;';
+          break;
+        case 'divider':
+          newElement = document.createElement('hr');
+          newElement.style.cssText = 'width:80%;border:none;border-top:2px solid #e5e7eb;margin:20px auto;position:absolute;left:10%;top:50px;';
+          break;
+        case 'spacer':
+          newElement = document.createElement('div');
+          newElement.style.cssText = 'width:100%;height:50px;background:transparent;position:absolute;left:0;top:50px;';
+          break;
+        default:
+          newElement = document.createElement('div');
+          newElement.textContent = 'New element';
+          newElement.style.cssText = 'padding:20px;background:#f3f4f6;border-radius:8px;position:absolute;left:50px;top:50px;';
+      }
+      
+      // Apply any additional styles
+      if (styles) {
+        Object.assign(newElement.style, styles);
+      }
+      
+      // Make container relative if needed
+      const containerPos = window.getComputedStyle(container).position;
+      if (containerPos === 'static') {
+        container.style.position = 'relative';
+      }
+      
+      // Add to container
+      container.appendChild(newElement);
+      
+      // Select the new element
+      setTimeout(() => {
+        selectElement(newElement);
+        newElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+      
+      window.parent.postMessage({ 
+        type: 'elementAdded', 
+        data: { elementType, xpath: getXPath(newElement) } 
+      }, '*');
+    }
+    
     if (e.data.type === 'duplicateElement' && selectedElement) {
       const clone = selectedElement.cloneNode(true);
       
@@ -1505,6 +1593,11 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         }
       }
       
+      // Handle new element added
+      if (event.data?.type === 'elementAdded') {
+        setHasUnsavedChanges(true);
+      }
+      
       if (event.data?.type === 'htmlContent') {
         // Update the current page content with the modified HTML
         const cleanedHtml = cleanVisualEditorHtml(event.data.data.html);
@@ -1975,6 +2068,34 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     };
     
     toast(messages[command]);
+  };
+  
+  // Add new element function
+  const addNewElement = (elementType: string, content?: string) => {
+    if (!iframeRef.current?.contentWindow) return;
+    iframeRef.current.contentWindow.postMessage({ 
+      type: 'addElement', 
+      elementType,
+      content 
+    }, '*');
+    setHasUnsavedChanges(true);
+    
+    const elementNames: Record<string, string> = {
+      text: 'Text Block',
+      heading: 'Heading',
+      image: 'Image',
+      button: 'Button',
+      container: 'Container',
+      card: 'Card',
+      icon: 'Icon',
+      divider: 'Divider',
+      spacer: 'Spacer',
+    };
+    
+    toast({
+      title: `${elementNames[elementType] || 'Element'} Added`,
+      description: "Drag it to position, then edit its properties.",
+    });
   };
   
   // Store the last selected element's xpath for persistent add-similar functionality
@@ -4303,6 +4424,55 @@ Generated by Avallon - ${new Date().toISOString()}
                     )}
                   </div>
                   
+                  {/* Quick Add Elements */}
+                  <div className={`px-6 py-3 border-t ${isLight ? 'border-slate-200' : 'border-panel-border'}`}>
+                    <h4 className={`text-[10px] font-semibold uppercase tracking-wider mb-2 ${isLight ? 'text-slate-400' : 'text-gray-500'}`}>Quick Add</h4>
+                    <div className="flex flex-wrap gap-1">
+                      <button
+                        onClick={() => addNewElement('text')}
+                        className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-colors ${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border text-gray-400'}`}
+                      >
+                        <span className="material-symbols-outlined text-[12px]">text_fields</span>
+                        Text
+                      </button>
+                      <button
+                        onClick={() => addNewElement('image')}
+                        className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-colors ${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border text-gray-400'}`}
+                      >
+                        <span className="material-symbols-outlined text-[12px]">image</span>
+                        Image
+                      </button>
+                      <button
+                        onClick={() => addNewElement('button')}
+                        className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-colors ${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border text-gray-400'}`}
+                      >
+                        <span className="material-symbols-outlined text-[12px]">smart_button</span>
+                        Button
+                      </button>
+                      <button
+                        onClick={() => addNewElement('heading')}
+                        className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-colors ${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border text-gray-400'}`}
+                      >
+                        <span className="material-symbols-outlined text-[12px]">title</span>
+                        Heading
+                      </button>
+                      <button
+                        onClick={() => addNewElement('container')}
+                        className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-colors ${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border text-gray-400'}`}
+                      >
+                        <span className="material-symbols-outlined text-[12px]">dashboard</span>
+                        Box
+                      </button>
+                      <button
+                        onClick={() => addNewElement('card')}
+                        className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-colors ${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border text-gray-400'}`}
+                      >
+                        <span className="material-symbols-outlined text-[12px]">crop_portrait</span>
+                        Card
+                      </button>
+                    </div>
+                  </div>
+                  
                   {/* AI Assist Micro-tool */}
                   <div className="p-4 border-t border-panel-border bg-surface-dark/50">
                     <div className="flex items-center justify-between gap-2 mb-2">
@@ -4362,15 +4532,107 @@ Generated by Avallon - ${new Date().toISOString()}
                   </div>
                 </div>
               ) : (
-                <div className="flex-1 flex items-center justify-center px-6">
-                  <div className="text-center">
-                    <div className="size-16 rounded-full bg-surface-dark border border-panel-border flex items-center justify-center mx-auto mb-4">
-                      <span className="material-symbols-outlined text-[32px] text-gray-500">touch_app</span>
+                <div className="flex-1 overflow-y-auto">
+                  {/* Add Elements Panel */}
+                  <div className={`px-6 py-4 border-b ${isLight ? 'border-slate-200' : 'border-panel-border'}`}>
+                    <h3 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isLight ? 'text-slate-700' : 'text-gray-200'}`}>
+                      <span className="material-symbols-outlined text-[18px] text-primary">add_box</span>
+                      Add Elements
+                    </h3>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() => addNewElement('text')}
+                        className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors ${isLight ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border border-panel-border text-gray-300'}`}
+                      >
+                        <span className="material-symbols-outlined text-[20px]">text_fields</span>
+                        <span className="text-[10px]">Text</span>
+                      </button>
+                      <button
+                        onClick={() => addNewElement('heading')}
+                        className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors ${isLight ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border border-panel-border text-gray-300'}`}
+                      >
+                        <span className="material-symbols-outlined text-[20px]">title</span>
+                        <span className="text-[10px]">Heading</span>
+                      </button>
+                      <button
+                        onClick={() => addNewElement('image')}
+                        className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors ${isLight ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border border-panel-border text-gray-300'}`}
+                      >
+                        <span className="material-symbols-outlined text-[20px]">image</span>
+                        <span className="text-[10px]">Image</span>
+                      </button>
+                      <button
+                        onClick={() => addNewElement('button')}
+                        className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors ${isLight ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border border-panel-border text-gray-300'}`}
+                      >
+                        <span className="material-symbols-outlined text-[20px]">smart_button</span>
+                        <span className="text-[10px]">Button</span>
+                      </button>
+                      <button
+                        onClick={() => addNewElement('container')}
+                        className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors ${isLight ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border border-panel-border text-gray-300'}`}
+                      >
+                        <span className="material-symbols-outlined text-[20px]">dashboard</span>
+                        <span className="text-[10px]">Container</span>
+                      </button>
+                      <button
+                        onClick={() => addNewElement('card')}
+                        className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors ${isLight ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border border-panel-border text-gray-300'}`}
+                      >
+                        <span className="material-symbols-outlined text-[20px]">crop_portrait</span>
+                        <span className="text-[10px]">Card</span>
+                      </button>
+                      <button
+                        onClick={() => addNewElement('divider')}
+                        className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors ${isLight ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border border-panel-border text-gray-300'}`}
+                      >
+                        <span className="material-symbols-outlined text-[20px]">horizontal_rule</span>
+                        <span className="text-[10px]">Divider</span>
+                      </button>
+                      <button
+                        onClick={() => addNewElement('spacer')}
+                        className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors ${isLight ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border border-panel-border text-gray-300'}`}
+                      >
+                        <span className="material-symbols-outlined text-[20px]">expand</span>
+                        <span className="text-[10px]">Spacer</span>
+                      </button>
+                      <button
+                        onClick={() => addNewElement('icon')}
+                        className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors ${isLight ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border border-panel-border text-gray-300'}`}
+                      >
+                        <span className="material-symbols-outlined text-[20px]">star</span>
+                        <span className="text-[10px]">Icon</span>
+                      </button>
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-300 mb-2">Select an Element</h3>
-                    <p className="text-sm text-gray-500 max-w-xs">
-                      Click on any element in the preview to edit its properties, styles, and content.
-                    </p>
+                  </div>
+                  
+                  {/* Instructions */}
+                  <div className="px-6 py-4">
+                    <div className={`p-4 rounded-lg ${isLight ? 'bg-slate-50 border border-slate-200' : 'bg-surface-dark/50 border border-panel-border'}`}>
+                      <div className="flex items-start gap-3">
+                        <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                          <span className="material-symbols-outlined text-primary text-[20px]">touch_app</span>
+                        </div>
+                        <div>
+                          <h4 className={`font-semibold mb-1 ${isLight ? 'text-slate-700' : 'text-gray-200'}`}>Click to Edit</h4>
+                          <p className={`text-sm ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
+                            Click any element in the preview to edit its properties, or add new elements above.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className={`mt-4 p-4 rounded-lg ${isLight ? 'bg-blue-50 border border-blue-200' : 'bg-blue-900/20 border border-blue-800'}`}>
+                      <h4 className={`font-semibold mb-2 flex items-center gap-2 ${isLight ? 'text-blue-700' : 'text-blue-300'}`}>
+                        <span className="material-symbols-outlined text-[16px]">lightbulb</span>
+                        Tips
+                      </h4>
+                      <ul className={`text-sm space-y-1 ${isLight ? 'text-blue-600' : 'text-blue-300/80'}`}>
+                        <li>• Drag elements freely to position them</li>
+                        <li>• Hold <kbd className="px-1 py-0.5 bg-blue-900/30 rounded text-[10px]">Alt</kbd> to snap/reorder</li>
+                        <li>• Use layer controls to arrange overlapping elements</li>
+                      </ul>
+                    </div>
                   </div>
                 </div>
               )}
