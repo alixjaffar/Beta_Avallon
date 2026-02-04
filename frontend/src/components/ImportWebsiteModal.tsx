@@ -26,6 +26,8 @@ interface ImportWebsiteModalProps {
   // Widget management
   savedScripts?: SavedScript[];
   onRemoveScript?: (scriptId: string) => void;
+  onCleanupLegacyWidgets?: () => void;
+  hasLegacyWidgets?: boolean;
 }
 
 /**
@@ -103,6 +105,8 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
   isLight = false,
   savedScripts = [],
   onRemoveScript,
+  onCleanupLegacyWidgets,
+  hasLegacyWidgets = false,
 }) => {
   const [activeTab, setActiveTab] = useState<'paste' | 'url' | 'folder'>('url'); // Default to URL tab
   const [pastedContent, setPastedContent] = useState('');
@@ -825,42 +829,68 @@ ${jsContent}
         {/* Content */}
         <div className="px-6 py-4 overflow-y-auto flex-1">
           {/* Existing Imported Widgets Section */}
-          {savedScripts.length > 0 && (
+          {(savedScripts.length > 0 || hasLegacyWidgets) && (
             <div className={`mb-6 p-4 rounded-lg border ${isLight ? 'bg-amber-50 border-amber-200' : 'bg-amber-500/10 border-amber-500/30'}`}>
               <div className="flex items-center justify-between mb-3">
                 <h3 className={`text-sm font-semibold flex items-center gap-2 ${isLight ? 'text-amber-700' : 'text-amber-400'}`}>
                   <span className="material-symbols-outlined text-lg">widgets</span>
-                  Active Imported Widgets ({savedScripts.length})
+                  Active Imported Widgets {savedScripts.length > 0 ? `(${savedScripts.length})` : ''}
                 </h3>
               </div>
-              <div className="space-y-2">
-                {savedScripts.map((script) => (
-                  <div 
-                    key={script.id} 
-                    className={`flex items-center justify-between p-3 rounded-lg ${isLight ? 'bg-white border border-amber-200' : 'bg-surface-dark border border-panel-border'}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className={`material-symbols-outlined text-lg ${isLight ? 'text-amber-600' : 'text-amber-400'}`}>smart_toy</span>
-                      <div>
-                        <p className={`font-medium text-sm ${isLight ? 'text-slate-800' : 'text-white'}`}>{script.name}</p>
-                        <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>
-                          Applies to: {script.applyTo === 'all' ? 'All pages' : script.applyTo}
-                        </p>
-                      </div>
+              
+              {/* Legacy widgets cleanup button */}
+              {hasLegacyWidgets && onCleanupLegacyWidgets && (
+                <div className={`mb-3 p-3 rounded-lg ${isLight ? 'bg-red-50 border border-red-200' : 'bg-red-900/20 border border-red-500/30'}`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className={`text-sm font-medium ${isLight ? 'text-red-700' : 'text-red-400'}`}>
+                        Legacy Widget Detected
+                      </p>
+                      <p className={`text-xs ${isLight ? 'text-red-600' : 'text-red-400/70'}`}>
+                        Found old injected widget code. Click to remove it.
+                      </p>
                     </div>
-                    {onRemoveScript && (
-                      <button
-                        onClick={() => onRemoveScript(script.id)}
-                        className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isLight ? 'bg-red-100 hover:bg-red-200 text-red-600' : 'bg-red-900/30 hover:bg-red-900/50 text-red-400'}`}
-                        title="Remove widget"
-                      >
-                        <span className="material-symbols-outlined text-base">delete</span>
-                        <span>Delete</span>
-                      </button>
-                    )}
+                    <button
+                      onClick={onCleanupLegacyWidgets}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isLight ? 'bg-red-100 hover:bg-red-200 text-red-600' : 'bg-red-600 hover:bg-red-500 text-white'}`}
+                    >
+                      <span className="material-symbols-outlined text-base">delete_sweep</span>
+                      <span>Remove Legacy Widget</span>
+                    </button>
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
+              
+              {savedScripts.length > 0 && (
+                <div className="space-y-2">
+                  {savedScripts.map((script) => (
+                    <div 
+                      key={script.id} 
+                      className={`flex items-center justify-between p-3 rounded-lg ${isLight ? 'bg-white border border-amber-200' : 'bg-surface-dark border border-panel-border'}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className={`material-symbols-outlined text-lg ${isLight ? 'text-amber-600' : 'text-amber-400'}`}>smart_toy</span>
+                        <div>
+                          <p className={`font-medium text-sm ${isLight ? 'text-slate-800' : 'text-white'}`}>{script.name}</p>
+                          <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>
+                            Applies to: {script.applyTo === 'all' ? 'All pages' : script.applyTo}
+                          </p>
+                        </div>
+                      </div>
+                      {onRemoveScript && (
+                        <button
+                          onClick={() => onRemoveScript(script.id)}
+                          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isLight ? 'bg-red-100 hover:bg-red-200 text-red-600' : 'bg-red-900/30 hover:bg-red-900/50 text-red-400'}`}
+                          title="Remove widget"
+                        >
+                          <span className="material-symbols-outlined text-base">delete</span>
+                          <span>Delete</span>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
               <p className={`text-xs mt-3 ${isLight ? 'text-amber-600' : 'text-amber-400/70'}`}>
                 💡 Delete old widgets before adding new ones. Re-publish after changes.
               </p>

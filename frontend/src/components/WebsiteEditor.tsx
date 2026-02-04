@@ -1870,6 +1870,16 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       return;
     }
     
+    // Generate unique ID for this injection
+    const injectionId = `inject_${Date.now()}`;
+    const widgetName = code.js?.includes('intercom') ? 'Intercom Widget' :
+                       code.js?.includes('drift') ? 'Drift Chat' :
+                       code.js?.includes('crisp') ? 'Crisp Chat' :
+                       code.js?.includes('tidio') ? 'Tidio Chat' :
+                       code.js?.includes('hubspot') ? 'HubSpot Chat' :
+                       code.js?.includes('zendesk') ? 'Zendesk Widget' :
+                       'Imported Widget';
+    
     const updatedContent = { ...currentWebsiteContent };
     let injectedCount = 0;
     
@@ -1877,9 +1887,9 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       let html = updatedContent[pageName];
       if (typeof html !== 'string') continue;
       
-      // Inject CSS into <head>
+      // Inject CSS into <head> with unique marker
       if (code.css) {
-        const styleTag = `<style>\n/* === Injected Widget Styles === */\n${code.css}\n</style>`;
+        const styleTag = `<style data-injection-id="${injectionId}">\n/* === Injected Widget Styles [${injectionId}] === */\n${code.css}\n</style>`;
         if (html.includes('</head>')) {
           html = html.replace('</head>', `${styleTag}\n</head>`);
         } else if (html.includes('<body')) {
@@ -1887,9 +1897,9 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         }
       }
       
-      // Inject HTML before </body>
+      // Inject HTML before </body> with unique marker
       if (code.html) {
-        const htmlBlock = `\n<!-- === Injected Widget === -->\n${code.html}\n`;
+        const htmlBlock = `\n<!-- INJECTION_START[${injectionId}] -->\n${code.html}\n<!-- INJECTION_END[${injectionId}] -->\n`;
         if (html.includes('</body>')) {
           html = html.replace('</body>', `${htmlBlock}</body>`);
         } else {
@@ -1897,9 +1907,9 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         }
       }
       
-      // Inject JS before </body>
+      // Inject JS before </body> with unique marker
       if (code.js) {
-        const scriptTag = `<script>\n// === Injected Widget Script ===\n${code.js}\n</script>`;
+        const scriptTag = `<script data-injection-id="${injectionId}">\n// === Injected Widget Script [${injectionId}] ===\n${code.js}\n</script>`;
         if (html.includes('</body>')) {
           html = html.replace('</body>', `${scriptTag}\n</body>`);
         } else {
@@ -1910,6 +1920,17 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       updatedContent[pageName] = html;
       injectedCount++;
     }
+    
+    // Save injection record to _customScripts for tracking
+    const newScript = {
+      id: injectionId,
+      code: `CSS: ${code.css?.length || 0} chars, JS: ${code.js?.length || 0} chars, HTML: ${code.html?.length || 0} chars`,
+      applyTo: 'all' as const,
+      name: widgetName,
+    };
+    const updatedScripts = [...savedScripts, newScript];
+    updatedContent._customScripts = updatedScripts;
+    setSavedScripts(updatedScripts);
     
     setCurrentWebsiteContent(updatedContent);
     
@@ -1954,7 +1975,7 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     }
   }, [currentWebsiteContent?._customScripts]);
   
-  // Remove script
+  // Remove script/widget (also removes injected code from all pages)
   const handleRemoveScript = async (scriptId: string) => {
     const updatedScripts = savedScripts.filter(s => s.id !== scriptId);
     setSavedScripts(updatedScripts);
@@ -1963,6 +1984,33 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       ...currentWebsiteContent,
       _customScripts: updatedScripts,
     };
+    
+    // If this is an injection (starts with 'inject_'), remove injected code from all pages
+    if (scriptId.startsWith('inject_')) {
+      const existingPages = Object.keys(updatedContent).filter(
+        key => key.endsWith('.html') && !key.startsWith('_')
+      );
+      
+      for (const pageName of existingPages) {
+        let html = updatedContent[pageName];
+        if (typeof html !== 'string') continue;
+        
+        // Remove injected CSS
+        const cssPattern = new RegExp(`<style[^>]*data-injection-id="${scriptId}"[^>]*>[\\s\\S]*?</style>\\n?`, 'gi');
+        html = html.replace(cssPattern, '');
+        
+        // Remove injected HTML
+        const htmlPattern = new RegExp(`\\n?<!-- INJECTION_START\\[${scriptId}\\] -->[\\s\\S]*?<!-- INJECTION_END\\[${scriptId}\\] -->\\n?`, 'gi');
+        html = html.replace(htmlPattern, '');
+        
+        // Remove injected JS
+        const jsPattern = new RegExp(`<script[^>]*data-injection-id="${scriptId}"[^>]*>[\\s\\S]*?</script>\\n?`, 'gi');
+        html = html.replace(jsPattern, '');
+        
+        updatedContent[pageName] = html;
+      }
+    }
+    
     setCurrentWebsiteContent(updatedContent);
     
     try {
@@ -1972,10 +2020,83 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       });
       toast({ 
         title: "Widget Removed",
-        description: "Re-publish your site to apply changes.",
+        description: "Widget deleted from all pages. Re-publish to apply changes.",
       });
     } catch (error) {
       console.error('Failed to remove script:', error);
+    }
+  };
+  
+  // Check for legacy injected widgets (without tracking)
+  const hasLegacyWidgets = React.useMemo(() => {
+    const existingPages = Object.keys(currentWebsiteContent).filter(
+      key => key.endsWith('.html') && !key.startsWith('_')
+    );
+    
+    for (const pageName of existingPages) {
+      const html = currentWebsiteContent[pageName];
+      if (typeof html !== 'string') continue;
+      
+      // Check for old injection markers without IDs
+      if (html.includes('/* === Injected Widget Styles === */') ||
+          html.includes('<!-- === Injected Widget === -->') ||
+          html.includes('// === Injected Widget Script ===')) {
+        return true;
+      }
+    }
+    return false;
+  }, [currentWebsiteContent]);
+  
+  // Clean up legacy widgets (remove old injected code without tracking)
+  const handleCleanupLegacyWidgets = async () => {
+    const existingPages = Object.keys(currentWebsiteContent).filter(
+      key => key.endsWith('.html') && !key.startsWith('_')
+    );
+    
+    const updatedContent = { ...currentWebsiteContent };
+    let cleanedCount = 0;
+    
+    for (const pageName of existingPages) {
+      let html = updatedContent[pageName];
+      if (typeof html !== 'string') continue;
+      
+      const originalLength = html.length;
+      
+      // Remove legacy injected CSS (without ID markers)
+      html = html.replace(/<style>\n?\/\* === Injected Widget Styles === \*\/[\s\S]*?<\/style>\n?/gi, '');
+      
+      // Remove legacy injected HTML
+      html = html.replace(/\n?<!-- === Injected Widget === -->[\s\S]*?(?=<\/body>|$)/gi, '');
+      
+      // Remove legacy injected JS
+      html = html.replace(/<script>\n?\/\/ === Injected Widget Script ===[\s\S]*?<\/script>\n?/gi, '');
+      
+      if (html.length !== originalLength) {
+        cleanedCount++;
+      }
+      
+      updatedContent[pageName] = html;
+    }
+    
+    setCurrentWebsiteContent(updatedContent);
+    
+    // Save to backend
+    try {
+      await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ websiteContent: updatedContent }),
+      });
+      
+      toast({
+        title: "Legacy Widget Removed!",
+        description: `Cleaned up old widget from ${cleanedCount} page${cleanedCount > 1 ? 's' : ''}. Re-publish to apply changes.`,
+      });
+    } catch (error) {
+      console.error('Error cleaning up:', error);
+      toast({
+        title: "Cleaned Locally",
+        description: "Widget removed. Click Publish to deploy.",
+      });
     }
   };
   
@@ -3791,6 +3912,8 @@ Generated by Avallon - ${new Date().toISOString()}
         isLight={isLight}
         savedScripts={savedScripts}
         onRemoveScript={handleRemoveScript}
+        hasLegacyWidgets={hasLegacyWidgets}
+        onCleanupLegacyWidgets={handleCleanupLegacyWidgets}
       />
       
       {/* Add New Page Modal */}
