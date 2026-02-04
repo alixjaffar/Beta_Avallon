@@ -8,6 +8,13 @@ interface ImportedPage {
   url?: string;
 }
 
+interface SavedScript {
+  id: string;
+  code: string;
+  applyTo: 'all' | string;
+  name: string;
+}
+
 interface ImportWebsiteModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -16,6 +23,9 @@ interface ImportWebsiteModalProps {
   onInjectToAllPages?: (code: { html: string; css: string; js: string }) => void;
   existingPages?: string[];
   isLight?: boolean;
+  // Widget management
+  savedScripts?: SavedScript[];
+  onRemoveScript?: (scriptId: string) => void;
 }
 
 /**
@@ -91,6 +101,8 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
   onInjectToAllPages,
   existingPages = [],
   isLight = false,
+  savedScripts = [],
+  onRemoveScript,
 }) => {
   const [activeTab, setActiveTab] = useState<'paste' | 'url' | 'folder'>('url'); // Default to URL tab
   const [pastedContent, setPastedContent] = useState('');
@@ -812,6 +824,49 @@ ${jsContent}
 
         {/* Content */}
         <div className="px-6 py-4 overflow-y-auto flex-1">
+          {/* Existing Imported Widgets Section */}
+          {savedScripts.length > 0 && (
+            <div className={`mb-6 p-4 rounded-lg border ${isLight ? 'bg-amber-50 border-amber-200' : 'bg-amber-500/10 border-amber-500/30'}`}>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className={`text-sm font-semibold flex items-center gap-2 ${isLight ? 'text-amber-700' : 'text-amber-400'}`}>
+                  <span className="material-symbols-outlined text-lg">widgets</span>
+                  Active Imported Widgets ({savedScripts.length})
+                </h3>
+              </div>
+              <div className="space-y-2">
+                {savedScripts.map((script) => (
+                  <div 
+                    key={script.id} 
+                    className={`flex items-center justify-between p-3 rounded-lg ${isLight ? 'bg-white border border-amber-200' : 'bg-surface-dark border border-panel-border'}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className={`material-symbols-outlined text-lg ${isLight ? 'text-amber-600' : 'text-amber-400'}`}>smart_toy</span>
+                      <div>
+                        <p className={`font-medium text-sm ${isLight ? 'text-slate-800' : 'text-white'}`}>{script.name}</p>
+                        <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>
+                          Applies to: {script.applyTo === 'all' ? 'All pages' : script.applyTo}
+                        </p>
+                      </div>
+                    </div>
+                    {onRemoveScript && (
+                      <button
+                        onClick={() => onRemoveScript(script.id)}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isLight ? 'bg-red-100 hover:bg-red-200 text-red-600' : 'bg-red-900/30 hover:bg-red-900/50 text-red-400'}`}
+                        title="Remove widget"
+                      >
+                        <span className="material-symbols-outlined text-base">delete</span>
+                        <span>Delete</span>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <p className={`text-xs mt-3 ${isLight ? 'text-amber-600' : 'text-amber-400/70'}`}>
+                💡 Delete old widgets before adding new ones. Re-publish after changes.
+              </p>
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 p-4 rounded-lg bg-red-500/10 border border-red-500/30">
               <div className="flex items-start gap-2">
