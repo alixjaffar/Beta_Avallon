@@ -53,6 +53,13 @@ interface SelectedElement {
     justifyContent: string;
     alignItems: string;
     gap: string;
+    // Position properties for Canva-like editing
+    position: string;
+    top: string;
+    left: string;
+    right: string;
+    bottom: string;
+    zIndex: string;
   };
   content: string;
   rect: { x: number; y: number; width: number; height: number };
@@ -407,7 +414,14 @@ function getVisualEditorScript(): string {
       flexDirection: computed.flexDirection,
       justifyContent: computed.justifyContent,
       alignItems: computed.alignItems,
-      gap: computed.gap
+      gap: computed.gap,
+      // Position properties for Canva-like editing
+      position: computed.position,
+      top: computed.top,
+      left: computed.left,
+      right: computed.right,
+      bottom: computed.bottom,
+      zIndex: computed.zIndex
     };
   }
   
@@ -461,6 +475,11 @@ function getVisualEditorScript(): string {
     window.parent.postMessage({ type: 'elementSelected', data: data }, '*');
   }
   
+  // Track if we're in free-position mode (Alt key held)
+  let isFreePositionMode = false;
+  let coordsTooltip = null;
+  let containerHighlight = null;
+  
   function startDrag(e) {
     if (!selectedElement || isResizing) return;
     
@@ -469,6 +488,7 @@ function getVisualEditorScript(): string {
     if (tag === 'html' || tag === 'body' || tag === 'head') return;
     
     isDragging = true;
+    isFreePositionMode = e.altKey; // Hold Alt for free positioning mode
     dragStart = { x: e.clientX, y: e.clientY };
     const rect = selectedElement.getBoundingClientRect();
     elementStart = { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
@@ -483,6 +503,20 @@ function getVisualEditorScript(): string {
     dragClone.id = 'avallon-drag-clone';
     dragClone.style.cssText = 'position:fixed;pointer-events:none;opacity:0.8;z-index:100002;width:' + rect.width + 'px;max-width:300px;left:' + rect.left + 'px;top:' + rect.top + 'px;transform:scale(0.9);box-shadow:0 10px 40px rgba(99,102,241,0.4);border-radius:8px;overflow:hidden;';
     document.body.appendChild(dragClone);
+    
+    // Create coordinates tooltip
+    coordsTooltip = document.createElement('div');
+    coordsTooltip.id = 'avallon-coords-tooltip';
+    coordsTooltip.style.cssText = 'position:fixed;background:#1e1e2e;color:#fff;padding:4px 8px;border-radius:4px;font-size:11px;font-family:monospace;z-index:100004;pointer-events:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+    document.body.appendChild(coordsTooltip);
+    
+    // Create container highlight for free position mode
+    if (isFreePositionMode) {
+      containerHighlight = document.createElement('div');
+      containerHighlight.id = 'avallon-container-highlight';
+      containerHighlight.style.cssText = 'position:absolute;border:2px dashed #22c55e;background:rgba(34,197,94,0.05);z-index:99997;pointer-events:none;border-radius:4px;';
+      document.body.appendChild(containerHighlight);
+    }
     
     // Dim the original
     selectedElement.style.opacity = '0.3';
@@ -507,52 +541,125 @@ function getVisualEditorScript(): string {
   }
   
   function handleMouseMove(e) {
+    // Update free position mode based on Alt key (can toggle during drag)
+    if (isDragging) {
+      isFreePositionMode = e.altKey;
+    }
+    
     if (isDragging && selectedElement && dragClone) {
       // Move the drag clone
       dragClone.style.left = (e.clientX - elementStart.width / 2) + 'px';
       dragClone.style.top = (e.clientY - 20) + 'px';
       
-      // Find potential drop target
+      // Find potential drop target/container
       dragClone.style.display = 'none'; // Hide clone to get element underneath
+      if (coordsTooltip) coordsTooltip.style.display = 'none';
+      if (containerHighlight) containerHighlight.style.display = 'none';
       const elementBelow = document.elementFromPoint(e.clientX, e.clientY);
       dragClone.style.display = 'block';
+      if (coordsTooltip) coordsTooltip.style.display = 'block';
       
-      if (elementBelow && elementBelow !== selectedElement && !elementBelow.id?.startsWith('avallon-') && !elementBelow.className?.includes?.('avallon-')) {
-        // Find the nearest sibling-level element
-        let target = elementBelow;
-        
-        // Skip text nodes and inline elements, find block-level siblings
-        while (target && target !== document.body) {
-          const display = window.getComputedStyle(target).display;
-          if (display === 'block' || display === 'flex' || display === 'grid' || target.tagName.toLowerCase() === 'li' || target.tagName.toLowerCase() === 'section' || target.tagName.toLowerCase() === 'div') {
-            break;
+      if (isFreePositionMode) {
+        // FREE POSITION MODE: Place element at exact X/Y within a container
+        if (elementBelow && elementBelow !== selectedElement && !elementBelow.id?.startsWith('avallon-') && !elementBelow.className?.includes?.('avallon-')) {
+          // Find the nearest container element
+          let container = elementBelow;
+          while (container && container !== document.body) {
+            const display = window.getComputedStyle(container).display;
+            const tag = container.tagName.toLowerCase();
+            if (display === 'block' || display === 'flex' || display === 'grid' || tag === 'section' || tag === 'div' || tag === 'header' || tag === 'main' || tag === 'article') {
+              break;
+            }
+            container = container.parentElement;
           }
-          target = target.parentElement;
+          
+          if (container && container !== selectedElement && container !== document.body && container !== document.documentElement) {
+            dropTarget = container;
+            dropPosition = 'free'; // Special marker for free positioning
+            
+            // Calculate position relative to container
+            const containerRect = container.getBoundingClientRect();
+            const relX = Math.round(e.clientX - containerRect.left);
+            const relY = Math.round(e.clientY - containerRect.top);
+            
+            // Store calculated position for drop
+            dropTarget._freeX = relX;
+            dropTarget._freeY = relY;
+            
+            // Update coordinates tooltip
+            if (coordsTooltip) {
+              coordsTooltip.textContent = 'X: ' + relX + 'px, Y: ' + relY + 'px (Free Mode)';
+              coordsTooltip.style.left = (e.clientX + 15) + 'px';
+              coordsTooltip.style.top = (e.clientY - 30) + 'px';
+            }
+            
+            // Show container highlight
+            if (!containerHighlight) {
+              containerHighlight = document.createElement('div');
+              containerHighlight.id = 'avallon-container-highlight';
+              document.body.appendChild(containerHighlight);
+            }
+            const absRect = getAbsoluteRect(container);
+            containerHighlight.style.cssText = 'position:absolute;border:2px dashed #22c55e;background:rgba(34,197,94,0.08);z-index:99997;pointer-events:none;border-radius:4px;display:block;left:' + absRect.left + 'px;top:' + absRect.top + 'px;width:' + absRect.width + 'px;height:' + absRect.height + 'px;';
+            
+            // Hide sibling drop indicator
+            dropIndicator.style.display = 'none';
+          } else {
+            dropTarget = null;
+            if (containerHighlight) containerHighlight.style.display = 'none';
+          }
+        } else {
+          dropTarget = null;
+          if (containerHighlight) containerHighlight.style.display = 'none';
+        }
+      } else {
+        // SIBLING REORDER MODE (original behavior)
+        if (containerHighlight) containerHighlight.style.display = 'none';
+        
+        // Update coordinates tooltip for sibling mode
+        if (coordsTooltip) {
+          coordsTooltip.textContent = 'Hold Alt for free position mode';
+          coordsTooltip.style.left = (e.clientX + 15) + 'px';
+          coordsTooltip.style.top = (e.clientY - 30) + 'px';
         }
         
-        if (target && target !== selectedElement && target !== document.body && target !== document.documentElement) {
-          dropTarget = target;
+        if (elementBelow && elementBelow !== selectedElement && !elementBelow.id?.startsWith('avallon-') && !elementBelow.className?.includes?.('avallon-')) {
+          // Find the nearest sibling-level element
+          let target = elementBelow;
           
-          // Determine drop position (before or after)
-          const targetRect = target.getBoundingClientRect();
-          const mouseY = e.clientY;
-          const middleY = targetRect.top + targetRect.height / 2;
-          dropPosition = mouseY < middleY ? 'before' : 'after';
+          // Skip text nodes and inline elements, find block-level siblings
+          while (target && target !== document.body) {
+            const display = window.getComputedStyle(target).display;
+            if (display === 'block' || display === 'flex' || display === 'grid' || target.tagName.toLowerCase() === 'li' || target.tagName.toLowerCase() === 'section' || target.tagName.toLowerCase() === 'div') {
+              break;
+            }
+            target = target.parentElement;
+          }
           
-          // Show drop indicator
-          const absRect = getAbsoluteRect(target);
-          if (dropPosition === 'before') {
-            dropIndicator.style.cssText = 'position:absolute;background:#6366f1;z-index:100001;display:block;pointer-events:none;border-radius:2px;left:' + absRect.left + 'px;top:' + (absRect.top - 2) + 'px;width:' + absRect.width + 'px;height:4px;';
+          if (target && target !== selectedElement && target !== document.body && target !== document.documentElement) {
+            dropTarget = target;
+            
+            // Determine drop position (before or after)
+            const targetRect = target.getBoundingClientRect();
+            const mouseY = e.clientY;
+            const middleY = targetRect.top + targetRect.height / 2;
+            dropPosition = mouseY < middleY ? 'before' : 'after';
+            
+            // Show drop indicator
+            const absRect = getAbsoluteRect(target);
+            if (dropPosition === 'before') {
+              dropIndicator.style.cssText = 'position:absolute;background:#6366f1;z-index:100001;display:block;pointer-events:none;border-radius:2px;left:' + absRect.left + 'px;top:' + (absRect.top - 2) + 'px;width:' + absRect.width + 'px;height:4px;';
+            } else {
+              dropIndicator.style.cssText = 'position:absolute;background:#6366f1;z-index:100001;display:block;pointer-events:none;border-radius:2px;left:' + absRect.left + 'px;top:' + (absRect.bottom - 2) + 'px;width:' + absRect.width + 'px;height:4px;';
+            }
           } else {
-            dropIndicator.style.cssText = 'position:absolute;background:#6366f1;z-index:100001;display:block;pointer-events:none;border-radius:2px;left:' + absRect.left + 'px;top:' + (absRect.bottom - 2) + 'px;width:' + absRect.width + 'px;height:4px;';
+            dropTarget = null;
+            dropIndicator.style.display = 'none';
           }
         } else {
           dropTarget = null;
           dropIndicator.style.display = 'none';
         }
-      } else {
-        dropTarget = null;
-        dropIndicator.style.display = 'none';
       }
     }
     
@@ -590,6 +697,18 @@ function getVisualEditorScript(): string {
         dragClone = null;
       }
       
+      // Remove coordinates tooltip
+      if (coordsTooltip) {
+        coordsTooltip.remove();
+        coordsTooltip = null;
+      }
+      
+      // Remove container highlight
+      if (containerHighlight) {
+        containerHighlight.remove();
+        containerHighlight = null;
+      }
+      
       // Hide drop indicator
       if (dropIndicator) {
         dropIndicator.style.display = 'none';
@@ -598,7 +717,33 @@ function getVisualEditorScript(): string {
       // Perform the drop if we have a valid target
       if (dropTarget && dropPosition) {
         try {
-          if (dropPosition === 'before') {
+          if (dropPosition === 'free') {
+            // FREE POSITION MODE: Set absolute positioning
+            const freeX = dropTarget._freeX || 0;
+            const freeY = dropTarget._freeY || 0;
+            
+            // Make sure the container is positioned (relative if static)
+            const containerPos = window.getComputedStyle(dropTarget).position;
+            if (containerPos === 'static') {
+              dropTarget.style.position = 'relative';
+            }
+            
+            // Move element into the container if not already there
+            if (selectedElement.parentElement !== dropTarget) {
+              dropTarget.appendChild(selectedElement);
+            }
+            
+            // Apply absolute positioning
+            selectedElement.style.position = 'absolute';
+            selectedElement.style.left = freeX + 'px';
+            selectedElement.style.top = freeY + 'px';
+            selectedElement.style.margin = '0'; // Clear margins for absolute positioning
+            
+            // Clean up temp properties
+            delete dropTarget._freeX;
+            delete dropTarget._freeY;
+            
+          } else if (dropPosition === 'before') {
             dropTarget.parentNode.insertBefore(selectedElement, dropTarget);
           } else {
             dropTarget.parentNode.insertBefore(selectedElement, dropTarget.nextSibling);
@@ -616,7 +761,8 @@ function getVisualEditorScript(): string {
             type: 'elementMoved', 
             data: { 
               xpath: getXPath(selectedElement),
-              message: 'Element moved successfully'
+              styles: getComputedStyles(selectedElement),
+              message: dropPosition === 'free' ? 'Element positioned freely' : 'Element moved successfully'
             } 
           }, '*');
         } catch (err) {
@@ -631,6 +777,7 @@ function getVisualEditorScript(): string {
       
       dropTarget = null;
       dropPosition = null;
+      isFreePositionMode = false;
     }
     
     if (isResizing && selectedElement) {
@@ -682,6 +829,62 @@ function getVisualEditorScript(): string {
       selectedElement = null;
       hideOverlay();
       window.parent.postMessage({ type: 'elementDeleted', data: { xpath: xpath } }, '*');
+    }
+    
+    // =====================================================
+    // LAYER CONTROLS: z-index manipulation
+    // =====================================================
+    if (e.data.type === 'bringToFront' && selectedElement) {
+      const parent = selectedElement.parentElement;
+      if (parent) {
+        // Find all positioned elements in the same container
+        const siblings = Array.from(parent.children);
+        let maxZ = 0;
+        siblings.forEach(s => {
+          const z = parseInt(window.getComputedStyle(s).zIndex) || 0;
+          if (z > maxZ) maxZ = z;
+        });
+        selectedElement.style.zIndex = (maxZ + 1).toString();
+        window.parent.postMessage({
+          type: 'layerChanged',
+          data: { xpath: getXPath(selectedElement), zIndex: maxZ + 1, action: 'bringToFront', styles: getComputedStyles(selectedElement) }
+        }, '*');
+      }
+    }
+    
+    if (e.data.type === 'sendToBack' && selectedElement) {
+      const parent = selectedElement.parentElement;
+      if (parent) {
+        const siblings = Array.from(parent.children);
+        let minZ = 0;
+        siblings.forEach(s => {
+          const z = parseInt(window.getComputedStyle(s).zIndex) || 0;
+          if (z < minZ) minZ = z;
+        });
+        selectedElement.style.zIndex = (minZ - 1).toString();
+        window.parent.postMessage({
+          type: 'layerChanged',
+          data: { xpath: getXPath(selectedElement), zIndex: minZ - 1, action: 'sendToBack', styles: getComputedStyles(selectedElement) }
+        }, '*');
+      }
+    }
+    
+    if (e.data.type === 'bringForward' && selectedElement) {
+      const currentZ = parseInt(window.getComputedStyle(selectedElement).zIndex) || 0;
+      selectedElement.style.zIndex = (currentZ + 1).toString();
+      window.parent.postMessage({
+        type: 'layerChanged',
+        data: { xpath: getXPath(selectedElement), zIndex: currentZ + 1, action: 'bringForward', styles: getComputedStyles(selectedElement) }
+      }, '*');
+    }
+    
+    if (e.data.type === 'sendBackward' && selectedElement) {
+      const currentZ = parseInt(window.getComputedStyle(selectedElement).zIndex) || 0;
+      selectedElement.style.zIndex = (currentZ - 1).toString();
+      window.parent.postMessage({
+        type: 'layerChanged',
+        data: { xpath: getXPath(selectedElement), zIndex: currentZ - 1, action: 'sendBackward', styles: getComputedStyles(selectedElement) }
+      }, '*');
     }
     
     if (e.data.type === 'duplicateElement' && selectedElement) {
@@ -1280,6 +1483,24 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         setHasUnsavedChanges(true);
       }
       
+      // Handle layer changes (z-index updates)
+      if (event.data?.type === 'layerChanged') {
+        setHasUnsavedChanges(true);
+        // Update selected element with new styles
+        if (event.data.data?.styles && selectedElement) {
+          setSelectedElement(prev => prev ? { ...prev, styles: event.data.data.styles } : null);
+        }
+      }
+      
+      // Handle element moved (both sibling reorder and free positioning)
+      if (event.data?.type === 'elementMoved') {
+        setHasUnsavedChanges(true);
+        // Update selected element with new styles if provided
+        if (event.data.data?.styles && selectedElement) {
+          setSelectedElement(prev => prev ? { ...prev, styles: event.data.data.styles } : null);
+        }
+      }
+      
       if (event.data?.type === 'htmlContent') {
         // Update the current page content with the modified HTML
         const cleanedHtml = cleanVisualEditorHtml(event.data.data.html);
@@ -1734,6 +1955,22 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       title: "Duplicated!",
       description: "Element duplicated. Edit the 'New' text to customize.",
     });
+  };
+  
+  // Layer control function for z-index manipulation
+  const sendLayerCommand = (command: 'bringToFront' | 'sendToBack' | 'bringForward' | 'sendBackward') => {
+    if (!iframeRef.current?.contentWindow || !selectedElement) return;
+    iframeRef.current.contentWindow.postMessage({ type: command }, '*');
+    setHasUnsavedChanges(true);
+    
+    const messages: Record<string, { title: string; description: string }> = {
+      bringToFront: { title: "Brought to Front", description: "Element is now on top of other elements." },
+      sendToBack: { title: "Sent to Back", description: "Element is now behind other elements." },
+      bringForward: { title: "Moved Forward", description: "Element moved one layer forward." },
+      sendBackward: { title: "Moved Backward", description: "Element moved one layer back." },
+    };
+    
+    toast(messages[command]);
   };
   
   // Store the last selected element's xpath for persistent add-similar functionality
@@ -3376,6 +3613,45 @@ Generated by Avallon - ${new Date().toISOString()}
                       Delete
                     </button>
                     </div>
+                    
+                    {/* Layer Controls */}
+                    <div className="mt-3">
+                      <h4 className={`text-[10px] font-semibold uppercase tracking-wider mb-2 ${isLight ? 'text-slate-400' : 'text-gray-500'}`}>Layer Order</h4>
+                      <div className="grid grid-cols-4 gap-1">
+                        <button
+                          onClick={() => sendLayerCommand('bringToFront')}
+                          className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-lg border text-[10px] transition-colors ${isLight ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border border-panel-border text-gray-400 hover:text-white'}`}
+                          title="Bring to Front"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">flip_to_front</span>
+                          Front
+                        </button>
+                        <button
+                          onClick={() => sendLayerCommand('bringForward')}
+                          className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-lg border text-[10px] transition-colors ${isLight ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border border-panel-border text-gray-400 hover:text-white'}`}
+                          title="Bring Forward"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">arrow_upward</span>
+                          Up
+                        </button>
+                        <button
+                          onClick={() => sendLayerCommand('sendBackward')}
+                          className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-lg border text-[10px] transition-colors ${isLight ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border border-panel-border text-gray-400 hover:text-white'}`}
+                          title="Send Backward"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">arrow_downward</span>
+                          Down
+                        </button>
+                        <button
+                          onClick={() => sendLayerCommand('sendToBack')}
+                          className={`flex flex-col items-center justify-center gap-0.5 p-2 rounded-lg border text-[10px] transition-colors ${isLight ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600' : 'bg-surface-dark hover:bg-panel-border border-panel-border text-gray-400 hover:text-white'}`}
+                          title="Send to Back"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">flip_to_back</span>
+                          Back
+                        </button>
+                      </div>
+                    </div>
                   </div>
                   
                   {/* Properties Tabs */}
@@ -3667,6 +3943,95 @@ Generated by Avallon - ${new Date().toISOString()}
                                 className="w-full"
                               />
                             </div>
+                          </div>
+                        </div>
+                        
+                        {/* Position & Layer */}
+                        <div className="space-y-3 pt-3 border-t border-panel-border">
+                          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Position & Layer</h3>
+                          
+                          {/* Position Type */}
+                          <div className="flex items-center justify-between">
+                            <label className="text-sm text-gray-300">Position</label>
+                            <select
+                              value={selectedElement.styles.position || 'static'}
+                              onChange={(e) => updateElementStyle('position', e.target.value)}
+                              className="px-2 py-1 bg-surface-dark border border-panel-border rounded text-sm text-white"
+                            >
+                              <option value="static">Static</option>
+                              <option value="relative">Relative</option>
+                              <option value="absolute">Absolute</option>
+                              <option value="fixed">Fixed</option>
+                            </select>
+                          </div>
+                          
+                          {/* Coordinates (only show when not static) */}
+                          {selectedElement.styles.position !== 'static' && (
+                            <div className="space-y-2">
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[10px] text-gray-400 mb-1 block">Top</label>
+                                  <input
+                                    type="text"
+                                    value={selectedElement.styles.top === 'auto' ? '' : selectedElement.styles.top || ''}
+                                    onChange={(e) => updateElementStyle('top', e.target.value || 'auto')}
+                                    placeholder="auto"
+                                    className="w-full px-2 py-1 bg-surface-dark border border-panel-border rounded text-xs text-white"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-gray-400 mb-1 block">Left</label>
+                                  <input
+                                    type="text"
+                                    value={selectedElement.styles.left === 'auto' ? '' : selectedElement.styles.left || ''}
+                                    onChange={(e) => updateElementStyle('left', e.target.value || 'auto')}
+                                    placeholder="auto"
+                                    className="w-full px-2 py-1 bg-surface-dark border border-panel-border rounded text-xs text-white"
+                                  />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[10px] text-gray-400 mb-1 block">Bottom</label>
+                                  <input
+                                    type="text"
+                                    value={selectedElement.styles.bottom === 'auto' ? '' : selectedElement.styles.bottom || ''}
+                                    onChange={(e) => updateElementStyle('bottom', e.target.value || 'auto')}
+                                    placeholder="auto"
+                                    className="w-full px-2 py-1 bg-surface-dark border border-panel-border rounded text-xs text-white"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-gray-400 mb-1 block">Right</label>
+                                  <input
+                                    type="text"
+                                    value={selectedElement.styles.right === 'auto' ? '' : selectedElement.styles.right || ''}
+                                    onChange={(e) => updateElementStyle('right', e.target.value || 'auto')}
+                                    placeholder="auto"
+                                    className="w-full px-2 py-1 bg-surface-dark border border-panel-border rounded text-xs text-white"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Z-Index */}
+                          <div className="flex items-center justify-between">
+                            <label className="text-sm text-gray-300">Z-Index</label>
+                            <input
+                              type="number"
+                              value={selectedElement.styles.zIndex === 'auto' ? '' : parseInt(selectedElement.styles.zIndex) || ''}
+                              onChange={(e) => updateElementStyle('zIndex', e.target.value || 'auto')}
+                              placeholder="auto"
+                              className="w-20 px-2 py-1 bg-surface-dark border border-panel-border rounded text-sm text-white text-center"
+                            />
+                          </div>
+                          
+                          {/* Quick tip for free positioning */}
+                          <div className="bg-primary/10 border border-primary/20 rounded-lg p-2">
+                            <p className="text-[10px] text-primary/80">
+                              <strong>Tip:</strong> Hold <kbd className="px-1 py-0.5 bg-primary/20 rounded text-[9px]">Alt</kbd> while dragging to freely position elements anywhere on the canvas.
+                            </p>
                           </div>
                         </div>
                       </>
