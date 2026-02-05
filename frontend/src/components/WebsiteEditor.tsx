@@ -372,25 +372,42 @@ function getVisualEditorScript(): string {
   }
   
   function createShapeOverlay() {
-    if (!selectedElement || shapeContainer) return;
+    console.log('createShapeOverlay called, selectedElement:', selectedElement, 'shapeContainer:', shapeContainer);
+    if (!selectedElement) {
+      console.warn('createShapeOverlay: No selected element');
+      return;
+    }
+    if (shapeContainer) {
+      console.log('createShapeOverlay: Container already exists, updating');
+      updateShapeOverlay();
+      return;
+    }
     
     const rect = selectedElement.getBoundingClientRect();
     const clipPath = window.getComputedStyle(selectedElement).clipPath;
+    console.log('Element rect:', rect, 'clipPath:', clipPath);
     shapePoints = parseClipPath(clipPath);
+    console.log('Parsed shapePoints:', shapePoints);
     
     // Create container for shape controls
     shapeContainer = document.createElement('div');
     shapeContainer.id = 'avallon-shape-editor';
-    shapeContainer.style.cssText = 'position:absolute;pointer-events:none;z-index:100005;';
+    shapeContainer.style.cssText = 'position:absolute;pointer-events:none;z-index:999999;';
     document.body.appendChild(shapeContainer);
+    console.log('Shape container created and appended to body');
     
     updateShapeOverlay();
   }
   
   function updateShapeOverlay() {
-    if (!selectedElement || !shapeContainer) return;
+    console.log('updateShapeOverlay called');
+    if (!selectedElement || !shapeContainer) {
+      console.warn('updateShapeOverlay: Missing element or container', selectedElement, shapeContainer);
+      return;
+    }
     
     const rect = getAbsoluteRect(selectedElement);
+    console.log('Updating shape overlay with rect:', rect);
     shapeContainer.style.left = rect.left + 'px';
     shapeContainer.style.top = rect.top + 'px';
     shapeContainer.style.width = rect.width + 'px';
@@ -424,14 +441,16 @@ function getVisualEditorScript(): string {
     svg.appendChild(path);
     
     // Create draggable points
+    console.log('Creating ' + shapePoints.length + ' shape points');
     shapePoints.forEach((point, index) => {
       const x = (point.x / 100) * rect.width;
       const y = (point.y / 100) * rect.height;
+      console.log('Point ' + index + ' at x=' + x + ', y=' + y + ' (percent: ' + point.x + '%, ' + point.y + '%)');
       
       const pointEl = document.createElement('div');
       pointEl.className = 'avallon-shape-point';
       pointEl.dataset.index = index;
-      pointEl.style.cssText = 'position:absolute;width:12px;height:12px;background:#6366f1;border:2px solid white;border-radius:50%;cursor:move;pointer-events:auto;transform:translate(-50%,-50%);box-shadow:0 2px 4px rgba(0,0,0,0.3);left:' + x + 'px;top:' + y + 'px;';
+      pointEl.style.cssText = 'position:absolute;width:16px;height:16px;background:#ff0000;border:3px solid white;border-radius:50%;cursor:move;pointer-events:auto;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,0.5);left:' + x + 'px;top:' + y + 'px;';
       
       // Drag handlers
       pointEl.addEventListener('mousedown', function(e) {
@@ -1197,12 +1216,19 @@ function getVisualEditorScript(): string {
     }
     
     // Shape editing message handlers
-    if (e.data.type === 'enableShapeEdit' && selectedElement) {
-      shapeEditMode = true;
-      createShapeOverlay();
+    if (e.data.type === 'enableShapeEdit') {
+      console.log('Shape edit enabled, selectedElement:', selectedElement);
+      if (selectedElement) {
+        shapeEditMode = true;
+        createShapeOverlay();
+        console.log('Shape overlay created, shapePoints:', shapePoints);
+      } else {
+        console.warn('No element selected for shape editing');
+      }
     }
     
     if (e.data.type === 'disableShapeEdit') {
+      console.log('Shape edit disabled');
       shapeEditMode = false;
       removeShapeOverlay();
     }
