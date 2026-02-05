@@ -265,6 +265,15 @@ function getVisualEditorScript(): string {
   let dropTarget = null;
   let dropPosition = null; // 'before', 'after', or 'free'
   
+  // Shape editing state
+  let shapeEditMode = false;
+  let shapePoints = [];
+  let shapePointElements = [];
+  let shapeLineElements = [];
+  let shapeMidpointElements = [];
+  let activePointIndex = -1;
+  let shapeContainer = null;
+  
   // Create selection overlay
   function createOverlay() {
     overlay = document.createElement('div');
@@ -316,6 +325,214 @@ function getVisualEditorScript(): string {
   function getCursor(pos) {
     const cursors = { nw: 'nwse-resize', n: 'ns-resize', ne: 'nesw-resize', e: 'ew-resize', se: 'nwse-resize', s: 'ns-resize', sw: 'nesw-resize', w: 'ew-resize' };
     return cursors[pos] || 'pointer';
+  }
+  
+  // =====================================================
+  // SHAPE EDITING FUNCTIONS (POLYGON CLIP-PATH)
+  // =====================================================
+  
+  function parseClipPath(clipPath) {
+    // Parse polygon clip-path to array of {x, y} percentages
+    if (!clipPath || clipPath === 'none') {
+      // Default to rectangle
+      return [{x: 0, y: 0}, {x: 100, y: 0}, {x: 100, y: 100}, {x: 0, y: 100}];
+    }
+    
+    const polygonMatch = clipPath.match(/polygon\\(([^)]+)\\)/);
+    if (polygonMatch) {
+      const coords = polygonMatch[1].split(',').map(pair => {
+        const [x, y] = pair.trim().split(/\\s+/);
+        return {
+          x: parseFloat(x) || 0,
+          y: parseFloat(y) || 0
+        };
+      });
+      return coords.length >= 3 ? coords : [{x: 0, y: 0}, {x: 100, y: 0}, {x: 100, y: 100}, {x: 0, y: 100}];
+    }
+    
+    // For circle/ellipse, convert to polygon approximation
+    if (clipPath.includes('circle') || clipPath.includes('ellipse')) {
+      const points = [];
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2;
+        points.push({
+          x: 50 + Math.cos(angle) * 45,
+          y: 50 + Math.sin(angle) * 45
+        });
+      }
+      return points;
+    }
+    
+    return [{x: 0, y: 0}, {x: 100, y: 0}, {x: 100, y: 100}, {x: 0, y: 100}];
+  }
+  
+  function pointsToClipPath(points) {
+    const coords = points.map(p => p.x.toFixed(1) + '% ' + p.y.toFixed(1) + '%').join(', ');
+    return 'polygon(' + coords + ')';
+  }
+  
+  function createShapeOverlay() {
+    if (!selectedElement || shapeContainer) return;
+    
+    const rect = selectedElement.getBoundingClientRect();
+    const clipPath = window.getComputedStyle(selectedElement).clipPath;
+    shapePoints = parseClipPath(clipPath);
+    
+    // Create container for shape controls
+    shapeContainer = document.createElement('div');
+    shapeContainer.id = 'avallon-shape-editor';
+    shapeContainer.style.cssText = 'position:absolute;pointer-events:none;z-index:100005;';
+    document.body.appendChild(shapeContainer);
+    
+    updateShapeOverlay();
+  }
+  
+  function updateShapeOverlay() {
+    if (!selectedElement || !shapeContainer) return;
+    
+    const rect = getAbsoluteRect(selectedElement);
+    shapeContainer.style.left = rect.left + 'px';
+    shapeContainer.style.top = rect.top + 'px';
+    shapeContainer.style.width = rect.width + 'px';
+    shapeContainer.style.height = rect.height + 'px';
+    
+    // Clear existing elements
+    shapePointElements.forEach(el => el.remove());
+    shapeLineElements.forEach(el => el.remove());
+    shapeMidpointElements.forEach(el => el.remove());
+    shapePointElements = [];
+    shapeLineElements = [];
+    shapeMidpointElements = [];
+    
+    // Draw connecting lines (SVG)
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;';
+    shapeContainer.appendChild(svg);
+    shapeLineElements.push(svg);
+    
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const pathD = shapePoints.map((p, i) => {
+      const x = (p.x / 100) * rect.width;
+      const y = (p.y / 100) * rect.height;
+      return (i === 0 ? 'M' : 'L') + x + ',' + y;
+    }).join(' ') + ' Z';
+    path.setAttribute('d', pathD);
+    path.setAttribute('fill', 'rgba(99, 102, 241, 0.1)');
+    path.setAttribute('stroke', '#6366f1');
+    path.setAttribute('stroke-width', '2');
+    path.setAttribute('stroke-dasharray', '4');
+    svg.appendChild(path);
+    
+    // Create draggable points
+    shapePoints.forEach((point, index) => {
+      const x = (point.x / 100) * rect.width;
+      const y = (point.y / 100) * rect.height;
+      
+      const pointEl = document.createElement('div');
+      pointEl.className = 'avallon-shape-point';
+      pointEl.dataset.index = index;
+      pointEl.style.cssText = 'position:absolute;width:12px;height:12px;background:#6366f1;border:2px solid white;border-radius:50%;cursor:move;pointer-events:auto;transform:translate(-50%,-50%);box-shadow:0 2px 4px rgba(0,0,0,0.3);left:' + x + 'px;top:' + y + 'px;';
+      
+      // Drag handlers
+      pointEl.addEventListener('mousedown', function(e) {
+        e.stopPropagation();
+        e.preventDefault();
+        activePointIndex = index;
+        document.addEventListener('mousemove', handleShapePointDrag);
+        document.addEventListener('mouseup', handleShapePointDragEnd);
+      });
+      
+      // Double-click to remove (if more than 3 points)
+      pointEl.addEventListener('dblclick', function(e) {
+        e.stopPropagation();
+        if (shapePoints.length > 3) {
+          shapePoints.splice(index, 1);
+          updateShapeOverlay();
+          applyShapeToElement();
+        }
+      });
+      
+      shapeContainer.appendChild(pointEl);
+      shapePointElements.push(pointEl);
+    });
+    
+    // Create midpoints for adding new points
+    for (let i = 0; i < shapePoints.length; i++) {
+      const p1 = shapePoints[i];
+      const p2 = shapePoints[(i + 1) % shapePoints.length];
+      const midX = ((p1.x + p2.x) / 2 / 100) * rect.width;
+      const midY = ((p1.y + p2.y) / 2 / 100) * rect.height;
+      
+      const midEl = document.createElement('div');
+      midEl.className = 'avallon-shape-midpoint';
+      midEl.dataset.afterIndex = i;
+      midEl.style.cssText = 'position:absolute;width:8px;height:8px;background:white;border:2px solid #6366f1;border-radius:50%;cursor:pointer;pointer-events:auto;transform:translate(-50%,-50%);opacity:0.7;left:' + midX + 'px;top:' + midY + 'px;';
+      midEl.title = 'Click to add point';
+      
+      midEl.addEventListener('click', function(e) {
+        e.stopPropagation();
+        const afterIdx = parseInt(this.dataset.afterIndex);
+        const newPoint = {
+          x: (p1.x + p2.x) / 2,
+          y: (p1.y + p2.y) / 2
+        };
+        shapePoints.splice(afterIdx + 1, 0, newPoint);
+        updateShapeOverlay();
+        applyShapeToElement();
+      });
+      
+      midEl.addEventListener('mouseenter', function() { this.style.opacity = '1'; this.style.transform = 'translate(-50%,-50%) scale(1.2)'; });
+      midEl.addEventListener('mouseleave', function() { this.style.opacity = '0.7'; this.style.transform = 'translate(-50%,-50%)'; });
+      
+      shapeContainer.appendChild(midEl);
+      shapeMidpointElements.push(midEl);
+    }
+  }
+  
+  function handleShapePointDrag(e) {
+    if (activePointIndex < 0 || !selectedElement || !shapeContainer) return;
+    
+    const rect = selectedElement.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Convert to percentage (clamp to 0-100)
+    shapePoints[activePointIndex] = {
+      x: Math.max(0, Math.min(100, (x / rect.width) * 100)),
+      y: Math.max(0, Math.min(100, (y / rect.height) * 100))
+    };
+    
+    updateShapeOverlay();
+    applyShapeToElement();
+  }
+  
+  function handleShapePointDragEnd(e) {
+    activePointIndex = -1;
+    document.removeEventListener('mousemove', handleShapePointDrag);
+    document.removeEventListener('mouseup', handleShapePointDragEnd);
+    
+    // Notify parent of final shape
+    window.parent.postMessage({
+      type: 'shapeUpdated',
+      data: { clipPath: pointsToClipPath(shapePoints) }
+    }, '*');
+  }
+  
+  function applyShapeToElement() {
+    if (!selectedElement) return;
+    selectedElement.style.clipPath = pointsToClipPath(shapePoints);
+  }
+  
+  function removeShapeOverlay() {
+    if (shapeContainer) {
+      shapeContainer.remove();
+      shapeContainer = null;
+    }
+    shapePointElements = [];
+    shapeLineElements = [];
+    shapeMidpointElements = [];
+    shapePoints = [];
+    activePointIndex = -1;
   }
   
   function updateOverlay(el) {
@@ -979,6 +1196,17 @@ function getVisualEditorScript(): string {
       }, '*');
     }
     
+    // Shape editing message handlers
+    if (e.data.type === 'enableShapeEdit' && selectedElement) {
+      shapeEditMode = true;
+      createShapeOverlay();
+    }
+    
+    if (e.data.type === 'disableShapeEdit') {
+      shapeEditMode = false;
+      removeShapeOverlay();
+    }
+    
     if (e.data.type === 'duplicateElement' && selectedElement) {
       const clone = selectedElement.cloneNode(true);
       
@@ -1392,6 +1620,9 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
   const [showImageReplacer, setShowImageReplacer] = useState(false);
   const [imageReplaceUrl, setImageReplaceUrl] = useState('');
   
+  // Shape edit mode state
+  const [isShapeEditMode, setIsShapeEditMode] = useState(false);
+  
   // Add Page modal state
   const [showAddPageModal, setShowAddPageModal] = useState(false);
   const [newPageName, setNewPageName] = useState('');
@@ -1540,6 +1771,10 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       
       if (event.data?.type === 'elementSelected' && mode === 'visual') {
         setSelectedElement(event.data.data);
+        // Reset shape edit mode when selecting a new element
+        if (isShapeEditMode) {
+          setIsShapeEditMode(false);
+        }
       }
       
       if (event.data?.type === 'styleUpdated') {
@@ -1596,6 +1831,18 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       // Handle new element added
       if (event.data?.type === 'elementAdded') {
         setHasUnsavedChanges(true);
+      }
+      
+      // Handle shape updated from visual polygon editor
+      if (event.data?.type === 'shapeUpdated') {
+        setHasUnsavedChanges(true);
+        // Update selected element with new clipPath style
+        if (event.data.data?.clipPath && selectedElement) {
+          setSelectedElement(prev => prev ? { 
+            ...prev, 
+            styles: { ...prev.styles, clipPath: event.data.data.clipPath } 
+          } : null);
+        }
       }
       
       if (event.data?.type === 'htmlContent') {
@@ -2096,6 +2343,25 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       title: `${elementNames[elementType] || 'Element'} Added`,
       description: "Drag it to position, then edit its properties.",
     });
+  };
+  
+  // Toggle shape edit mode for visual polygon editing
+  const toggleShapeEditMode = () => {
+    if (!iframeRef.current?.contentWindow || !selectedElement) return;
+    
+    const newMode = !isShapeEditMode;
+    setIsShapeEditMode(newMode);
+    
+    iframeRef.current.contentWindow.postMessage({
+      type: newMode ? 'enableShapeEdit' : 'disableShapeEdit'
+    }, '*');
+    
+    if (newMode) {
+      toast({
+        title: "Shape Edit Mode",
+        description: "Drag points to reshape. Double-click to remove. Click edge to add.",
+      });
+    }
   };
   
   // Store the last selected element's xpath for persistent add-similar functionality
@@ -4089,6 +4355,30 @@ Generated by Avallon - ${new Date().toISOString()}
                               }}
                             />
                           </div>
+                          
+                          {/* Visual Shape Editor Button */}
+                          <button
+                            onClick={toggleShapeEditMode}
+                            className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                              isShapeEditMode 
+                                ? 'bg-green-500 hover:bg-green-600 text-white' 
+                                : isLight 
+                                  ? 'bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700' 
+                                  : 'bg-surface-dark hover:bg-panel-border border border-panel-border text-gray-300'
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-[16px]">
+                              {isShapeEditMode ? 'check' : 'edit'}
+                            </span>
+                            {isShapeEditMode ? 'Done Editing Shape' : 'Edit Shape Visually'}
+                          </button>
+                          
+                          {isShapeEditMode && (
+                            <p className="text-[10px] text-primary bg-primary/10 p-2 rounded">
+                              Drag points to reshape. Double-click point to remove. Click on edge to add point.
+                            </p>
+                          )}
+                          
                           <p className="text-[10px] text-gray-500">Apply shape masks for diagonal cuts, circles, and custom shapes.</p>
                         </div>
                         
