@@ -1037,6 +1037,11 @@ function getVisualEditorScript(): string {
   
   // Listen for style updates from parent
   window.addEventListener('message', function(e) {
+    // Log all messages for debugging
+    if (e.data && e.data.type) {
+      console.log('[iframe] Received message:', e.data.type, e.data);
+    }
+    
     if (e.data.type === 'updateStyle' && selectedElement) {
       const { property, value } = e.data;
       selectedElement.style[property] = value;
@@ -2373,14 +2378,22 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
   
   // Toggle shape edit mode for visual polygon editing
   const toggleShapeEditMode = () => {
-    if (!iframeRef.current?.contentWindow || !selectedElement) return;
+    console.log('toggleShapeEditMode called, iframeRef:', iframeRef.current, 'selectedElement:', selectedElement);
+    if (!iframeRef.current?.contentWindow) {
+      console.warn('No iframe contentWindow');
+      return;
+    }
+    if (!selectedElement) {
+      console.warn('No selected element');
+      return;
+    }
     
     const newMode = !isShapeEditMode;
     setIsShapeEditMode(newMode);
     
-    iframeRef.current.contentWindow.postMessage({
-      type: newMode ? 'enableShapeEdit' : 'disableShapeEdit'
-    }, '*');
+    const message = { type: newMode ? 'enableShapeEdit' : 'disableShapeEdit' };
+    console.log('Sending message to iframe:', message);
+    iframeRef.current.contentWindow.postMessage(message, '*');
     
     if (newMode) {
       toast({
