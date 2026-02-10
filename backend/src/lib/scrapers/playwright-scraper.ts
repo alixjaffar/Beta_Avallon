@@ -124,23 +124,23 @@ export class PlaywrightScraper {
       const description = this.extractDescription($);
       
       // Final check: verify we didn't scrape a security checkpoint page
+      // Only check title - body might have legitimate mentions
       const lowerTitle = title.toLowerCase();
-      const lowerBody = html.toLowerCase().slice(0, 5000);
       
-      const checkpointPhrases = [
+      const checkpointTitlePhrases = [
         'security checkpoint', 'verifying your browser', 'just a moment',
         'checking the site connection', 'checking your connection',
-        'vercel security', 'cloudflare', 'browser verification',
-        'please wait while we', 'enable cookies', 'requires cookies',
-        "we're verifying", 'performance & security by'
+        'vercel security checkpoint', 'browser verification',
+        'please wait', 'attention required'
       ];
       
-      for (const phrase of checkpointPhrases) {
-        if (lowerTitle.includes(phrase) || lowerBody.includes(phrase)) {
-          await this.cleanup();
-          logError('Scraped content is a security checkpoint page', null, { url: targetUrl, title, detectedPhrase: phrase });
-          throw new Error('SECURITY_CHECKPOINT: The website has bot protection (Vercel/Cloudflare). The scraped content is a security checkpoint page. Please download the HTML manually and use "Import HTML File" instead.');
-        }
+      // Check if the HTML is suspiciously short (likely just a checkpoint page)
+      const isLikelyCheckpoint = html.length < 50000 && checkpointTitlePhrases.some(phrase => lowerTitle.includes(phrase));
+      
+      if (isLikelyCheckpoint) {
+        await this.cleanup();
+        logError('Scraped content appears to be a security checkpoint page', null, { url: targetUrl, title, htmlLength: html.length });
+        throw new Error('SECURITY_CHECKPOINT: The website has bot protection. The scraped content appears to be a security checkpoint page. Please try again or download the HTML manually and use "Import HTML File" instead.');
       }
       const colors = this.extractColors($, html);
       const fonts = this.extractFonts($);
@@ -595,15 +595,25 @@ export class PlaywrightScraper {
   private async initBrowser(): Promise<void> {
     if (this.browser) return;
     
+    // Stealth browser args to bypass bot detection
+    const stealthArgs = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-features=IsolateOrigins,site-per-process',
+      '--disable-site-isolation-trials',
+      '--disable-web-security',
+      '--disable-features=BlockInsecurePrivateNetworkRequests',
+      '--allow-running-insecure-content',
+      '--window-size=1920,1080',
+      '--start-maximized',
+    ];
+    
     try {
       this.browser = await chromium.launch({
         headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-        ],
+        args: stealthArgs,
       });
     } catch (error: any) {
       // If browser not found, try to find it manually or fall back to downloading
@@ -646,12 +656,7 @@ export class PlaywrightScraper {
           this.browser = await chromium.launch({
             headless: true,
             executablePath: foundPath,
-            args: [
-              '--no-sandbox',
-              '--disable-setuid-sandbox',
-              '--disable-dev-shm-usage',
-              '--disable-gpu',
-            ],
+            args: stealthArgs,
           });
         } else {
           // Last resort: try to install at runtime
@@ -695,10 +700,28 @@ export class PlaywrightScraper {
       }
     }
     
+    // Create context with realistic browser settings
     this.context = await this.browser.newContext({
-      userAgent: this.options.userAgent,
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       viewport: { width: 1920, height: 1080 },
       ignoreHTTPSErrors: true,
+      javaScriptEnabled: true,
+      locale: 'en-US',
+      timezoneId: 'America/New_York',
+      geolocation: { longitude: -73.935242, latitude: 40.730610 },
+      permissions: ['geolocation'],
+      extraHTTPHeaders: {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Cache-Control': 'max-age=0',
+      },
     });
   }
 
@@ -709,11 +732,58 @@ export class PlaywrightScraper {
     
     const page = await this.context!.newPage();
     
-    // Block tracking scripts if enabled
+    // Inject stealth scripts to avoid bot detection
+    await page.addInitScript(() => {
+      // Override webdriver property
+      Object.defineProperty(navigator, 'webdriver', { get: () => false });
+      
+      // Override plugins
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+      });
+      
+      // Override languages
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['en-US', 'en'],
+      });
+      
+      // Override platform
+      Object.defineProperty(navigator, 'platform', {
+        get: () => 'Win32',
+      });
+      
+      // Override hardware concurrency
+      Object.defineProperty(navigator, 'hardwareConcurrency', {
+        get: () => 8,
+      });
+      
+      // Override device memory
+      Object.defineProperty(navigator, 'deviceMemory', {
+        get: () => 8,
+      });
+      
+      // Mock chrome runtime
+      (window as any).chrome = {
+        runtime: {},
+      };
+      
+      // Override permissions
+      const originalQuery = window.navigator.permissions.query;
+      window.navigator.permissions.query = (parameters: any) => (
+        parameters.name === 'notifications' ?
+          Promise.resolve({ state: 'denied', onchange: null, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => true } as PermissionStatus) :
+          originalQuery(parameters)
+      );
+    });
+    
+    // Block tracking scripts if enabled (but NOT cloudflare/security scripts)
     if (this.options.blockTracking) {
       await page.route('**/*', (route) => {
         const url = route.request().url();
-        if (this.BLOCK_PATTERNS.some(pattern => url.includes(pattern))) {
+        // Don't block cloudflare or security-related scripts
+        if (url.includes('cloudflare') || url.includes('challenge') || url.includes('turnstile')) {
+          route.continue();
+        } else if (this.BLOCK_PATTERNS.some(pattern => url.includes(pattern))) {
           route.abort();
         } else {
           route.continue();
@@ -748,22 +818,42 @@ export class PlaywrightScraper {
       // Wait for JavaScript to render
       await this.sleep(this.options.waitForJs);
       
-      // Check for and handle Vercel/Cloudflare security checkpoints
-      const isSecurityCheckpoint = await this.detectAndWaitForSecurityCheckpoint(page);
+      // Check for and handle Vercel/Cloudflare security checkpoints with retry
+      let isSecurityCheckpoint = await this.detectAndWaitForSecurityCheckpoint(page);
       if (isSecurityCheckpoint) {
-        logInfo('🔒 Security checkpoint detected, waiting for resolution...', { url });
-        // Wait additional time for checkpoint to resolve
-        await this.sleep(10000);
+        logInfo('🔒 Security checkpoint detected, attempting to resolve...', { url });
         
-        // Check if still on checkpoint
-        const stillOnCheckpoint = await this.detectAndWaitForSecurityCheckpoint(page);
-        if (stillOnCheckpoint) {
-          await page.close();
-          await this.cleanup();
-          logError('Security checkpoint did not resolve', null, { url });
-          throw new Error('SECURITY_CHECKPOINT: The website has bot protection (Vercel/Cloudflare). Please download the HTML manually and use "Import HTML File" instead.');
+        // Try multiple times with increasing wait times
+        const waitTimes = [5000, 8000, 12000, 15000];
+        
+        for (let i = 0; i < waitTimes.length; i++) {
+          logInfo(`🔄 Waiting for checkpoint to resolve (attempt ${i + 1}/${waitTimes.length})...`, { url, waitMs: waitTimes[i] });
+          await this.sleep(waitTimes[i]);
+          
+          // Check if resolved
+          isSecurityCheckpoint = await this.detectAndWaitForSecurityCheckpoint(page);
+          if (!isSecurityCheckpoint) {
+            logInfo('🔓 Security checkpoint resolved!', { url, attempt: i + 1 });
+            break;
+          }
+          
+          // Try refreshing the page on later attempts
+          if (i >= 2) {
+            logInfo('🔄 Refreshing page to retry checkpoint...', { url });
+            try {
+              await page.reload({ waitUntil: 'networkidle', timeout: 15000 });
+              await this.sleep(3000);
+            } catch {
+              // Ignore reload errors
+            }
+          }
         }
-        logInfo('🔓 Security checkpoint resolved, continuing scrape', { url });
+        
+        // Final check
+        if (await this.detectAndWaitForSecurityCheckpoint(page)) {
+          logError('Security checkpoint did not resolve after all attempts', null, { url });
+          // Don't throw error - return what we have and let the content check catch it
+        }
       }
       
       // Scroll to trigger lazy loading
@@ -799,9 +889,13 @@ export class PlaywrightScraper {
   
   /**
    * Detect Vercel, Cloudflare, or other security checkpoints
+   * Also attempts to click through verification if possible
    */
   private async detectAndWaitForSecurityCheckpoint(page: Page): Promise<boolean> {
     try {
+      // First, try to click any verification buttons/checkboxes
+      await this.tryClickVerificationElements(page);
+      
       const isCheckpoint = await page.evaluate(() => {
         const bodyText = document.body?.innerText?.toLowerCase() || '';
         const title = document.title?.toLowerCase() || '';
@@ -824,7 +918,6 @@ export class PlaywrightScraper {
           'checking your connection',
           'enable javascript and cookies',
           'ray id',
-          'cloudflare',
           'please wait',
           'this page requires cookies',
           'performance & security by cloudflare',
@@ -845,13 +938,52 @@ export class PlaywrightScraper {
         const hasCloudflareChallenge = document.querySelector('#challenge-running') !== null;
         const hasCloudflareForm = document.querySelector('#challenge-form') !== null;
         const hasCfChallenge = document.querySelector('.cf-browser-verification') !== null;
+        const hasTurnstile = document.querySelector('[data-turnstile-callback]') !== null;
+        const hasHcaptcha = document.querySelector('.h-captcha') !== null;
         
-        return hasVercelChallenge || hasCloudflareChallenge || hasCloudflareForm || hasCfChallenge;
+        return hasVercelChallenge || hasCloudflareChallenge || hasCloudflareForm || hasCfChallenge || hasTurnstile || hasHcaptcha;
       });
       
       return isCheckpoint;
     } catch {
       return false;
+    }
+  }
+  
+  /**
+   * Try to click verification elements (checkboxes, buttons) on challenge pages
+   */
+  private async tryClickVerificationElements(page: Page): Promise<void> {
+    try {
+      // List of possible verification selectors
+      const verificationSelectors = [
+        // Cloudflare Turnstile
+        'input[type="checkbox"]',
+        '.cf-turnstile iframe',
+        '#turnstile-wrapper input',
+        // Generic verify buttons
+        'button:has-text("Verify")',
+        'button:has-text("Continue")',
+        'button:has-text("I am human")',
+        'input[type="submit"]',
+        // Cloudflare specific
+        '#challenge-stage input',
+        '.challenge-solve-button',
+      ];
+      
+      for (const selector of verificationSelectors) {
+        try {
+          const element = page.locator(selector).first();
+          if (await element.count() > 0 && await element.isVisible()) {
+            await element.click({ timeout: 2000 }).catch(() => {});
+            await this.sleep(1000);
+          }
+        } catch {
+          // Ignore click errors
+        }
+      }
+    } catch {
+      // Ignore errors
     }
   }
 
