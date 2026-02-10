@@ -767,13 +767,16 @@ export class PlaywrightScraper {
         runtime: {},
       };
       
-      // Override permissions
-      const originalQuery = window.navigator.permissions.query;
-      window.navigator.permissions.query = (parameters: any) => (
-        parameters.name === 'notifications' ?
-          Promise.resolve({ state: 'denied', onchange: null, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => true } as PermissionStatus) :
-          originalQuery(parameters)
-      );
+      // Override permissions query
+      const originalQuery = window.navigator.permissions.query.bind(window.navigator.permissions);
+      Object.defineProperty(window.navigator.permissions, 'query', {
+        value: (parameters: any) => {
+          if (parameters.name === 'notifications') {
+            return Promise.resolve({ state: 'denied' } as any);
+          }
+          return originalQuery(parameters);
+        }
+      });
     });
     
     // Block tracking scripts if enabled (but NOT cloudflare/security scripts)
