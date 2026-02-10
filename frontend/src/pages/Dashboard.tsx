@@ -412,12 +412,22 @@ const Dashboard = () => {
                   <div className="absolute inset-0 pointer-events-none">
                     <iframe
                       srcDoc={(() => {
-                        const html = site.websiteContent['index.html'] || Object.values(site.websiteContent)[0] || '';
+                        let html = site.websiteContent['index.html'] || Object.values(site.websiteContent)[0] || '';
+                        // Clean up corrupted data URLs to prevent "Data URL decoding failed" errors
+                        // Remove data URLs from img src (keep small ones under 500 chars)
+                        html = html.replace(/src="data:[^"]{500,}"/gi, 'src="about:blank"');
+                        html = html.replace(/src='data:[^']{500,}'/gi, "src='about:blank'");
+                        // Remove data URLs from CSS url()
+                        html = html.replace(/url\(['"]?data:[^'")\s]{500,}['"]?\)/gi, 'url()');
+                        // Remove blob URLs
+                        html = html.replace(/src="blob:[^"]+"/gi, 'src="about:blank"');
+                        html = html.replace(/url\(['"]?blob:[^'")\s]+['"]?\)/gi, 'url()');
                         // Add scale transform to fit preview
                         return html.replace('</head>', `
                           <style>
                             body { transform: scale(0.25); transform-origin: top left; width: 400%; height: 400%; }
                             * { pointer-events: none !important; }
+                            img[src="about:blank"] { display: none; }
                           </style>
                         </head>`);
                       })()}
