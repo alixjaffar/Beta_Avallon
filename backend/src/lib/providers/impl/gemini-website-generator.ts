@@ -426,6 +426,25 @@ export class GeminiWebsiteGenerator {
       fetchedContent = await this.fetchWebsiteContent(websiteUrl);
     }
     
+    // Check if this is a large imported website modification
+    // Use QUICK modification mode for faster results
+    const hasExistingCode = currentCode && Object.keys(currentCode).length > 0;
+    const totalSize = currentCode ? Object.values(currentCode).reduce((acc, html) => acc + (html?.length || 0), 0) : 0;
+    const isLargeImportedSite = hasExistingCode && totalSize > 50000; // 50KB threshold
+    
+    if (isLargeImportedSite) {
+      logInfo('Using QUICK modification mode for large imported site', { totalSize, fileCount: Object.keys(currentCode!).length });
+      try {
+        const quickResult = await this.quickModifyLargeWebsite(request, currentCode!);
+        if (quickResult && Object.keys(quickResult).length > 0) {
+          return quickResult;
+        }
+      } catch (quickError: any) {
+        logError('Quick modification failed, falling back to standard mode', quickError);
+        // Fall through to standard generation
+      }
+    }
+    
     const prompt = this.buildWebsitePrompt(request, chatHistory, currentCode, fetchedContent);
     
     // Check if multi-page website is requested for higher token limit
@@ -439,7 +458,7 @@ export class GeminiWebsiteGenerator {
     // Multi-page sites also need high tokens
     // Modifications need LOW temperature for deterministic output
     const isCloneOperation = isCopyRequest && websiteUrl;
-    const isModification = currentCode && Object.keys(currentCode).length > 0;
+    const isModification = hasExistingCode; // Use already computed value
     const maxOutputTokens = isCloneOperation ? 65000 : (isMultiPage ? 65000 : 49152); // Max 65536 for Gemini API
     const timeout = isCloneOperation ? 300000 : (isMultiPage ? 240000 : 180000); // Increased timeouts for better results
     
@@ -673,6 +692,166 @@ export class GeminiWebsiteGenerator {
       }
       
       throw new Error(`Gemini 3 Pro Preview failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Quick modification mode for large imported websites
+   * Uses Gemini Flash for faster results and only generates the new section
+   */
+  private async quickModifyLargeWebsite(
+    request: WebsiteGenerationRequest,
+    currentCode: Record<string, string>
+  ): Promise<Record<string, string>> {
+    const prompt = request.description.toLowerCase();
+    
+    // Detect what kind of modification is requested
+    const isAddingSection = prompt.includes('add') && (
+      prompt.includes('section') || prompt.includes('testimonial') || 
+      prompt.includes('faq') || prompt.includes('pricing') || 
+      prompt.includes('contact') || prompt.includes('gallery') ||
+      prompt.includes('team') || prompt.includes('about')
+    );
+    
+    if (!isAddingSection) {
+      // Not a simple section addition, fall back to standard mode
+      throw new Error('Quick modification only supports adding new sections');
+    }
+    
+    logInfo('Quick modification: Generating new section only', { prompt: request.description.substring(0, 100) });
+    
+    // Detect section type
+    let sectionType = 'section';
+    if (prompt.includes('testimonial')) sectionType = 'testimonials';
+    else if (prompt.includes('faq') || prompt.includes('question')) sectionType = 'faq';
+    else if (prompt.includes('pricing')) sectionType = 'pricing';
+    else if (prompt.includes('contact')) sectionType = 'contact';
+    else if (prompt.includes('gallery')) sectionType = 'gallery';
+    else if (prompt.includes('team')) sectionType = 'team';
+    else if (prompt.includes('about')) sectionType = 'about';
+    else if (prompt.includes('hero')) sectionType = 'hero';
+    else if (prompt.includes('feature')) sectionType = 'features';
+    else if (prompt.includes('service')) sectionType = 'services';
+    
+    // Extract color scheme from existing HTML (simplified)
+    const mainFile = currentCode['index.html'] || Object.values(currentCode)[0] || '';
+    const colorMatch = mainFile.match(/(?:background|color|bg-):\s*#([0-9a-fA-F]{3,6})/);
+    const primaryColor = colorMatch ? `#${colorMatch[1]}` : '#3b82f6';
+    
+    // Create a minimal prompt for just the new section
+    const sectionPrompt = `Generate ONLY the HTML for a ${sectionType} section to add to a website.
+
+REQUEST: "${request.description}"
+
+REQUIREMENTS:
+1. Generate ONLY the <section> element with its content - NO full page, NO doctype, NO head/body tags
+2. Use modern, professional styling with Tailwind CSS classes
+3. Primary color: ${primaryColor}
+4. Make it responsive (mobile-friendly)
+5. Include realistic placeholder content
+6. The section should be self-contained and look professional
+
+OUTPUT FORMAT:
+Return ONLY the HTML section code, starting with <section and ending with </section>.
+Do NOT include any explanation or markdown code blocks - just the raw HTML.`;
+
+    // Use Gemini Flash for speed (much faster than Pro)
+    const flashModel = 'gemini-2.0-flash-001';
+    
+    try {
+      if (!this.vertexAI) {
+        throw new Error('Vertex AI not initialized');
+      }
+      
+      const generativeModel = this.vertexAI.getGenerativeModel({
+        model: flashModel,
+        generationConfig: {
+          temperature: 0.3,
+          topK: 20,
+          topP: 0.9,
+          maxOutputTokens: 8192, // Much smaller for just a section
+        },
+      });
+      
+      logInfo('Quick modification: Calling Gemini Flash', { model: flashModel });
+      
+      const result = await generativeModel.generateContent({
+        contents: [{
+          role: 'user',
+          parts: [{ text: sectionPrompt }]
+        }]
+      });
+      
+      const response = result.response;
+      if (!response.candidates || response.candidates.length === 0) {
+        throw new Error('No response from Gemini Flash');
+      }
+      
+      let newSectionHtml = response.candidates[0].content?.parts?.[0]?.text || '';
+      
+      // Clean up the response
+      newSectionHtml = newSectionHtml.trim();
+      if (newSectionHtml.startsWith('```')) {
+        newSectionHtml = newSectionHtml.replace(/^```(?:html)?\n?/, '').replace(/\n?```$/, '');
+      }
+      
+      if (!newSectionHtml.includes('<section')) {
+        throw new Error('Generated content does not contain a valid section');
+      }
+      
+      logInfo('Quick modification: Section generated', { sectionLength: newSectionHtml.length, sectionType });
+      
+      // Insert the new section into the existing HTML
+      // Find the best insertion point (before </main> or before </body>)
+      const files: Record<string, string> = {};
+      
+      for (const [filename, content] of Object.entries(currentCode)) {
+        if (!filename.endsWith('.html')) {
+          files[filename] = content;
+          continue;
+        }
+        
+        let modifiedContent = content;
+        
+        // Try to find a good insertion point
+        // Priority: 1. Before </main>, 2. Before <footer>, 3. Before </body>
+        let insertionPoint = modifiedContent.lastIndexOf('</main>');
+        if (insertionPoint === -1) {
+          insertionPoint = modifiedContent.lastIndexOf('<footer');
+        }
+        if (insertionPoint === -1) {
+          insertionPoint = modifiedContent.lastIndexOf('</body>');
+        }
+        
+        if (insertionPoint !== -1) {
+          modifiedContent = 
+            modifiedContent.slice(0, insertionPoint) + 
+            '\n\n    <!-- New section added by AI -->\n' + 
+            newSectionHtml + 
+            '\n\n' + 
+            modifiedContent.slice(insertionPoint);
+          
+          logInfo('Quick modification: Section inserted', { filename, insertionPoint });
+        }
+        
+        files[filename] = modifiedContent;
+      }
+      
+      // Track token usage
+      if (response.usageMetadata) {
+        this.lastTokenUsage = {
+          input: response.usageMetadata.promptTokenCount || 0,
+          output: response.usageMetadata.candidatesTokenCount || 0,
+          total: response.usageMetadata.totalTokenCount || 0,
+        };
+      }
+      
+      logInfo('Quick modification: Complete', { filesModified: Object.keys(files).length });
+      return files;
+      
+    } catch (error: any) {
+      logError('Quick modification failed', error, { model: flashModel });
+      throw error;
     }
   }
 
