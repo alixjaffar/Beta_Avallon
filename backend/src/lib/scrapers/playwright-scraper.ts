@@ -734,7 +734,7 @@ export class PlaywrightScraper {
       // Check for and handle Vercel/Cloudflare security checkpoints
       const isSecurityCheckpoint = await this.detectAndWaitForSecurityCheckpoint(page);
       if (isSecurityCheckpoint) {
-        logInfo('🔒 Security checkpoint detected, waiting for resolution...', { url: targetUrl });
+        logInfo('🔒 Security checkpoint detected, waiting for resolution...', { url });
         // Wait additional time for checkpoint to resolve
         await this.sleep(10000);
         
@@ -743,10 +743,10 @@ export class PlaywrightScraper {
         if (stillOnCheckpoint) {
           await page.close();
           await this.cleanup();
-          logError('Security checkpoint did not resolve', null, { url: targetUrl });
+          logError('Security checkpoint did not resolve', null, { url });
           throw new Error('SECURITY_CHECKPOINT: The website has bot protection (Vercel/Cloudflare). Please download the HTML manually and use "Import HTML File" instead.');
         }
-        logInfo('🔓 Security checkpoint resolved, continuing scrape', { url: targetUrl });
+        logInfo('🔓 Security checkpoint resolved, continuing scrape', { url });
       }
       
       // Scroll to trigger lazy loading
