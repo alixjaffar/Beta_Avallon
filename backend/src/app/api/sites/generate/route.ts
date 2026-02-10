@@ -257,7 +257,32 @@ export async function POST(req: NextRequest) {
       // Generate website using Gemini AI (pass currentCode for modifications)
       let websiteResult;
       try {
-        websiteResult = await generator.generateWebsite(generationRequest, messages, currentCode);
+        // For modifications with large existing content, truncate to avoid token limits
+        let truncatedCurrentCode = currentCode;
+        if (currentCode && Object.keys(currentCode).length > 0) {
+          const totalSize = Object.values(currentCode).reduce((acc, html) => acc + (html?.length || 0), 0);
+          logInfo('Current code size for modification', { totalSize, fileCount: Object.keys(currentCode).length });
+          
+          // If total size exceeds 100KB, truncate each file
+          if (totalSize > 100000) {
+            truncatedCurrentCode = {};
+            const maxPerFile = Math.floor(60000 / Object.keys(currentCode).length);
+            for (const [filename, content] of Object.entries(currentCode)) {
+              if (content && content.length > maxPerFile) {
+                truncatedCurrentCode[filename] = content.substring(0, maxPerFile) + '\n<!-- Content truncated for AI processing -->';
+              } else {
+                truncatedCurrentCode[filename] = content;
+              }
+            }
+            logInfo('Truncated large website content for modification', { 
+              originalSize: totalSize, 
+              maxPerFile,
+              truncatedSize: Object.values(truncatedCurrentCode).reduce((acc, html) => acc + (html?.length || 0), 0)
+            });
+          }
+        }
+        
+        websiteResult = await generator.generateWebsite(generationRequest, messages, truncatedCurrentCode);
       } catch (genError: any) {
         logError('Generator.generateWebsite failed', genError, {
           name,
@@ -265,7 +290,24 @@ export async function POST(req: NextRequest) {
           errorMessage: genError?.message,
           errorStack: genError?.stack,
         });
-        throw new Error(`Website generation failed: ${genError?.message || 'Unknown error'}`);
+        
+        // Provide more helpful error messages based on the error type
+        const errorMsg = genError?.message || 'Unknown error';
+        let helpText = '';
+        
+        if (errorMsg.includes('quota') || errorMsg.includes('RESOURCE_EXHAUSTED')) {
+          helpText = 'The AI service quota has been exceeded. Please try again in a few minutes or contact support.';
+        } else if (errorMsg.includes('PERMISSION_DENIED') || errorMsg.includes('UNAUTHENTICATED') || errorMsg.includes('authentication')) {
+          helpText = 'AI service authentication failed. Please contact support.';
+        } else if (errorMsg.includes('token') || errorMsg.includes('too long') || errorMsg.includes('limit')) {
+          helpText = 'The request was too large. Try making a smaller change or editing fewer files at once.';
+        } else if (errorMsg.includes('timeout') || errorMsg.includes('DEADLINE_EXCEEDED')) {
+          helpText = 'The AI service took too long to respond. Please try again.';
+        }
+        
+        const error = new Error(`Website generation failed: ${errorMsg}`);
+        (error as any).help = helpText;
+        throw error;
       }
       
       // Validate that we got website content
@@ -449,11 +491,21 @@ export async function POST(req: NextRequest) {
         status: error?.response?.status
       });
 
+      // Use help text from error if available, otherwise generate based on message
+      let helpText = (error as any).help;
+      if (!helpText) {
+        if (errorMessage.includes('expired') || errorMessage.includes('invalid')) {
+          helpText = "Get a new Gemini API key from https://aistudio.google.com/apikey and update GEMINI_API_KEY in backend/.env";
+        } else if (errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+          helpText = "The AI service quota has been exceeded. Please try again in a few minutes.";
+        } else if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('authentication')) {
+          helpText = "AI service authentication failed. Please contact support.";
+        }
+      }
+
       return NextResponse.json({
         error: "Failed to generate website",
-        help: error.message?.includes('expired') || error.message?.includes('invalid') 
-          ? "Get a new Gemini API key from https://aistudio.google.com/apikey and update GEMINI_API_KEY in backend/.env"
-          : undefined,
+        help: helpText,
         message: errorMessage,
         details: typeof errorDetails === 'object' ? JSON.stringify(errorDetails) : errorDetails,
       }, { 

@@ -1262,20 +1262,32 @@ export class PlaywrightScraper {
 
   private fixUrls($: CheerioAPI, baseUrl: string): void {
     const base = new URL(baseUrl);
+    const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://avallon-backend.onrender.com';
+    
+    // Helper to convert external URLs to proxy URLs to avoid hotlinking blocks
+    const toProxyUrl = (imageUrl: string): string => {
+      // Skip if already proxied or data URL
+      if (imageUrl.includes('/api/proxy/image') || imageUrl.startsWith('data:')) {
+        return imageUrl;
+      }
+      // Only proxy external URLs (not local)
+      if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+        return `${backendUrl}/api/proxy/image?url=${encodeURIComponent(imageUrl)}`;
+      }
+      return imageUrl;
+    };
     
     // Fix image sources
     $('img[src]').each((_, el) => {
       const src = $(el).attr('src');
       if (!src) return;
       
-      // Skip data URLs and absolute URLs
-      if (src.startsWith('http://') || src.startsWith('https://')) return;
-      
       // Handle blob URLs - try to use data-src instead
       if (src.startsWith('blob:')) {
         const dataSrc = $(el).attr('data-src') || $(el).attr('data-lazy-src');
         if (dataSrc && !dataSrc.startsWith('blob:')) {
-          $(el).attr('src', dataSrc.startsWith('http') ? dataSrc : new URL(dataSrc, base).href);
+          const absoluteUrl = dataSrc.startsWith('http') ? dataSrc : new URL(dataSrc, base).href;
+          $(el).attr('src', toProxyUrl(absoluteUrl));
         }
         return;
       }
@@ -1283,11 +1295,18 @@ export class PlaywrightScraper {
       // Skip data URLs
       if (src.startsWith('data:')) return;
       
-      // Convert relative URLs to absolute
-      try {
-        $(el).attr('src', new URL(src, base).href);
-      } catch {
-        // Invalid URL, leave as-is
+      // Convert relative URLs to absolute and proxy
+      if (src.startsWith('http://') || src.startsWith('https://')) {
+        // Already absolute URL - proxy it
+        $(el).attr('src', toProxyUrl(src));
+      } else {
+        // Relative URL - make absolute and proxy
+        try {
+          const absoluteUrl = new URL(src, base).href;
+          $(el).attr('src', toProxyUrl(absoluteUrl));
+        } catch {
+          // Invalid URL, leave as-is
+        }
       }
     });
     
@@ -1307,28 +1326,43 @@ export class PlaywrightScraper {
       }
     });
     
-    // Fix background images in inline styles
+    // Fix background images in inline styles and proxy them
     $('[style*="url("]').each((_, el) => {
       const style = $(el).attr('style');
       if (style) {
         const fixed = style.replace(/url\(['"]?([^'")\s]+)['"]?\)/g, (match, url) => {
-          if (url.startsWith('data:') || url.startsWith('http')) return match;
-          return `url('${new URL(url, base).href}')`;
+          if (url.startsWith('data:') || url.includes('/api/proxy/image')) return match;
+          if (url.startsWith('http')) {
+            return `url('${toProxyUrl(url)}')`;
+          }
+          try {
+            const absoluteUrl = new URL(url, base).href;
+            return `url('${toProxyUrl(absoluteUrl)}')`;
+          } catch {
+            return match;
+          }
         });
         $(el).attr('style', fixed);
       }
     });
     
-    // Fix source srcset
+    // Fix source srcset and proxy images
     $('source[srcset], img[srcset]').each((_, el) => {
       const srcset = $(el).attr('srcset');
       if (srcset) {
         const fixed = srcset.split(',').map(part => {
           const [url, descriptor] = part.trim().split(/\s+/);
-          if (url && !url.startsWith('data:') && !url.startsWith('http')) {
-            return `${new URL(url, base).href} ${descriptor || ''}`.trim();
+          if (!url || url.startsWith('data:') || url.includes('/api/proxy/image')) return part;
+          
+          let absoluteUrl = url;
+          if (!url.startsWith('http')) {
+            try {
+              absoluteUrl = new URL(url, base).href;
+            } catch {
+              return part;
+            }
           }
-          return part;
+          return `${toProxyUrl(absoluteUrl)} ${descriptor || ''}`.trim();
         }).join(', ');
         $(el).attr('srcset', fixed);
       }

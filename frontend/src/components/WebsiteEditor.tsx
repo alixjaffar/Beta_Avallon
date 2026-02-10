@@ -2113,14 +2113,20 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to generate website');
+        // Show detailed error message including help text
+        const errorMsg = errorData.message || errorData.error || 'Failed to generate website';
+        const helpText = errorData.help ? `\n\n${errorData.help}` : '';
+        const details = errorData.details ? `\n\nDetails: ${typeof errorData.details === 'object' ? JSON.stringify(errorData.details) : errorData.details}` : '';
+        throw new Error(`${errorMsg}${helpText}${details}`);
       }
 
       const result = await response.json();
       
       // Check if there's an error in the result
       if (result.error) {
-        throw new Error(result.message || result.error || 'Failed to generate website');
+        const errorMsg = result.message || result.error || 'Failed to generate website';
+        const helpText = result.help ? `\n\n${result.help}` : '';
+        throw new Error(`${errorMsg}${helpText}`);
       }
       
       // Update content - MERGE with existing content instead of replacing
