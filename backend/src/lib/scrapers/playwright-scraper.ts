@@ -122,6 +122,19 @@ export class PlaywrightScraper {
       const $ = load(html);
       const title = this.extractTitle($);
       const description = this.extractDescription($);
+      
+      // Final check: verify we didn't scrape a security checkpoint page
+      const lowerTitle = title.toLowerCase();
+      const lowerBody = html.toLowerCase().slice(0, 5000);
+      if (lowerTitle.includes('security checkpoint') || 
+          lowerTitle.includes('verifying your browser') ||
+          lowerTitle.includes('just a moment') ||
+          lowerBody.includes('vercel security checkpoint') ||
+          lowerBody.includes("we're verifying your browser")) {
+        await this.cleanup();
+        logError('Scraped content is a security checkpoint page', null, { url: targetUrl, title });
+        throw new Error('SECURITY_CHECKPOINT: The website has bot protection. The scraped content is a security checkpoint page, not the actual website. Please download the HTML manually and use "Import HTML File" instead.');
+      }
       const colors = this.extractColors($, html);
       const fonts = this.extractFonts($);
       const images = this.extractImages($, targetUrl);
@@ -498,18 +511,45 @@ export class PlaywrightScraper {
       
       // Final wait and scroll
       await this.sleep(this.options.waitForJs);
+      
+      // Check for security checkpoint BEFORE scrolling
+      const isSecurityCheckpoint = await this.detectAndWaitForSecurityCheckpoint(page);
+      if (isSecurityCheckpoint) {
+        logInfo('🔒 Security checkpoint detected on internal page, waiting...', { path: normalizedPath });
+        await this.sleep(8000);
+        
+        // Check again
+        const stillOnCheckpoint = await this.detectAndWaitForSecurityCheckpoint(page);
+        if (stillOnCheckpoint) {
+          logInfo('🔒 Security checkpoint did not resolve, skipping page', { path: normalizedPath });
+          await page.close();
+          await this.cleanup();
+          return null;
+        }
+      }
+      
       await this.autoScroll(page);
       await page.evaluate(() => window.scrollTo(0, 0));
       await this.sleep(500);
       
       const html = await page.content();
       const $ = load(html);
+      
+      // Double-check the title isn't a security checkpoint
+      const title = this.extractTitle($);
+      if (title.toLowerCase().includes('security checkpoint') || 
+          title.toLowerCase().includes('verifying your browser') ||
+          title.toLowerCase().includes('just a moment')) {
+        logInfo('🔒 Page title indicates security checkpoint, skipping', { path: normalizedPath, title });
+        await page.close();
+        await this.cleanup();
+        return null;
+      }
+      
       const processedHtml = await this.processHtml(page, html, targetUrl);
       
       await page.close();
       await this.cleanup();
-      
-      const title = this.extractTitle($);
       
       logInfo('🎭 Playwright: Internal page scraped', { 
         path: normalizedPath, 
@@ -694,16 +734,19 @@ export class PlaywrightScraper {
       // Check for and handle Vercel/Cloudflare security checkpoints
       const isSecurityCheckpoint = await this.detectAndWaitForSecurityCheckpoint(page);
       if (isSecurityCheckpoint) {
-        logInfo('🔒 Security checkpoint detected, waiting for resolution...');
+        logInfo('🔒 Security checkpoint detected, waiting for resolution...', { url: targetUrl });
         // Wait additional time for checkpoint to resolve
-        await this.sleep(8000);
+        await this.sleep(10000);
         
         // Check if still on checkpoint
         const stillOnCheckpoint = await this.detectAndWaitForSecurityCheckpoint(page);
         if (stillOnCheckpoint) {
-          logError('Security checkpoint did not resolve', null, { url });
-          throw new Error('SECURITY_CHECKPOINT: The website has bot protection. Try importing the HTML file directly instead.');
+          await page.close();
+          await this.cleanup();
+          logError('Security checkpoint did not resolve', null, { url: targetUrl });
+          throw new Error('SECURITY_CHECKPOINT: The website has bot protection (Vercel/Cloudflare). Please download the HTML manually and use "Import HTML File" instead.');
         }
+        logInfo('🔓 Security checkpoint resolved, continuing scrape', { url: targetUrl });
       }
       
       // Scroll to trigger lazy loading
