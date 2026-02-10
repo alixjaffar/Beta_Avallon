@@ -126,14 +126,21 @@ export class PlaywrightScraper {
       // Final check: verify we didn't scrape a security checkpoint page
       const lowerTitle = title.toLowerCase();
       const lowerBody = html.toLowerCase().slice(0, 5000);
-      if (lowerTitle.includes('security checkpoint') || 
-          lowerTitle.includes('verifying your browser') ||
-          lowerTitle.includes('just a moment') ||
-          lowerBody.includes('vercel security checkpoint') ||
-          lowerBody.includes("we're verifying your browser")) {
-        await this.cleanup();
-        logError('Scraped content is a security checkpoint page', null, { url: targetUrl, title });
-        throw new Error('SECURITY_CHECKPOINT: The website has bot protection. The scraped content is a security checkpoint page, not the actual website. Please download the HTML manually and use "Import HTML File" instead.');
+      
+      const checkpointPhrases = [
+        'security checkpoint', 'verifying your browser', 'just a moment',
+        'checking the site connection', 'checking your connection',
+        'vercel security', 'cloudflare', 'browser verification',
+        'please wait while we', 'enable cookies', 'requires cookies',
+        "we're verifying", 'performance & security by'
+      ];
+      
+      for (const phrase of checkpointPhrases) {
+        if (lowerTitle.includes(phrase) || lowerBody.includes(phrase)) {
+          await this.cleanup();
+          logError('Scraped content is a security checkpoint page', null, { url: targetUrl, title, detectedPhrase: phrase });
+          throw new Error('SECURITY_CHECKPOINT: The website has bot protection (Vercel/Cloudflare). The scraped content is a security checkpoint page. Please download the HTML manually and use "Import HTML File" instead.');
+        }
       }
       const colors = this.extractColors($, html);
       const fonts = this.extractFonts($);
@@ -535,15 +542,25 @@ export class PlaywrightScraper {
       const html = await page.content();
       const $ = load(html);
       
-      // Double-check the title isn't a security checkpoint
+      // Double-check the title/content isn't a security checkpoint
       const title = this.extractTitle($);
-      if (title.toLowerCase().includes('security checkpoint') || 
-          title.toLowerCase().includes('verifying your browser') ||
-          title.toLowerCase().includes('just a moment')) {
-        logInfo('🔒 Page title indicates security checkpoint, skipping', { path: normalizedPath, title });
-        await page.close();
-        await this.cleanup();
-        return null;
+      const lowerTitle = title.toLowerCase();
+      const lowerHtml = html.toLowerCase().slice(0, 3000);
+      
+      const checkpointPhrases = [
+        'security checkpoint', 'verifying your browser', 'just a moment',
+        'checking the site connection', 'checking your connection', 
+        'cloudflare', 'please wait', 'browser verification',
+        'enable cookies', 'requires cookies'
+      ];
+      
+      for (const phrase of checkpointPhrases) {
+        if (lowerTitle.includes(phrase) || lowerHtml.includes(phrase)) {
+          logInfo('🔒 Page content indicates security checkpoint, skipping', { path: normalizedPath, title, phrase });
+          await page.close();
+          await this.cleanup();
+          return null;
+        }
       }
       
       const processedHtml = await this.processHtml(page, html, targetUrl);
@@ -797,14 +814,22 @@ export class PlaywrightScraper {
           'checking your browser',
           'ddos protection',
           'please wait while we verify',
+          'we\'re verifying',
         ];
         
-        // Cloudflare indicators
+        // Cloudflare indicators (expanded)
         const cloudflareIndicators = [
           'checking if the site connection is secure',
+          'checking the site connection security',
+          'checking your connection',
           'enable javascript and cookies',
           'ray id',
           'cloudflare',
+          'please wait',
+          'this page requires cookies',
+          'performance & security by cloudflare',
+          'please enable cookies',
+          'browser verification',
         ];
         
         const allIndicators = [...vercelIndicators, ...cloudflareIndicators];
@@ -818,8 +843,10 @@ export class PlaywrightScraper {
         // Check for common checkpoint elements
         const hasVercelChallenge = document.querySelector('[data-testid="challenge"]') !== null;
         const hasCloudflareChallenge = document.querySelector('#challenge-running') !== null;
+        const hasCloudflareForm = document.querySelector('#challenge-form') !== null;
+        const hasCfChallenge = document.querySelector('.cf-browser-verification') !== null;
         
-        return hasVercelChallenge || hasCloudflareChallenge;
+        return hasVercelChallenge || hasCloudflareChallenge || hasCloudflareForm || hasCfChallenge;
       });
       
       return isCheckpoint;
