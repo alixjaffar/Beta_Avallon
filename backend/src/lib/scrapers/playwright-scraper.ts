@@ -1064,9 +1064,10 @@ export class PlaywrightScraper {
 
   private async processHtml(page: Page, html: string, baseUrl: string): Promise<string> {
     const $ = load(html);
+    const base = new URL(baseUrl);
     
-    // Extract and inline all CSS
-    const extractedCSS = await page.evaluate(() => {
+    // Extract and inline all CSS, cleaning up problematic URLs
+    let extractedCSS = await page.evaluate(() => {
       const styles: string[] = [];
       
       // Get all stylesheet rules (convert StyleSheetList to Array)
@@ -1085,6 +1086,25 @@ export class PlaywrightScraper {
       return styles.join('\n');
     });
     
+    // Clean up the extracted CSS
+    if (extractedCSS) {
+      // Remove blob: URLs (they don't work outside the original browser session)
+      extractedCSS = extractedCSS.replace(/url\(['"]?blob:[^'")\s]+['"]?\)/gi, 'url()');
+      
+      // Remove broken data: URLs (very long ones that might be corrupted)
+      extractedCSS = extractedCSS.replace(/url\(['"]?data:[^'")\s]{10000,}['"]?\)/gi, 'url()');
+      
+      // Fix relative URLs in CSS to absolute
+      extractedCSS = extractedCSS.replace(/url\(['"]?(?!data:|http|https|blob:)([^'")\s]+)['"]?\)/gi, (match, url) => {
+        try {
+          const absoluteUrl = new URL(url, base).href;
+          return `url('${absoluteUrl}')`;
+        } catch {
+          return match;
+        }
+      });
+    }
+    
     // Remove external stylesheets (we've inlined them)
     $('link[rel="stylesheet"]').remove();
     
@@ -1102,12 +1122,55 @@ export class PlaywrightScraper {
     // Remove tracking scripts
     this.removeTrackingScripts($);
     
+    // Remove broken image placeholders
+    this.cleanupBrokenResources($);
+    
     // Add meta tag for imported site
     if (!$('meta[name="avallon-imported"]').length) {
       $('head').prepend(`<meta name="avallon-imported" content="${new Date().toISOString()}">`);
     }
     
     return $.html();
+  }
+  
+  /**
+   * Remove broken resource references that can cause errors
+   */
+  private cleanupBrokenResources($: CheerioAPI): void {
+    // Remove images with blob: URLs
+    $('img[src^="blob:"]').each((_, el) => {
+      const dataSrc = $(el).attr('data-src') || $(el).attr('data-lazy-src');
+      if (dataSrc && !dataSrc.startsWith('blob:')) {
+        $(el).attr('src', dataSrc);
+      } else {
+        $(el).removeAttr('src');
+      }
+    });
+    
+    // Fix data-src and data-lazy-src attributes
+    $('img[data-src], img[data-lazy-src]').each((_, el) => {
+      const src = $(el).attr('src');
+      const dataSrc = $(el).attr('data-src') || $(el).attr('data-lazy-src');
+      
+      // If src is empty or a placeholder, use data-src
+      if ((!src || src.includes('placeholder') || src.includes('data:image/gif')) && dataSrc && !dataSrc.startsWith('blob:')) {
+        $(el).attr('src', dataSrc);
+      }
+    });
+    
+    // Remove elements with broken blob: background images
+    $('[style*="blob:"]').each((_, el) => {
+      const style = $(el).attr('style') || '';
+      $(el).attr('style', style.replace(/url\(['"]?blob:[^'")\s]+['"]?\)/gi, 'none'));
+    });
+    
+    // Remove preload links for resources we can't load
+    $('link[rel="preload"][href^="blob:"]').remove();
+    
+    // Fix srcset with blob URLs
+    $('img[srcset*="blob:"], source[srcset*="blob:"]').each((_, el) => {
+      $(el).removeAttr('srcset');
+    });
   }
 
   /**
@@ -1174,8 +1237,28 @@ export class PlaywrightScraper {
     // Fix image sources
     $('img[src]').each((_, el) => {
       const src = $(el).attr('src');
-      if (src && !src.startsWith('data:') && !src.startsWith('http')) {
+      if (!src) return;
+      
+      // Skip data URLs and absolute URLs
+      if (src.startsWith('http://') || src.startsWith('https://')) return;
+      
+      // Handle blob URLs - try to use data-src instead
+      if (src.startsWith('blob:')) {
+        const dataSrc = $(el).attr('data-src') || $(el).attr('data-lazy-src');
+        if (dataSrc && !dataSrc.startsWith('blob:')) {
+          $(el).attr('src', dataSrc.startsWith('http') ? dataSrc : new URL(dataSrc, base).href);
+        }
+        return;
+      }
+      
+      // Skip data URLs
+      if (src.startsWith('data:')) return;
+      
+      // Convert relative URLs to absolute
+      try {
         $(el).attr('src', new URL(src, base).href);
+      } catch {
+        // Invalid URL, leave as-is
       }
     });
     
