@@ -1086,13 +1086,14 @@ export class PlaywrightScraper {
       return styles.join('\n');
     });
     
-    // Clean up the extracted CSS
+    // Clean up the extracted CSS aggressively
     if (extractedCSS) {
       // Remove blob: URLs (they don't work outside the original browser session)
       extractedCSS = extractedCSS.replace(/url\(['"]?blob:[^'")\s]+['"]?\)/gi, 'url()');
       
-      // Remove broken data: URLs (very long ones that might be corrupted)
-      extractedCSS = extractedCSS.replace(/url\(['"]?data:[^'")\s]{10000,}['"]?\)/gi, 'url()');
+      // Remove ALL data: URLs from CSS - they cause "Data URL decoding failed" errors
+      // and massively bloat the HTML. Better to lose some inline images than break the site.
+      extractedCSS = extractedCSS.replace(/url\(['"]?data:[^'")\s]+['"]?\)/gi, 'url()');
       
       // Fix relative URLs in CSS to absolute
       extractedCSS = extractedCSS.replace(/url\(['"]?(?!data:|http|https|blob:)([^'")\s]+)['"]?\)/gi, (match, url) => {
@@ -1140,10 +1141,24 @@ export class PlaywrightScraper {
     // Remove images with blob: URLs
     $('img[src^="blob:"]').each((_, el) => {
       const dataSrc = $(el).attr('data-src') || $(el).attr('data-lazy-src');
-      if (dataSrc && !dataSrc.startsWith('blob:')) {
+      if (dataSrc && !dataSrc.startsWith('blob:') && !dataSrc.startsWith('data:')) {
         $(el).attr('src', dataSrc);
       } else {
         $(el).removeAttr('src');
+      }
+    });
+    
+    // Remove images with data: URLs (they often get corrupted and cause errors)
+    $('img[src^="data:"]').each((_, el) => {
+      const dataSrc = $(el).attr('data-src') || $(el).attr('data-lazy-src');
+      if (dataSrc && !dataSrc.startsWith('blob:') && !dataSrc.startsWith('data:')) {
+        $(el).attr('src', dataSrc);
+      }
+      // Keep small data URLs (likely valid placeholders), remove large ones
+      const src = $(el).attr('src') || '';
+      if (src.length > 1000) {
+        $(el).removeAttr('src');
+        $(el).attr('src', 'about:blank'); // Prevent broken image icon
       }
     });
     
@@ -1152,24 +1167,38 @@ export class PlaywrightScraper {
       const src = $(el).attr('src');
       const dataSrc = $(el).attr('data-src') || $(el).attr('data-lazy-src');
       
-      // If src is empty or a placeholder, use data-src
-      if ((!src || src.includes('placeholder') || src.includes('data:image/gif')) && dataSrc && !dataSrc.startsWith('blob:')) {
+      // If src is empty, placeholder, or data URL, use data-src if it's a real URL
+      if ((!src || src.includes('placeholder') || src.startsWith('data:') || src === 'about:blank') && 
+          dataSrc && !dataSrc.startsWith('blob:') && !dataSrc.startsWith('data:')) {
         $(el).attr('src', dataSrc);
       }
     });
     
-    // Remove elements with broken blob: background images
-    $('[style*="blob:"]').each((_, el) => {
+    // Remove elements with broken blob: or data: background images in inline styles
+    $('[style*="blob:"], [style*="data:image"]').each((_, el) => {
       const style = $(el).attr('style') || '';
-      $(el).attr('style', style.replace(/url\(['"]?blob:[^'")\s]+['"]?\)/gi, 'none'));
+      // Remove blob URLs
+      let cleanStyle = style.replace(/url\(['"]?blob:[^'")\s]+['"]?\)/gi, 'none');
+      // Remove data URLs (they get corrupted)
+      cleanStyle = cleanStyle.replace(/url\(['"]?data:[^'")\s]+['"]?\)/gi, 'none');
+      $(el).attr('style', cleanStyle);
     });
     
     // Remove preload links for resources we can't load
     $('link[rel="preload"][href^="blob:"]').remove();
+    $('link[rel="preload"][href^="data:"]').remove();
     
-    // Fix srcset with blob URLs
-    $('img[srcset*="blob:"], source[srcset*="blob:"]').each((_, el) => {
+    // Fix srcset with blob or data URLs
+    $('img[srcset*="blob:"], source[srcset*="blob:"], img[srcset*="data:"], source[srcset*="data:"]').each((_, el) => {
       $(el).removeAttr('srcset');
+    });
+    
+    // Remove any remaining very long data: attributes that might cause issues
+    $('[src^="data:"]').each((_, el) => {
+      const src = $(el).attr('src') || '';
+      if (src.length > 5000) {
+        $(el).removeAttr('src');
+      }
     });
   }
 
