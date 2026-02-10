@@ -691,6 +691,21 @@ export class PlaywrightScraper {
       // Wait for JavaScript to render
       await this.sleep(this.options.waitForJs);
       
+      // Check for and handle Vercel/Cloudflare security checkpoints
+      const isSecurityCheckpoint = await this.detectAndWaitForSecurityCheckpoint(page);
+      if (isSecurityCheckpoint) {
+        logInfo('🔒 Security checkpoint detected, waiting for resolution...');
+        // Wait additional time for checkpoint to resolve
+        await this.sleep(8000);
+        
+        // Check if still on checkpoint
+        const stillOnCheckpoint = await this.detectAndWaitForSecurityCheckpoint(page);
+        if (stillOnCheckpoint) {
+          logError('Security checkpoint did not resolve', null, { url });
+          throw new Error('SECURITY_CHECKPOINT: The website has bot protection. Try importing the HTML file directly instead.');
+        }
+      }
+      
       // Scroll to trigger lazy loading
       await this.autoScroll(page);
       
@@ -703,6 +718,11 @@ export class PlaywrightScraper {
     } catch (error: any) {
       logError('Navigation failed', error, { url });
       
+      // Re-throw security checkpoint errors with helpful message
+      if (error.message?.includes('SECURITY_CHECKPOINT')) {
+        throw error;
+      }
+      
       // Try with domcontentloaded as fallback
       try {
         await page.goto(url, {
@@ -714,6 +734,54 @@ export class PlaywrightScraper {
       } catch {
         return null;
       }
+    }
+  }
+  
+  /**
+   * Detect Vercel, Cloudflare, or other security checkpoints
+   */
+  private async detectAndWaitForSecurityCheckpoint(page: Page): Promise<boolean> {
+    try {
+      const isCheckpoint = await page.evaluate(() => {
+        const bodyText = document.body?.innerText?.toLowerCase() || '';
+        const title = document.title?.toLowerCase() || '';
+        
+        // Vercel security checkpoint indicators
+        const vercelIndicators = [
+          'verifying your browser',
+          'security checkpoint',
+          'just a moment',
+          'checking your browser',
+          'ddos protection',
+          'please wait while we verify',
+        ];
+        
+        // Cloudflare indicators
+        const cloudflareIndicators = [
+          'checking if the site connection is secure',
+          'enable javascript and cookies',
+          'ray id',
+          'cloudflare',
+        ];
+        
+        const allIndicators = [...vercelIndicators, ...cloudflareIndicators];
+        
+        for (const indicator of allIndicators) {
+          if (bodyText.includes(indicator) || title.includes(indicator)) {
+            return true;
+          }
+        }
+        
+        // Check for common checkpoint elements
+        const hasVercelChallenge = document.querySelector('[data-testid="challenge"]') !== null;
+        const hasCloudflareChallenge = document.querySelector('#challenge-running') !== null;
+        
+        return hasVercelChallenge || hasCloudflareChallenge;
+      });
+      
+      return isCheckpoint;
+    } catch {
+      return false;
     }
   }
 

@@ -109,6 +109,18 @@ export async function POST(req: NextRequest) {
       }
     } catch (fetchError: any) {
       logError('Playwright scraping failed', fetchError, { url });
+      
+      // Handle security checkpoint errors with helpful message
+      if (fetchError?.message?.includes('SECURITY_CHECKPOINT')) {
+        return NextResponse.json(
+          { 
+            error: 'This website has bot protection (Vercel/Cloudflare security). Please download the website HTML manually and use the "Import HTML File" option instead.',
+            code: 'SECURITY_CHECKPOINT'
+          },
+          { status: 422, headers: corsHeaders }
+        );
+      }
+      
       return NextResponse.json(
         { error: `Failed to fetch website: ${fetchError?.message || 'Unknown error'}` },
         { status: 500, headers: corsHeaders }
