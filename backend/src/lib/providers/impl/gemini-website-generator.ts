@@ -706,16 +706,17 @@ export class GeminiWebsiteGenerator {
     const prompt = request.description.toLowerCase();
     
     // Detect what kind of modification is requested
-    const isAddingSection = prompt.includes('add') && (
+    const isAddingContent = (prompt.includes('add') || prompt.includes('create') || prompt.includes('new')) && (
       prompt.includes('section') || prompt.includes('testimonial') || 
       prompt.includes('faq') || prompt.includes('pricing') || 
       prompt.includes('contact') || prompt.includes('gallery') ||
-      prompt.includes('team') || prompt.includes('about')
+      prompt.includes('team') || prompt.includes('about') ||
+      prompt.includes('page') || prompt.includes('question')
     );
     
-    if (!isAddingSection) {
-      // Not a simple section addition, fall back to standard mode
-      throw new Error('Quick modification only supports adding new sections');
+    if (!isAddingContent) {
+      // Not a simple section/page addition, fall back to standard mode
+      throw new Error('Quick modification only supports adding new sections/pages');
     }
     
     logInfo('Quick modification: Generating new section only', { prompt: request.description.substring(0, 100) });
@@ -756,38 +757,58 @@ Return ONLY the HTML section code, starting with <section and ending with </sect
 Do NOT include any explanation or markdown code blocks - just the raw HTML.`;
 
     // Use Gemini Flash for speed (much faster than Pro)
+    // Use global endpoint with GoogleAuth (same as working Gemini 3 Pro calls)
     const flashModel = 'gemini-2.0-flash-001';
     
     try {
-      if (!this.vertexAI) {
-        throw new Error('Vertex AI not initialized');
+      if (!this.googleAuth) {
+        throw new Error('GoogleAuth not initialized');
       }
       
-      const generativeModel = this.vertexAI.getGenerativeModel({
-        model: flashModel,
+      logInfo('Quick modification: Calling Gemini Flash via global endpoint', { model: flashModel });
+      
+      // Get access token using GoogleAuth (same as Gemini 3 Pro)
+      const client = await this.googleAuth.getClient();
+      if (!client) {
+        throw new Error('Failed to get Google Auth client');
+      }
+      
+      const tokenResponse = await client.getAccessToken();
+      if (!tokenResponse || !tokenResponse.token) {
+        throw new Error('Failed to get access token');
+      }
+      
+      const token = tokenResponse.token;
+      
+      // Use global endpoint for Gemini Flash (same pattern as Gemini 3 Pro)
+      const url = `https://aiplatform.googleapis.com/v1/projects/${this.projectId}/locations/global/publishers/google/models/${flashModel}:generateContent`;
+      
+      const requestBody = {
+        contents: [{
+          role: 'user',
+          parts: [{ text: sectionPrompt }]
+        }],
         generationConfig: {
           temperature: 0.3,
           topK: 20,
           topP: 0.9,
-          maxOutputTokens: 8192, // Much smaller for just a section
+          maxOutputTokens: 8192,
         },
+      };
+      
+      const response = await axios.post(url, requestBody, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 60000, // 60 second timeout for quick modification
       });
       
-      logInfo('Quick modification: Calling Gemini Flash', { model: flashModel });
-      
-      const result = await generativeModel.generateContent({
-        contents: [{
-          role: 'user',
-          parts: [{ text: sectionPrompt }]
-        }]
-      });
-      
-      const response = result.response;
-      if (!response.candidates || response.candidates.length === 0) {
+      if (!response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
         throw new Error('No response from Gemini Flash');
       }
       
-      let newSectionHtml = response.candidates[0].content?.parts?.[0]?.text || '';
+      let newSectionHtml = response.data.candidates[0].content.parts[0].text || '';
       
       // Clean up the response
       newSectionHtml = newSectionHtml.trim();
@@ -837,12 +858,12 @@ Do NOT include any explanation or markdown code blocks - just the raw HTML.`;
         files[filename] = modifiedContent;
       }
       
-      // Track token usage
-      if (response.usageMetadata) {
+      // Track token usage (from axios response)
+      if (response.data?.usageMetadata) {
         this.lastTokenUsage = {
-          input: response.usageMetadata.promptTokenCount || 0,
-          output: response.usageMetadata.candidatesTokenCount || 0,
-          total: response.usageMetadata.totalTokenCount || 0,
+          input: response.data.usageMetadata.promptTokenCount || 0,
+          output: response.data.usageMetadata.candidatesTokenCount || 0,
+          total: response.data.usageMetadata.totalTokenCount || 0,
         };
       }
       
