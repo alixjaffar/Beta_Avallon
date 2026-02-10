@@ -1262,7 +1262,8 @@ export class PlaywrightScraper {
 
   private fixUrls($: CheerioAPI, baseUrl: string): void {
     const base = new URL(baseUrl);
-    const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://avallon-backend.onrender.com';
+    // Use avallon.ca as the primary domain (not the Render subdomain)
+    const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://avallon.ca';
     
     // Helper to convert external URLs to proxy URLs to avoid hotlinking blocks
     const toProxyUrl = (imageUrl: string): string => {
