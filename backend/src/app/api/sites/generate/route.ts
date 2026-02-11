@@ -70,9 +70,14 @@ export async function POST(req: NextRequest) {
   // SECURITY: Rate limit AI generation to prevent abuse
   const rateLimitResponse = generationRateLimiter(req);
   if (rateLimitResponse) {
+    // Add CORS headers to rate limit response
+    const headers = new Headers(rateLimitResponse.headers);
+    Object.entries(corsHeaders).forEach(([key, value]) => {
+      headers.set(key, value);
+    });
     return new NextResponse(rateLimitResponse.body, {
       status: rateLimitResponse.status,
-      headers: { ...Object.fromEntries(rateLimitResponse.headers.entries()), ...corsHeaders },
+      headers,
     });
   }
   
