@@ -56,7 +56,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: hostingResult.error || "Failed to attach domain to hosting provider" }, { status: 502 });
     }
 
-    const updated = await updateDomain(domainRecord.id, { siteId: site.id });
+    // SECURITY: Pass userId for ownership verification
+    const updated = await updateDomain(domainRecord.id, user.id, { siteId: site.id });
 
     return NextResponse.json({
       message: "Domain connected to site",

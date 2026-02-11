@@ -36,7 +36,8 @@ export async function POST(req: NextRequest) {
 
     const status = registrarResult.verified ? "active" : "pending";
 
-    const updated = await updateDomain(record.id, { status });
+    // SECURITY: Pass userId for ownership verification
+    const updated = await updateDomain(record.id, user.id, { status });
 
     const responseBody = { 
       message: registrarResult.verified ? "Domain verified" : "Domain verification pending", 
