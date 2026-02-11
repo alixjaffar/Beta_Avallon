@@ -32,14 +32,55 @@ export async function GET(req: NextRequest) {
   }
   
   try {
-    // Parse the URL to get the origin for the Referer header
-    let origin: string;
+    // Parse and validate the URL
+    let parsedUrl: URL;
     try {
-      origin = new URL(url).origin;
+      parsedUrl = new URL(url);
     } catch {
       return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
     }
     
+    // SECURITY: Only allow http/https protocols to prevent file:// and other attacks
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return NextResponse.json({ error: 'Invalid protocol' }, { status: 400 });
+    }
+    
+    // SECURITY: Block internal/private IP addresses to prevent SSRF attacks
+    const hostname = parsedUrl.hostname.toLowerCase();
+    const isInternalIP = 
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0' ||
+      hostname === '::1' ||
+      hostname.startsWith('192.168.') ||
+      hostname.startsWith('10.') ||
+      hostname.startsWith('172.16.') ||
+      hostname.startsWith('172.17.') ||
+      hostname.startsWith('172.18.') ||
+      hostname.startsWith('172.19.') ||
+      hostname.startsWith('172.20.') ||
+      hostname.startsWith('172.21.') ||
+      hostname.startsWith('172.22.') ||
+      hostname.startsWith('172.23.') ||
+      hostname.startsWith('172.24.') ||
+      hostname.startsWith('172.25.') ||
+      hostname.startsWith('172.26.') ||
+      hostname.startsWith('172.27.') ||
+      hostname.startsWith('172.28.') ||
+      hostname.startsWith('172.29.') ||
+      hostname.startsWith('172.30.') ||
+      hostname.startsWith('172.31.') ||
+      hostname.endsWith('.local') ||
+      hostname.endsWith('.internal') ||
+      hostname === 'metadata.google.internal' || // GCP metadata
+      hostname === '169.254.169.254'; // AWS/Cloud metadata endpoint
+    
+    if (isInternalIP) {
+      logError('SSRF attempt blocked', null, { url, hostname });
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
+    
+    const origin = parsedUrl.origin;
     logInfo('Proxying image download', { url: url.substring(0, 100) });
     
     const response = await fetch(url, {

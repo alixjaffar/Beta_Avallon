@@ -521,8 +521,9 @@ Be professional, friendly, and always aim to provide accurate and helpful respon
         });
 
         // Update agent with n8n workflow ID
+        // SECURITY: Pass userId for ownership verification
         const { updateAgent } = await import("@/data/agents");
-        agent = await updateAgent(agent.id, {
+        agent = await updateAgent(agent.id, user.id, {
           n8nId: result.externalId || null,
           status: "inactive",
         });
@@ -546,10 +547,11 @@ Be professional, friendly, and always aim to provide accurate and helpful respon
         logError('Failed to create n8n agent during onboarding (non-blocking)', apiError);
         
         // Try to update agent status
+        // SECURITY: Pass userId for ownership verification
         if (agent) {
           try {
             const { updateAgent } = await import("@/data/agents");
-            await updateAgent(agent.id, { status: "inactive" });
+            await updateAgent(agent.id, user.id, { status: "inactive" });
           } catch (updateError) {
             logError('Failed to update agent status', updateError);
           }

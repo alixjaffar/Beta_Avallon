@@ -50,7 +50,8 @@ export async function PUT(
       return NextResponse.json({ error: "Domain not found" }, { status: 404 });
     }
     
-    const updatedDomain = await updateDomain(id, validated);
+    // SECURITY: Pass userId to updateDomain for ownership verification
+    const updatedDomain = await updateDomain(id, user.id, validated);
     
     return NextResponse.json({ 
       message: "Domain updated successfully", 

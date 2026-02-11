@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCorsHeaders } from '@/lib/cors';
 import { logInfo, logError } from '@/lib/log';
+import { scrapingRateLimiter } from '@/lib/rateLimit';
 
 export async function OPTIONS(req: NextRequest) {
   return new NextResponse(null, {
@@ -18,6 +19,15 @@ export async function OPTIONS(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const corsHeaders = getCorsHeaders(req);
+  
+  // SECURITY: Rate limit scraping to prevent abuse
+  const rateLimitResponse = scrapingRateLimiter(req);
+  if (rateLimitResponse) {
+    return new NextResponse(rateLimitResponse.body, {
+      status: rateLimitResponse.status,
+      headers: { ...Object.fromEntries(rateLimitResponse.headers.entries()), ...corsHeaders },
+    });
+  }
   
   try {
     const body = await req.json();
@@ -216,6 +226,63 @@ export async function GET(req: NextRequest) {
   if (!baseUrl || !pagePath) {
     return NextResponse.json(
       { error: 'baseUrl and path are required' },
+      { status: 400, headers: corsHeaders }
+    );
+  }
+  
+  // SECURITY: Validate URL format
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(baseUrl);
+  } catch {
+    return NextResponse.json(
+      { error: 'Invalid URL format' },
+      { status: 400, headers: corsHeaders }
+    );
+  }
+  
+  // SECURITY: Only allow http/https protocols
+  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+    return NextResponse.json(
+      { error: 'Only HTTP and HTTPS protocols are allowed' },
+      { status: 400, headers: corsHeaders }
+    );
+  }
+  
+  // SECURITY: Block internal/private IP addresses to prevent SSRF
+  const hostname = parsedUrl.hostname.toLowerCase();
+  const isInternalIP = 
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '0.0.0.0' ||
+    hostname === '::1' ||
+    hostname.startsWith('192.168.') ||
+    hostname.startsWith('10.') ||
+    hostname.startsWith('172.16.') || hostname.startsWith('172.17.') ||
+    hostname.startsWith('172.18.') || hostname.startsWith('172.19.') ||
+    hostname.startsWith('172.20.') || hostname.startsWith('172.21.') ||
+    hostname.startsWith('172.22.') || hostname.startsWith('172.23.') ||
+    hostname.startsWith('172.24.') || hostname.startsWith('172.25.') ||
+    hostname.startsWith('172.26.') || hostname.startsWith('172.27.') ||
+    hostname.startsWith('172.28.') || hostname.startsWith('172.29.') ||
+    hostname.startsWith('172.30.') || hostname.startsWith('172.31.') ||
+    hostname.endsWith('.local') ||
+    hostname.endsWith('.internal') ||
+    hostname === 'metadata.google.internal' ||
+    hostname === '169.254.169.254';
+  
+  if (isInternalIP) {
+    logError('SSRF attempt blocked in GET /api/sites/import', new Error('Internal IP access attempt'), { baseUrl, hostname });
+    return NextResponse.json(
+      { error: 'Cannot access internal URLs' },
+      { status: 403, headers: corsHeaders }
+    );
+  }
+  
+  // SECURITY: Validate pagePath to prevent path traversal attacks
+  if (pagePath.includes('..') || pagePath.includes('//') || pagePath.includes('\\')) {
+    return NextResponse.json(
+      { error: 'Invalid path' },
       { status: 400, headers: corsHeaders }
     );
   }

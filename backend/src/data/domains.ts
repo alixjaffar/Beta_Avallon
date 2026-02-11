@@ -19,9 +19,19 @@ export async function createDomain(input: CreateDomainInput) {
   });
 }
 
-export async function updateDomain(id: string, data: { status?: string; siteId?: string | null }) {
+/**
+ * Update a domain with ownership verification
+ * SECURITY: Always require userId to prevent IDOR attacks
+ */
+export async function updateDomain(id: string, userId: string, data: { status?: string; siteId?: string | null }) {
+  // SECURITY: Verify ownership before updating
+  const domain = await getDomainById(id, userId);
+  if (!domain) {
+    throw new Error('Domain not found or access denied');
+  }
+  
   return await prisma.domain.update({
-    where: { id },
+    where: { id, ownerId: userId }, // Double-check ownership in the query
     data,
   });
 }

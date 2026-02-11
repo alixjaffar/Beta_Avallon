@@ -217,6 +217,22 @@ N8N_API_KEY="your_n8n_api_key"
 N8N_USE_AI_AGENT_NODE="true"  # Optional: Use AI Agent node
 
 # ============================================
+# REQUIRED - Email Configuration
+# ============================================
+# SECURITY: Never hardcode email passwords in code!
+# Email credentials for sending notifications (Google Workspace/Gmail)
+EMAIL_USER="Hello@avallon.ca"
+EMAIL_PASSWORD="your_app_password_here"  # Google App Password (no spaces)
+# OR use these alternative names:
+# SMTP_USER="Hello@avallon.ca"
+# SMTP_PASSWORD="your_app_password_here"
+
+# Optional SMTP configuration
+SMTP_HOST="smtp.gmail.com"  # Default: smtp.gmail.com
+SMTP_PORT="587"  # Default: 587
+SMTP_SECURE="false"  # Set to "true" for port 465
+
+# ============================================
 # OPTIONAL - For Full Functionality
 # ============================================
 
@@ -241,6 +257,12 @@ NAMECHEAP_API_USER="your_api_user"
 NAMECHEAP_API_KEY="your_api_key"
 NAMECHEAP_USERNAME="your_username"
 NAMECHEAP_CLIENT_IP="127.0.0.1"
+
+# ============================================
+# Security (optional - for encryption)
+# ============================================
+# Used for encrypting sensitive data (auto-generated in dev mode)
+ENCRYPTION_KEY="your_32_byte_base64_key_here"
 ```
 
 ---

@@ -72,7 +72,8 @@ export async function PUT(
       return NextResponse.json({ error: "Agent not found" }, { status: 404, headers: corsHeaders });
     }
     
-    const updatedAgent = await updateAgent(id, validated);
+    // SECURITY: Pass userId for ownership verification
+    const updatedAgent = await updateAgent(id, user.id, validated);
     
     // Enrich with embed code if agent is active
     const provider = getAgentProvider();
@@ -174,7 +175,8 @@ export async function PATCH(
         logInfo('n8n workflow activated', { workflowId: agent.n8nId, agentId: id });
         
         // Update agent status to active
-        const updatedAgent = await updateAgent(id, { status: 'active' });
+        // SECURITY: Pass userId for ownership verification
+        const updatedAgent = await updateAgent(id, user.id, { status: 'active' });
         
         const provider = getAgentProvider();
         const enrichedAgent = {
@@ -201,7 +203,8 @@ export async function PATCH(
       return NextResponse.json({ error: "Agent not found" }, { status: 404, headers: corsHeaders });
     }
     
-    const updatedAgent = await updateAgent(id, validated);
+    // SECURITY: Pass userId for ownership verification
+    const updatedAgent = await updateAgent(id, user.id, validated);
     const provider = getAgentProvider();
     const enrichedAgent = {
       ...updatedAgent,

@@ -93,7 +93,8 @@ export async function POST(req: NextRequest) {
       const result = await provider.createAgent({ name, prompt, activate: shouldAutoActivate });
 
       // Update agent with n8nId and set status based on activation
-      const updatedAgent = await updateAgent(agent.id, {
+      // SECURITY: Pass userId for ownership verification
+      const updatedAgent = await updateAgent(agent.id, user.id, {
         n8nId: result.externalId || null,
         status: shouldAutoActivate ? "active" : "inactive", // Auto-activate if enabled
       });
@@ -118,7 +119,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(responseBody, { headers: corsHeaders });
     } catch (apiError: unknown) {
       // If n8n API fails, keep agent but mark as inactive
-      await updateAgent(agent.id, { status: "inactive" });
+      // SECURITY: Pass userId for ownership verification
+      await updateAgent(agent.id, user.id, { status: "inactive" });
       const errorMessage = apiError instanceof Error ? apiError.message : 'Unknown error';
       logError('n8n API error during agent creation', apiError);
       return NextResponse.json({ 

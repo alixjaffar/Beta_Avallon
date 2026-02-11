@@ -341,14 +341,23 @@ async function sendN8nInvitation(userId: string, userEmail: string): Promise<voi
       }
     }
     
-    // Send email directly using nodemailer (same config as emailService)
+    // SECURITY: Email credentials MUST come from environment variables
+    const emailUser = process.env.EMAIL_USER || process.env.SMTP_USER;
+    const emailPass = process.env.EMAIL_PASSWORD || process.env.SMTP_PASSWORD || process.env.EMAIL_APP_PASSWORD;
+    
+    if (!emailUser || !emailPass) {
+      logError('Email credentials not configured', new Error('Missing EMAIL_USER or EMAIL_PASSWORD'));
+      throw new Error('Email service not configured. Please set EMAIL_USER and EMAIL_PASSWORD environment variables.');
+    }
+    
+    // Send email directly using nodemailer
     const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false,
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: parseInt(process.env.SMTP_PORT || '587'),
+      secure: process.env.SMTP_SECURE === 'true',
       auth: {
-        user: 'Hello@avallon.ca',
-        pass: 'oagqtgpxwcldyibn', // App password (no spaces)
+        user: emailUser,
+        pass: emailPass,
       },
     });
     

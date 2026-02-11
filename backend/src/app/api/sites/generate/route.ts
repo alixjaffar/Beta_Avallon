@@ -3,6 +3,7 @@
 // CHANGELOG: 2025-12-23 - Switched to DeepSeek AI for better website generation (DeepSite-inspired)
 // CHANGELOG: 2026-01-06 - Added user integration support (Stripe, GA, etc.)
 // CHANGELOG: 2026-01-07 - Fixed CORS handling to use shared getCorsHeaders utility
+// CHANGELOG: 2026-01-21 - Added rate limiting for security
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 // AI generators are dynamically imported to avoid build-time issues with Google Cloud libs
@@ -22,6 +23,7 @@ import {
   getUserActiveIntegrations 
 } from "@/lib/integrations";
 import { getCorsHeaders } from "@/lib/cors";
+import { generationRateLimiter } from "@/lib/rateLimit";
 
 export async function OPTIONS(req: NextRequest) {
   return new NextResponse(null, {
@@ -64,6 +66,15 @@ const GenerateSiteSchema = z.object({
 
 export async function POST(req: NextRequest) {
   const corsHeaders = getCorsHeaders(req);
+  
+  // SECURITY: Rate limit AI generation to prevent abuse
+  const rateLimitResponse = generationRateLimiter(req);
+  if (rateLimitResponse) {
+    return new NextResponse(rateLimitResponse.body, {
+      status: rateLimitResponse.status,
+      headers: { ...Object.fromEntries(rateLimitResponse.headers.entries()), ...corsHeaders },
+    });
+  }
   
   try {
     const user = await getUser();

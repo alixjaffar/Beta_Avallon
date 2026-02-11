@@ -94,12 +94,20 @@ export async function createAgent(input: CreateAgentInput) {
   }
 }
 
-export async function updateAgent(id: string, data: { n8nId?: string | null; status?: string; name?: string }) {
+/**
+ * Update an agent with ownership verification
+ * SECURITY: Always require userId to prevent IDOR attacks
+ */
+export async function updateAgent(id: string, userId: string, data: { n8nId?: string | null; status?: string; name?: string }) {
   try {
     // First check if this is a file-based agent (starts with 'agent_')
     if (id.startsWith('agent_')) {
       const agentIndex = agents.findIndex(a => a.id === id);
       if (agentIndex !== -1) {
+        // SECURITY: Verify ownership for file-based agents
+        if (agents[agentIndex].ownerId !== userId) {
+          throw new Error('Agent not found or access denied');
+        }
         agents[agentIndex] = {
           ...agents[agentIndex],
           ...data,
@@ -111,10 +119,11 @@ export async function updateAgent(id: string, data: { n8nId?: string | null; sta
       }
     }
     
-    // Try database
+    // Try database with ownership verification
     try {
+      // SECURITY: Include ownerId in where clause to prevent IDOR
       return await prisma.agent.update({
-        where: { id },
+        where: { id, ownerId: userId },
         data,
       });
     } catch (dbError: any) {
@@ -135,9 +144,13 @@ export async function updateAgent(id: string, data: { n8nId?: string | null; sta
         });
         const agentIndex = agents.findIndex(a => a.id === id);
         if (agentIndex === -1) {
-          // Agent not in file storage either - create it
+          // Agent not in file storage either
           logInfo('Agent not found in file storage, skipping update', { agentId: id });
           return null;
+        }
+        // SECURITY: Verify ownership for file-based agents
+        if (agents[agentIndex].ownerId !== userId) {
+          throw new Error('Agent not found or access denied');
         }
         agents[agentIndex] = {
           ...agents[agentIndex],

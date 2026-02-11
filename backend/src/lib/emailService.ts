@@ -15,21 +15,32 @@ class EmailService {
   private emailLogFile: string;
 
   constructor() {
+    // SECURITY: Email credentials MUST come from environment variables
+    const emailUser = process.env.EMAIL_USER || process.env.SMTP_USER;
+    const emailPass = process.env.EMAIL_PASSWORD || process.env.SMTP_PASSWORD || process.env.EMAIL_APP_PASSWORD;
+    
+    if (!emailUser || !emailPass) {
+      console.warn('⚠️ Email Service: Missing EMAIL_USER or EMAIL_PASSWORD environment variables');
+      console.warn('⚠️ Email sending will be disabled until credentials are configured');
+    }
+    
     // Configure email transporter for Hello@avallon.ca Google Workspace
     this.transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false,
-      auth: {
-        user: 'Hello@avallon.ca',
-        pass: 'oagq tgpx wcld yibn', // Google Workspace App Password
-      },
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: parseInt(process.env.SMTP_PORT || '587'),
+      secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+      auth: emailUser && emailPass ? {
+        user: emailUser,
+        pass: emailPass,
+      } : undefined,
     });
     
     this.emailLogFile = path.join(process.cwd(), 'email-log.json');
     
-    console.log('📧 Email Service: Configured for Hello@avallon.ca');
-    console.log('📧 Automatic email sending enabled!');
+    if (emailUser && emailPass) {
+      console.log('📧 Email Service: Configured for', emailUser);
+      console.log('📧 Automatic email sending enabled!');
+    }
   }
 
   private logEmail(type: string, to: string, subject: string, content: string) {
