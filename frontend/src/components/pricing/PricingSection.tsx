@@ -76,7 +76,7 @@ export const PricingSection = () => {
           price="$0"
           description="Perfect for getting started"
           features={[
-            "15 credits/month",
+            "30 credits/month",
             "1 generated site",
             "Basic customization",
             "No AI agents",

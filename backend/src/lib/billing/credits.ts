@@ -15,7 +15,7 @@ export const CREDIT_COSTS = {
 
 // Credit allocations per plan (monthly)
 export const PLAN_CREDITS: Record<string, number> = {
-  free: 15,         // Free plan: 15 credits/month
+  free: 30,         // Free plan: 30 credits/month
   starter: 100,     // Starter plan: 100 credits/month
   growth: 250,      // Growth plan: 250 credits/month
   enterprise: 400,  // Enterprise plan: 400+ credits/month
@@ -97,8 +97,8 @@ export async function getUserCredits(userId: string, email?: string): Promise<nu
       return credits;
     }
     
-    // New user - give them 15 credits (free plan)
-    return 15;
+    // New user - give them 30 credits (free plan)
+    return 30;
   } catch (error: any) {
     logError('Failed to get user credits', error, { userId, email });
     return PLAN_CREDITS.free;
@@ -337,7 +337,7 @@ export async function ensureUserHasCredits(
   email: string,
   minCredits?: number
 ): Promise<{ success: boolean; credits: number }> {
-  const defaultCredits = minCredits ?? 15; // Default to 15 credits for all new users
+  const defaultCredits = minCredits ?? 30; // Default to 30 credits for all new users
   
   if (!email || email === 'user@example.com' || email === 'test@example.com') {
     return { success: true, credits: defaultCredits };

@@ -61,11 +61,11 @@ const Dashboard = () => {
       const response = await fetchWithAuth(`${baseUrl}/api/billing/credits`);
       if (response.ok) {
         const data = await response.json();
-        setCredits(data.credits ?? data.remainingCredits ?? 20);
+        setCredits(data.credits ?? data.remainingCredits ?? 30);
       }
     } catch (error) {
       console.error('Failed to load credits:', error);
-      setCredits(15); // Default to 15 on error
+      setCredits(30); // Default to 30 on error (free plan)
     }
   };
 

@@ -57,8 +57,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Ensure user exists in DB with initial credits (20 for free users)
-    await ensureUserHasCredits(user.id, user.email, 20);
+    // Ensure user exists in DB with initial credits (30 for free users)
+    await ensureUserHasCredits(user.id, user.email, 30);
 
     // Check if user has enough credits (pass email for lookup)
     const creditCheck = await hasEnoughCredits(user.id, CREDIT_COSTS.MODIFY_WEBSITE, user.email);

@@ -98,15 +98,15 @@ export async function POST(req: NextRequest) {
       }
     }
     
-    // Ensure user has at least 20 credits if they exist
-    if (dbUser && (dbUser.credits === null || dbUser.credits === undefined || dbUser.credits < 20)) {
+    // Ensure user has at least 30 credits if they exist
+    if (dbUser && (dbUser.credits === null || dbUser.credits === undefined || dbUser.credits < 30)) {
       try {
         const { getPlanCredits } = await import("@/lib/billing/credits");
         await prisma.user.update({
           where: { email: user.email },
           data: { credits: getPlanCredits('free') },
         });
-        logInfo('Updated user credits to 20', { email: user.email, userId: dbUser.id });
+        logInfo('Updated user credits to 30', { email: user.email, userId: dbUser.id });
         // Refresh dbUser
         dbUser = await prisma.user.findUnique({
           where: { email: user.email },
@@ -297,8 +297,8 @@ Be professional, friendly, and always aim to provide accurate and helpful respon
                     });
                     
                     if (existingUser) {
-                      // Update existing user - ensure they have at least 20 credits
-                      const creditsToSet = existingUser.credits === null || existingUser.credits < 20 ? 20 : existingUser.credits;
+                      // Update existing user - ensure they have at least 30 credits
+                      const creditsToSet = existingUser.credits === null || existingUser.credits < 30 ? 30 : existingUser.credits;
                       const updatedUser = await prisma.user.update({
                         where: { id: existingUser.id },
                         data: {
@@ -311,7 +311,7 @@ Be professional, friendly, and always aim to provide accurate and helpful respon
                       logInfo('User updated via Prisma', { userId: updatedUser.id, email: user.email, credits: updatedUser.credits });
                       userCreated = true;
                     } else {
-                      // Create new user with 20 free credits
+                      // Create new user with 30 free credits
                       const { getPlanCredits } = await import("@/lib/billing/credits");
                       const newUser = await prisma.user.create({
                         data: {
@@ -319,7 +319,7 @@ Be professional, friendly, and always aim to provide accurate and helpful respon
                           email: user.email,
                           n8nPassword: encryptedPassword,
                           n8nUserId: n8nUserAccount.id,
-                          credits: getPlanCredits('free'), // Give free plan users 20 credits
+                          credits: getPlanCredits('free'), // Give free plan users 30 credits
                         },
                       });
                       logInfo('User created via Prisma create', { userId: newUser.id, email: user.email, credits: newUser.credits });

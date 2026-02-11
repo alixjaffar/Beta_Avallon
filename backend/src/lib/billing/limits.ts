@@ -14,14 +14,14 @@ export type PlanLimits = {
 };
 
 export const PLAN_LIMITS: Record<string, PlanLimits> = {
-  // Free Tier - 15 credits/month, 1 site, no AI agents, no integrations
+  // Free Tier - 30 credits/month, 1 site, no AI agents, no integrations
   free: {
     sites: 1,
     agents: 0,           // No AI agents on free tier
     domains: 0,
     customDomains: false,
     emailAccounts: 0,
-    credits: 15,
+    credits: 30,
     integrations: false, // No integrations on free tier
     multiSite: false,
   },

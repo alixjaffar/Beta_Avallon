@@ -466,7 +466,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <p className="text-2xl font-bold text-slate-900 dark:text-white mb-4">$0<span className="text-sm font-normal text-slate-500">/mo</span></p>
                   <ul className="space-y-2 text-sm">
                     <li className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                      <Check className="w-4 h-4 text-green-500" /> 15 credits/month
+                      <Check className="w-4 h-4 text-green-500" /> 30 credits/month
                     </li>
                     <li className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                       <Check className="w-4 h-4 text-green-500" /> 1 website

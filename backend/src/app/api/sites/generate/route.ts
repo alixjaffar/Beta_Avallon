@@ -125,8 +125,8 @@ export async function POST(req: NextRequest) {
       complexity
     });
 
-    // Ensure user exists in DB with initial credits (20 for free users)
-    await ensureUserHasCredits(user.id, user.email, 20);
+    // Ensure user exists in DB with initial credits (30 for free users)
+    await ensureUserHasCredits(user.id, user.email, 30);
 
     // Check if user has enough credits (minimum 5 credits to start, actual cost based on tokens used)
     // We use a minimum threshold since we don't know exact token usage upfront

@@ -323,7 +323,7 @@ const Settings = () => {
                             </>
                           )}
                         </ul>
-                        <p className="mt-2">You'll be downgraded to the Free plan with 15 credits/month.</p>
+                        <p className="mt-2">You'll be downgraded to the Free plan with 30 credits/month.</p>
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -367,7 +367,7 @@ const Settings = () => {
                 </h4>
                 <p className="text-2xl font-bold mt-2">$0<span className="text-sm font-normal">/mo</span></p>
                 <ul className="mt-4 space-y-2 text-sm">
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> 15 credits/month</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> 30 credits/month</li>
                   <li className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> 1 website</li>
                   <li className="flex items-center gap-2 text-muted-foreground">✗ AI Agents</li>
                   <li className="flex items-center gap-2 text-muted-foreground">✗ Integrations</li>
