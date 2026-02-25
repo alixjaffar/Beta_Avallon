@@ -22,6 +22,11 @@ function isAdmin(email: string | undefined): boolean {
   return ADMIN_EMAILS.includes(email.toLowerCase());
 }
 
+// Helper: generate the same pseudo userId that getUser() uses when only email is known
+function getUserIdFromEmail(email: string): string {
+  return `user_${Buffer.from(email).toString('base64').replace(/[^a-zA-Z0-9]/g, '').substring(0, 16)}`;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const user = await getUser();
@@ -39,18 +44,29 @@ export async function GET(req: NextRequest) {
     const targetEmail = searchParams.get('email');
 
     if (targetEmail) {
-      // Get specific user's credits
+      // Try database first
       const targetUser = await prisma.user.findUnique({
         where: { email: targetEmail },
         select: { id: true, email: true, credits: true, createdAt: true },
       });
 
-      if (!targetUser) {
-        return NextResponse.json({ error: "User not found" }, { status: 404 });
-      }
+      // Always check file-based storage (source of truth for credits)
+      const fallbackUserId = getUserIdFromEmail(targetEmail);
+      const fileCredits = await getUserCredits(targetUser?.id || fallbackUserId, targetEmail);
 
-      // Also check file-based storage
-      const fileCredits = await getUserCredits(targetUser.id, targetUser.email);
+      // If user doesn't exist in DB, still return file-based credits
+      if (!targetUser) {
+        return NextResponse.json({
+          user: {
+            id: fallbackUserId,
+            email: targetEmail,
+            credits: fileCredits,
+            createdAt: null,
+          },
+          fileCredits,
+          note: "User not found in database; using file-based credits only",
+        });
+      }
 
       return NextResponse.json({
         user: targetUser,
@@ -108,17 +124,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "amount must be a positive number" }, { status: 400 });
     }
 
-    // Find target user
+    // Find target user in database (optional)
     const targetUser = await prisma.user.findUnique({
       where: { email },
     });
 
-    if (!targetUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    // Determine previous credits from DB or file-based storage
+    const fallbackUserId = getUserIdFromEmail(email);
+    const previousCredits = targetUser
+      ? (targetUser.credits ?? (await getUserCredits(targetUser.id, email)))
+      : await getUserCredits(fallbackUserId, email);
 
     let newCredits: number;
-    const previousCredits = targetUser.credits ?? 0;
 
     switch (action) {
       case 'set':
@@ -134,14 +151,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
-    // Update database
-    const updatedUser = await prisma.user.update({
-      where: { email },
-      data: { credits: newCredits },
-    });
+    // Update database if user exists there
+    if (targetUser) {
+      await prisma.user.update({
+        where: { email },
+        data: { credits: newCredits },
+      });
+    }
 
-    // Also update file-based storage
-    await setCredits(targetUser.id, newCredits, `Admin ${action} by ${user.email}`, email);
+    // Update file-based storage (always source of truth for billing endpoints)
+    const effectiveUserId = targetUser?.id || fallbackUserId;
+    await setCredits(effectiveUserId, newCredits, `Admin ${action} by ${user.email}`, email);
 
     logInfo('Admin credits update', {
       adminEmail: user.email,
@@ -150,18 +170,20 @@ export async function POST(req: NextRequest) {
       amount,
       previousCredits,
       newCredits,
+      hasDbUser: !!targetUser,
     });
 
     return NextResponse.json({
       success: true,
       user: {
-        email: updatedUser.email,
+        email,
         previousCredits,
         newCredits,
         action,
         amount,
       },
       updatedBy: user.email,
+      hasDbUser: !!targetUser,
     });
   } catch (error: any) {
     logError('Admin credits POST failed', error);
