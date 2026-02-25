@@ -1,473 +1,638 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Mail, Calendar, TrendingUp, Send, Trash2, RefreshCw, AlertCircle, CheckCircle } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { 
+  Shield, 
+  Users, 
+  Coins, 
+  Search, 
+  Plus, 
+  Minus, 
+  RefreshCw,
+  ArrowLeft,
+  Loader2,
+  CheckCircle,
+  AlertCircle
+} from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-interface SignupStats {
-  totalSignups: number;
-  emailSubscribers: number;
-  signupsToday: number;
-  signupsThisWeek: number;
-  signupsThisMonth: number;
-}
-
-interface Signup {
-  id: string;
-  name: string;
-  email: string;
-  birthday: string;
-  emailSubscription: boolean;
-  createdAt: string;
-}
+const ADMIN_EMAIL = "alij123402@gmail.com";
 
 const AdminDashboard = () => {
-  const [stats, setStats] = useState<SignupStats | null>(null);
-  const [signups, setSignups] = useState<Signup[]>([]);
+  const [isAuthorized, setIsAuthorized] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [emailSubject, setEmailSubject] = useState("");
-  const [emailContent, setEmailContent] = useState("");
-  const [sendingEmail, setSendingEmail] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [emailTemplates, setEmailTemplates] = useState([
-    {
-      name: "Beta Launch Announcement",
-      subject: "🚀 Avallon Beta is Here!",
-      content: "We're excited to announce that Avallon beta is now live! You can now access our platform and start creating amazing websites. Log in to your account to get started."
-    },
-    {
-      name: "Feature Update",
-      subject: "✨ New Features Added to Avallon",
-      content: "We've added some exciting new features to Avallon based on your feedback. Check out the latest updates and let us know what you think!"
-    },
-    {
-      name: "Maintenance Notice",
-      subject: "🔧 Scheduled Maintenance - Avallon",
-      content: "We'll be performing scheduled maintenance on our servers. The platform will be temporarily unavailable during this time. We apologize for any inconvenience."
-    }
-  ]);
+  const [currentUserEmail, setCurrentUserEmail] = useState("");
+  
+  // User list state
+  const [users, setUsers] = useState<any[]>([]);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  
+  // Single user lookup
+  const [searchEmail, setSearchEmail] = useState("");
+  const [searchResult, setSearchResult] = useState<any>(null);
+  const [searching, setSearching] = useState(false);
+  
+  // Credit modification
+  const [targetEmail, setTargetEmail] = useState("");
+  const [creditAction, setCreditAction] = useState<"set" | "add" | "subtract">("set");
+  const [creditAmount, setCreditAmount] = useState(100);
+  const [modifying, setModifying] = useState(false);
+  const [lastResult, setLastResult] = useState<any>(null);
+
+  const navigate = useNavigate();
   const { toast } = useToast();
 
+  const baseUrl = import.meta.env.PROD 
+    ? 'https://avallon.ca'
+    : 'http://localhost:3001';
+
+  // Check if user is authorized admin
   useEffect(() => {
-    fetchData();
+    const checkAuth = () => {
+      try {
+        const sessionData = localStorage.getItem('avallon_session');
+        if (sessionData) {
+          const session = JSON.parse(sessionData);
+          const email = session.email?.toLowerCase();
+          setCurrentUserEmail(email || "");
+          
+          if (email === ADMIN_EMAIL.toLowerCase()) {
+            setIsAuthorized(true);
+            loadUsers();
+          } else {
+            setIsAuthorized(false);
+          }
+        } else {
+          setIsAuthorized(false);
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        setIsAuthorized(false);
+      }
+      setLoading(false);
+    };
     
-    // Auto-refresh data every 30 seconds
-    const interval = setInterval(fetchData, 30000);
-    
-    return () => clearInterval(interval);
+    checkAuth();
   }, []);
 
-  const fetchData = async (isManualRefresh = false) => {
-    if (isManualRefresh) {
-      setRefreshing(true);
-    }
-    
+  const loadUsers = async () => {
+    setLoadingUsers(true);
     try {
-      const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://avallon.ca';
-      const [statsResponse, signupsResponse] = await Promise.all([
-        fetch(`${baseUrl}/api/beta-signups?type=stats`),
-        fetch(`${baseUrl}/api/beta-signups?type=all`),
-      ]);
-
-      const statsData = await statsResponse.json();
-      const signupsData = await signupsResponse.json();
-
-      setStats(statsData.stats);
-      setSignups(signupsData.signups);
-      setLastUpdated(new Date());
+      const response = await fetch(`${baseUrl}/api/admin/credits`, {
+        credentials: 'include',
+        headers: {
+          'x-user-email': ADMIN_EMAIL,
+        },
+      });
       
-      if (isManualRefresh) {
+      if (response.ok) {
+        const data = await response.json();
+        setUsers(data.users || []);
+        setTotalUsers(data.totalUsers || 0);
+      } else {
+        const error = await response.json();
         toast({
-          title: "Success",
-          description: "Data refreshed successfully",
+          title: "Failed to load users",
+          description: error.error || "Unknown error",
+          variant: "destructive",
         });
       }
-    } catch (error) {
-      console.error('Error fetching data:', error);
+    } catch (error: any) {
       toast({
-        title: "Error",
-        description: "Failed to fetch signup data. Make sure backend is running.",
+        title: "Error loading users",
+        description: error.message,
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
     }
+    setLoadingUsers(false);
   };
 
-  const sendBulkEmail = async () => {
-    if (!emailSubject.trim() || !emailContent.trim()) {
+  const searchUser = async () => {
+    if (!searchEmail.trim()) {
       toast({
-        title: "Error",
-        description: "Please fill in both subject and content",
+        title: "Enter an email",
+        description: "Please enter an email address to search",
         variant: "destructive",
       });
       return;
     }
-
-    if (!stats?.emailSubscribers || stats.emailSubscribers === 0) {
-      toast({
-        title: "No Subscribers",
-        description: "There are no email subscribers to send emails to.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setSendingEmail(true);
-    setLastEmailResult(null);
+    
+    setSearching(true);
+    setSearchResult(null);
     
     try {
-      const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://avallon.ca';
-      const response = await fetch(`${baseUrl}/api/bulk-email`, {
+      const response = await fetch(
+        `${baseUrl}/api/admin/credits?email=${encodeURIComponent(searchEmail.trim())}`,
+        {
+          credentials: 'include',
+          headers: {
+            'x-user-email': ADMIN_EMAIL,
+          },
+        }
+      );
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setSearchResult(data);
+        setTargetEmail(searchEmail.trim());
+      } else {
+        toast({
+          title: "User not found",
+          description: data.error || "Could not find user",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Search failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+    setSearching(false);
+  };
+
+  const modifyCredits = async () => {
+    if (!targetEmail.trim()) {
+      toast({
+        title: "Enter target email",
+        description: "Please enter the email of the user to modify",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (creditAmount < 0) {
+      toast({
+        title: "Invalid amount",
+        description: "Credit amount must be positive",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setModifying(true);
+    setLastResult(null);
+    
+    try {
+      const response = await fetch(`${baseUrl}/api/admin/credits`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          'x-user-email': ADMIN_EMAIL,
         },
         body: JSON.stringify({
-          subject: emailSubject,
-          content: emailContent,
+          email: targetEmail.trim(),
+          action: creditAction,
+          amount: creditAmount,
         }),
       });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setLastEmailResult({
-          sent: result.sent,
-          failed: result.failed,
-          total: result.totalSubscribers
-        });
-        
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setLastResult(data);
         toast({
-          title: "Success!",
-          description: `Email sent to ${result.sent} subscribers${result.failed > 0 ? ` (${result.failed} failed)` : ''}`,
+          title: "Credits updated!",
+          description: `${targetEmail}: ${data.user.previousCredits} → ${data.user.newCredits} credits`,
         });
         
-        // Clear form after successful send
-        setEmailSubject("");
-        setEmailContent("");
+        // Refresh user list
+        loadUsers();
         
-        // Refresh data to get updated stats
-        fetchData();
+        // Update search result if same user
+        if (searchResult && searchResult.user?.email === targetEmail.trim()) {
+          searchUser();
+        }
       } else {
         toast({
-          title: "Error",
-          description: result.message || "Failed to send bulk email",
+          title: "Failed to update credits",
+          description: data.error || "Unknown error",
           variant: "destructive",
         });
       }
-    } catch (error) {
-      console.error('Bulk email error:', error);
+    } catch (error: any) {
       toast({
-        title: "Error",
-        description: "Failed to send bulk email. Please check your connection and try again.",
+        title: "Error updating credits",
+        description: error.message,
         variant: "destructive",
       });
-    } finally {
-      setSendingEmail(false);
     }
+    setModifying(false);
   };
 
-  const useTemplate = (template: {subject: string, content: string}) => {
-    setEmailSubject(template.subject);
-    setEmailContent(template.content);
-  };
-
-  const deleteSignup = async (signupId: string, signupName: string) => {
-    if (!confirm(`Are you sure you want to delete ${signupName}? This action cannot be undone.`)) {
+  const bulkUpdateCredits = async (action: "set" | "add" | "ensure_minimum", amount: number) => {
+    if (!confirm(`Are you sure you want to ${action} ${amount} credits for ALL users?`)) {
       return;
     }
-
+    
+    setModifying(true);
+    
     try {
-      const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://avallon.ca';
-      const response = await fetch(`${baseUrl}/api/beta-signups/${signupId}`, {
-        method: 'DELETE',
+      const response = await fetch(`${baseUrl}/api/admin/credits`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-email': ADMIN_EMAIL,
+        },
+        body: JSON.stringify({ action, amount }),
       });
-
-      const result = await response.json();
-
-      if (result.success) {
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
         toast({
-          title: "Success!",
-          description: `${signupName} has been deleted`,
+          title: "Bulk update complete!",
+          description: `Updated ${data.totalUsers} users`,
         });
-        // Refresh the data
-        fetchData();
+        loadUsers();
       } else {
         toast({
-          title: "Error",
-          description: result.message || "Failed to delete signup",
+          title: "Bulk update failed",
+          description: data.error || "Unknown error",
           variant: "destructive",
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       toast({
-        title: "Error",
-        description: "Failed to delete signup. Make sure backend is running.",
+        title: "Error in bulk update",
+        description: error.message,
         variant: "destructive",
       });
     }
+    setModifying(false);
   };
 
+  // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
-          <p className="mt-4 text-muted-foreground">Loading admin dashboard...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Avallon Admin Dashboard</h1>
-            <p className="text-muted-foreground">Manage beta signups and send updates</p>
-            {lastUpdated && (
-              <p className="text-xs text-muted-foreground mt-1">
-                Last updated: {lastUpdated.toLocaleTimeString()}
-              </p>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <Button 
-              onClick={() => {
-                const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://avallon.ca';
-                window.open(`${baseUrl}/admin/emails`, '_blank');
-              }} 
-              variant="outline"
-            >
-              📧 View Email Logs
-            </Button>
-            <Button 
-              onClick={() => fetchData(true)} 
-              variant="outline"
-              disabled={refreshing}
-            >
-              {refreshing ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Refreshing...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Refresh Data
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Signups</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats?.totalSignups || 0}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Email Subscribers</CardTitle>
-              <Mail className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats?.emailSubscribers || 0}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Today</CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats?.signupsToday || 0}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">This Week</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats?.signupsThisWeek || 0}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">This Month</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats?.signupsThisMonth || 0}</div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Bulk Email Section */}
-        <Card>
+  // Not authorized
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="max-w-md w-full">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Send className="w-5 h-5" />
-              Send Update Email
+            <CardTitle className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="w-6 h-6" />
+              Access Denied
             </CardTitle>
             <CardDescription>
-              Send an update email to all subscribers ({stats?.emailSubscribers || 0} subscribers)
+              You are not authorized to access the admin dashboard.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Email Templates */}
-            <div className="space-y-3">
-              <Label className="text-sm font-medium">Quick Templates</Label>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {emailTemplates.map((template, index) => (
-                  <Button
-                    key={index}
-                    variant="outline"
-                    className="h-auto p-3 text-left justify-start"
-                    onClick={() => useTemplate(template)}
-                  >
-                    <div>
-                      <div className="font-medium text-sm">{template.name}</div>
-                      <div className="text-xs text-muted-foreground mt-1">{template.subject}</div>
-                    </div>
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            {/* Email Form */}
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email-subject">Subject</Label>
-                <Input
-                  id="email-subject"
-                  placeholder="Enter email subject..."
-                  value={emailSubject}
-                  onChange={(e) => setEmailSubject(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email-content">Content</Label>
-                <Textarea
-                  id="email-content"
-                  placeholder="Enter your update message..."
-                  value={emailContent}
-                  onChange={(e) => setEmailContent(e.target.value)}
-                  rows={6}
-                />
-              </div>
-            </div>
-
-            {/* Last Email Result */}
-            {lastEmailResult && (
-              <Alert className={lastEmailResult.failed > 0 ? "border-yellow-200 bg-yellow-50" : "border-green-200 bg-green-50"}>
-                <div className="flex items-center gap-2">
-                  {lastEmailResult.failed > 0 ? (
-                    <AlertCircle className="h-4 w-4 text-yellow-600" />
-                  ) : (
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                  )}
-                  <AlertDescription className="text-sm">
-                    <strong>Email Results:</strong> {lastEmailResult.sent} sent, {lastEmailResult.failed} failed out of {lastEmailResult.total} total subscribers
-                  </AlertDescription>
-                </div>
-              </Alert>
-            )}
-
-            {/* Send Button */}
-            <Button 
-              onClick={sendBulkEmail} 
-              disabled={sendingEmail || !emailSubject.trim() || !emailContent.trim() || !stats?.emailSubscribers}
-              className="w-full"
-              size="lg"
-            >
-              {sendingEmail ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Sending...
-                </>
-              ) : (
-                <>
-                  <Send className="w-4 h-4 mr-2" />
-                  Send to All Subscribers ({stats?.emailSubscribers || 0})
-                </>
-              )}
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Current account: <strong>{currentUserEmail || "Not logged in"}</strong>
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Required: <strong>{ADMIN_EMAIL}</strong>
+            </p>
+            <Button onClick={() => navigate("/dashboard")} className="w-full">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Dashboard
             </Button>
-
-            {/* Warning for no subscribers */}
-            {stats?.emailSubscribers === 0 && (
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  No email subscribers found. Users need to opt-in to email notifications during signup.
-                </AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Recent Signups */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Signups</CardTitle>
-            <CardDescription>
-              Latest {signups.length} signups
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {signups.slice(0, 10).map((signup) => (
-                <div key={signup.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex-1">
-                    <p className="font-medium">{signup.name}</p>
-                    <p className="text-sm text-muted-foreground">{signup.email}</p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="text-sm text-muted-foreground">
-                        {new Date(signup.createdAt).toLocaleDateString()}
-                      </p>
-                      {signup.emailSubscription && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
-                          Subscribed
-                        </span>
-                      )}
-                    </div>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => deleteSignup(signup.id, signup.name)}
-                      className="flex items-center gap-2"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
           </CardContent>
         </Card>
       </div>
+    );
+  }
+
+  // Admin Dashboard
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b bg-card">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Shield className="w-8 h-8 text-red-600" />
+            <div>
+              <h1 className="text-xl font-bold">Admin Dashboard</h1>
+              <p className="text-sm text-muted-foreground">{ADMIN_EMAIL}</p>
+            </div>
+          </div>
+          <Button variant="outline" onClick={() => navigate("/dashboard")}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Dashboard
+          </Button>
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-8 space-y-8">
+        {/* Quick Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Users</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-blue-500" />
+                <span className="text-2xl font-bold">{totalUsers}</span>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Default Credits</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2">
+                <Coins className="w-5 h-5 text-amber-500" />
+                <span className="text-2xl font-bold">30</span>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Admin Status</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-green-500" />
+                <span className="text-2xl font-bold">Active</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Modify Credits */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Coins className="w-5 h-5" />
+              Modify User Credits
+            </CardTitle>
+            <CardDescription>
+              Set, add, or subtract credits from any user account
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="space-y-2">
+                <Label>User Email</Label>
+                <Input
+                  type="email"
+                  placeholder="user@example.com"
+                  value={targetEmail}
+                  onChange={(e) => setTargetEmail(e.target.value)}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Action</Label>
+                <Select value={creditAction} onValueChange={(v: any) => setCreditAction(v)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="set">Set to exact amount</SelectItem>
+                    <SelectItem value="add">Add credits</SelectItem>
+                    <SelectItem value="subtract">Subtract credits</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Amount</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={creditAmount}
+                  onChange={(e) => setCreditAmount(parseInt(e.target.value) || 0)}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label>&nbsp;</Label>
+                <Button 
+                  onClick={modifyCredits} 
+                  disabled={modifying}
+                  className="w-full"
+                >
+                  {modifying ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      {creditAction === "add" && <Plus className="w-4 h-4 mr-2" />}
+                      {creditAction === "subtract" && <Minus className="w-4 h-4 mr-2" />}
+                      {creditAction === "set" && <Coins className="w-4 h-4 mr-2" />}
+                      Apply
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+            
+            {lastResult && (
+              <div className="p-4 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
+                <p className="text-sm text-green-800 dark:text-green-200">
+                  <strong>{lastResult.user.email}</strong>: {lastResult.user.previousCredits} → {lastResult.user.newCredits} credits
+                  ({lastResult.user.action} {lastResult.user.amount})
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Search User */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Search className="w-5 h-5" />
+              Search User
+            </CardTitle>
+            <CardDescription>
+              Look up a specific user's credit balance
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-2">
+              <Input
+                type="email"
+                placeholder="Enter email to search..."
+                value={searchEmail}
+                onChange={(e) => setSearchEmail(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && searchUser()}
+                className="flex-1"
+              />
+              <Button onClick={searchUser} disabled={searching}>
+                {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              </Button>
+            </div>
+            
+            {searchResult && (
+              <div className="p-4 bg-muted rounded-lg">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Email</p>
+                    <p className="font-medium">{searchResult.user?.email}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Credits (File)</p>
+                    <p className="font-medium text-lg">{searchResult.fileCredits}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Credits (DB)</p>
+                    <p className="font-medium">{searchResult.user?.credits ?? "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Status</p>
+                    <p className="font-medium">{searchResult.note}</p>
+                  </div>
+                </div>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="mt-4"
+                  onClick={() => {
+                    setTargetEmail(searchResult.user?.email || searchEmail);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                >
+                  Edit this user's credits
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Bulk Actions */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              Bulk Actions
+            </CardTitle>
+            <CardDescription>
+              Apply credit changes to all users at once
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => bulkUpdateCredits("ensure_minimum", 30)}
+                disabled={modifying}
+              >
+                Ensure everyone has 30+ credits
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => bulkUpdateCredits("add", 10)}
+                disabled={modifying}
+              >
+                Give everyone +10 credits
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => bulkUpdateCredits("set", 30)}
+                disabled={modifying}
+              >
+                Reset everyone to 30 credits
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* User List */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="w-5 h-5" />
+                  Recent Users
+                </CardTitle>
+                <CardDescription>
+                  Showing {users.length} of {totalUsers} users
+                </CardDescription>
+              </div>
+              <Button variant="outline" size="sm" onClick={loadUsers} disabled={loadingUsers}>
+                <RefreshCw className={`w-4 h-4 mr-2 ${loadingUsers ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loadingUsers ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : users.length === 0 ? (
+              <p className="text-center py-8 text-muted-foreground">No users found in database</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Email</TableHead>
+                    <TableHead className="text-right">Credits</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell className="font-medium">{user.email}</TableCell>
+                      <TableCell className="text-right">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 text-sm font-medium">
+                          <Coins className="w-3 h-3" />
+                          {user.credits ?? 0}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "N/A"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setTargetEmail(user.email);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                        >
+                          Edit
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </main>
     </div>
   );
 };
