@@ -903,6 +903,8 @@ a, button { touch-action: manipulation; }
   
   if (!toggle || !overlay) return;
   
+  var touchHandled = false;
+  
   function openMenu() {
     toggle.classList.add('active');
     overlay.classList.add('active');
@@ -923,15 +925,28 @@ a, button { touch-action: manipulation; }
     }
   }
   
-  // Toggle button handlers
-  toggle.addEventListener('click', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    toggleMenu();
-  });
+  // Handle touch events - prevent ghost click
+  toggle.addEventListener('touchstart', function(e) {
+    touchHandled = true;
+  }, { passive: true });
+  
   toggle.addEventListener('touchend', function(e) {
+    if (touchHandled) {
+      e.preventDefault();
+      toggleMenu();
+      // Reset after a delay to allow for rapid taps
+      setTimeout(function() { touchHandled = false; }, 300);
+    }
+  });
+  
+  // Click handler for non-touch devices
+  toggle.addEventListener('click', function(e) {
+    // Skip if touch already handled this
+    if (touchHandled) {
+      touchHandled = false;
+      return;
+    }
     e.preventDefault();
-    e.stopPropagation();
     toggleMenu();
   });
   
@@ -950,6 +965,14 @@ a, button { touch-action: manipulation; }
   // Close when clicking outside menu links
   overlay.addEventListener('click', function(e) {
     if (e.target === overlay) closeMenu();
+  });
+  
+  // Also handle touchend on overlay for mobile
+  overlay.addEventListener('touchend', function(e) {
+    if (e.target === overlay) {
+      e.preventDefault();
+      closeMenu();
+    }
   });
 })();
 </script>

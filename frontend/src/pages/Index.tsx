@@ -8,6 +8,7 @@ const Index = () => {
   const { theme, setTheme } = useTheme();
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -53,13 +54,61 @@ const Index = () => {
             >
               Start Building
             </button>
-              <button className="md:hidden text-slate-600 dark:text-slate-400">
-              <span className="material-symbols-outlined">menu</span>
-            </button>
+              <button 
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="md:hidden p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <span className="material-symbols-outlined">{isMobileMenuOpen ? 'close' : 'menu'}</span>
+              </button>
             </div>
           </div>
         </div>
       </header>
+
+      {/* Mobile Menu */}
+      {isMobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-40 bg-white dark:bg-[#101022]">
+          <div className="pt-20 px-6">
+            <nav className="flex flex-col gap-4">
+              <a 
+                className="text-lg font-medium text-slate-600 dark:text-slate-400 hover:text-primary transition-colors py-3 border-b border-slate-100 dark:border-white/10"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                Product
+              </a>
+              <a 
+                className="text-lg font-medium text-slate-600 dark:text-slate-400 hover:text-primary transition-colors py-3 border-b border-slate-100 dark:border-white/10"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  navigate('/auth');
+                }}
+              >
+                Pricing
+              </a>
+              <a 
+                className="text-lg font-medium text-slate-600 dark:text-slate-400 hover:text-primary transition-colors py-3 border-b border-slate-100 dark:border-white/10"
+                href="https://docs.avallon.ca" 
+                target="_blank" 
+                rel="noopener noreferrer"
+              >
+                Docs
+              </a>
+              <button 
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  navigate('/auth');
+                }}
+                className="mt-4 w-full flex items-center justify-center rounded-xl bg-primary hover:bg-primary/90 transition-colors px-5 py-3 text-base font-bold text-white shadow-lg shadow-primary/20"
+              >
+                Start Building
+              </button>
+            </nav>
+          </div>
+        </div>
+      )}
 
         {/* Hero Section */}
       <section className="relative pt-20 pb-32 overflow-hidden">

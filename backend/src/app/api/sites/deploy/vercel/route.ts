@@ -210,6 +210,205 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
 }
 
 /**
+ * Extract navigation links from HTML to build mobile menu
+ */
+function extractNavigationLinks(html: string): Array<{text: string; href: string}> {
+  const links: Array<{text: string; href: string}> = [];
+  const seen = new Set<string>();
+  
+  // Try nav elements first
+  const navLinkRegex = /<a[^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/gi;
+  const navSections = html.match(/<nav[^>]*>[\s\S]*?<\/nav>/gi) || [];
+  
+  for (const navSection of navSections) {
+    let match;
+    const regex = new RegExp(navLinkRegex.source, 'gi');
+    while ((match = regex.exec(navSection)) !== null) {
+      const href = match[1];
+      const text = match[2].trim();
+      if (text && href && !seen.has(href) && 
+          !href.startsWith('#') && 
+          !href.startsWith('javascript') &&
+          !href.includes('mailto:') &&
+          !href.includes('tel:') &&
+          text.length < 50) {
+        seen.add(href);
+        links.push({ text, href });
+      }
+    }
+  }
+  
+  // If no nav links found, try header area
+  if (links.length === 0) {
+    const headerSections = html.match(/<header[^>]*>[\s\S]*?<\/header>/gi) || [];
+    for (const section of headerSections) {
+      let match;
+      const regex = new RegExp(navLinkRegex.source, 'gi');
+      while ((match = regex.exec(section)) !== null) {
+        const href = match[1];
+        const text = match[2].trim();
+        if (text && href && !seen.has(href) && 
+            !href.startsWith('#') && 
+            !href.startsWith('javascript') &&
+            !href.includes('mailto:') &&
+            !href.includes('tel:') &&
+            text.length < 50) {
+          seen.add(href);
+          links.push({ text, href });
+        }
+      }
+    }
+  }
+  
+  return links.slice(0, 10);
+}
+
+/**
+ * Inject mobile menu fix for published sites
+ * Ensures hamburger menus work on mobile devices
+ */
+function injectMobileMenuFix(files: Record<string, string>): Record<string, string> {
+  const fixedFiles: Record<string, string> = {};
+  
+  for (const [filename, content] of Object.entries(files)) {
+    if (!filename.endsWith('.html') || typeof content !== 'string') {
+      fixedFiles[filename] = content;
+      continue;
+    }
+    
+    // Skip if already has our mobile menu
+    if (content.includes('avallon-mobile-toggle') || content.includes('data-avallon-mobile-nav')) {
+      fixedFiles[filename] = content;
+      continue;
+    }
+    
+    // Extract navigation links for mobile menu
+    const navLinks = extractNavigationLinks(content);
+    const navLinksHtml = navLinks.map(link => 
+      `<a href="${link.href}" class="avallon-mobile-link">${link.text}</a>`
+    ).join('\n    ');
+    
+    const mobileMenuCode = `
+<style data-avallon-mobile="true">
+/* Avallon Mobile Menu System */
+@media (min-width: 768px) {
+  #avallon-mobile-toggle, #avallon-mobile-overlay { display: none !important; }
+}
+@media (max-width: 767px) {
+  #avallon-mobile-toggle {
+    display: flex !important;
+    position: fixed !important;
+    top: 15px !important;
+    right: 15px !important;
+    z-index: 99999 !important;
+    width: 44px !important;
+    height: 44px !important;
+    background: #333 !important;
+    border: none !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-direction: column !important;
+    gap: 5px !important;
+    padding: 10px !important;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3) !important;
+  }
+  #avallon-mobile-toggle span {
+    display: block !important;
+    width: 22px !important;
+    height: 2px !important;
+    background: white !important;
+    transition: all 0.3s !important;
+  }
+  #avallon-mobile-toggle.active span:nth-child(1) { transform: rotate(45deg) translate(5px, 5px) !important; }
+  #avallon-mobile-toggle.active span:nth-child(2) { opacity: 0 !important; }
+  #avallon-mobile-toggle.active span:nth-child(3) { transform: rotate(-45deg) translate(5px, -5px) !important; }
+}
+#avallon-mobile-overlay {
+  display: none;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: rgba(255, 255, 255, 0.98) !important;
+  z-index: 99998 !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 20px !important;
+}
+#avallon-mobile-overlay.active { display: flex !important; }
+.avallon-mobile-link {
+  display: block !important;
+  padding: 16px 24px !important;
+  font-size: 20px !important;
+  color: #333 !important;
+  text-decoration: none !important;
+  border-bottom: 1px solid #eee !important;
+  width: 100% !important;
+  max-width: 300px !important;
+  text-align: center !important;
+}
+body.avallon-menu-open { overflow: hidden !important; }
+</style>
+<button id="avallon-mobile-toggle" aria-label="Menu">
+  <span></span><span></span><span></span>
+</button>
+<div id="avallon-mobile-overlay">
+  ${navLinksHtml || '<p style="color:#666;">Menu</p>'}
+</div>
+<script data-avallon-mobile-nav="true">
+(function() {
+  var toggle = document.getElementById('avallon-mobile-toggle');
+  var overlay = document.getElementById('avallon-mobile-overlay');
+  if (!toggle || !overlay) return;
+  var touchHandled = false;
+  function toggleMenu() {
+    var isOpen = overlay.classList.contains('active');
+    toggle.classList.toggle('active', !isOpen);
+    overlay.classList.toggle('active', !isOpen);
+    document.body.classList.toggle('avallon-menu-open', !isOpen);
+  }
+  toggle.addEventListener('touchstart', function() { touchHandled = true; }, { passive: true });
+  toggle.addEventListener('touchend', function(e) {
+    if (touchHandled) { e.preventDefault(); toggleMenu(); setTimeout(function() { touchHandled = false; }, 300); }
+  });
+  toggle.addEventListener('click', function(e) {
+    if (touchHandled) { touchHandled = false; return; }
+    e.preventDefault(); toggleMenu();
+  });
+  overlay.querySelectorAll('a').forEach(function(link) {
+    link.addEventListener('click', function() {
+      toggle.classList.remove('active');
+      overlay.classList.remove('active');
+      document.body.classList.remove('avallon-menu-open');
+    });
+  });
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) toggleMenu(); });
+})();
+</script>
+`;
+
+    // Inject before </body>
+    let fixedContent = content;
+    if (content.includes('</body>')) {
+      fixedContent = content.replace('</body>', mobileMenuCode + '\n</body>');
+    } else if (content.includes('</html>')) {
+      fixedContent = content.replace('</html>', mobileMenuCode + '\n</html>');
+    } else {
+      fixedContent = content + mobileMenuCode;
+    }
+    
+    fixedFiles[filename] = fixedContent;
+  }
+  
+  logInfo('Injected mobile menu fix', { fileCount: Object.keys(fixedFiles).filter(f => f.endsWith('.html')).length });
+  return fixedFiles;
+}
+
+/**
  * Fix navigation links in HTML files for multi-page sites
  * ONLY replaces absolute URLs to the original source domain
  * Leaves relative links alone (Vercel rewrites will handle them)
@@ -416,8 +615,11 @@ export async function POST(req: NextRequest) {
       // Remove _customScripts from files (it's metadata, not a file)
       delete cleanedFiles._customScripts;
       
+      // Step 0.75: Inject mobile menu fix for reliable mobile navigation
+      const filesWithMobileMenu = injectMobileMenuFix(cleanedFiles);
+      
       // Step 1: Fix navigation links for multi-page sites
-      const filesWithFixedNav = fixNavigationLinks(cleanedFiles);
+      const filesWithFixedNav = fixNavigationLinks(filesWithMobileMenu);
       
       // Step 2: Download external images and embed locally
       const { updatedFiles, imageFiles } = await downloadAndEmbedImages(filesWithFixedNav);
