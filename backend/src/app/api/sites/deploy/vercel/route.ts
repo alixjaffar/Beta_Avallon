@@ -266,6 +266,11 @@ function extractNavigationLinks(html: string): Array<{text: string; href: string
 /**
  * Inject mobile menu fix for published sites
  * Ensures hamburger menus work on mobile devices
+ * 
+ * BULLETPROOF VERSION:
+ * 1. Hides ALL original hamburger/mobile menu buttons
+ * 2. Injects our own working hamburger with inline onclick (no JS dependency)
+ * 3. Uses extremely high specificity CSS
  */
 function injectMobileMenuFix(files: Record<string, string>): Record<string, string> {
   const fixedFiles: Record<string, string> = {};
@@ -277,7 +282,7 @@ function injectMobileMenuFix(files: Record<string, string>): Record<string, stri
     }
     
     // Skip if already has our mobile menu
-    if (content.includes('avallon-mobile-toggle') || content.includes('data-avallon-mobile-nav')) {
+    if (content.includes('id="avallon-mobile-toggle"') || content.includes('data-avallon-mobile-nav="true"')) {
       fixedFiles[filename] = content;
       continue;
     }
@@ -285,110 +290,217 @@ function injectMobileMenuFix(files: Record<string, string>): Record<string, stri
     // Extract navigation links for mobile menu
     const navLinks = extractNavigationLinks(content);
     const navLinksHtml = navLinks.map(link => 
-      `<a href="${link.href}" class="avallon-mobile-link">${link.text}</a>`
+      `<a href="${link.href}" class="avm-link" onclick="document.getElementById('avallon-mobile-overlay').classList.remove('active');document.getElementById('avallon-mobile-toggle').classList.remove('active');document.body.classList.remove('avm-open');">${link.text}</a>`
     ).join('\n    ');
     
+    // Inline toggle function - works even if external JS is blocked
+    const toggleFn = `(function(){var o=document.getElementById('avallon-mobile-overlay'),t=document.getElementById('avallon-mobile-toggle');if(!o||!t)return;var isOpen=o.classList.contains('active');o.classList.toggle('active',!isOpen);t.classList.toggle('active',!isOpen);document.body.classList.toggle('avm-open',!isOpen);})()`;
+    
     const mobileMenuCode = `
-<style data-avallon-mobile="true">
-/* Avallon Mobile Menu System */
-@media (min-width: 768px) {
-  #avallon-mobile-toggle, #avallon-mobile-overlay { display: none !important; }
+<!-- AVALLON MOBILE MENU - Injected for reliable mobile navigation -->
+<style data-avallon-mobile-nav="true">
+/* ========== HIDE ALL ORIGINAL HAMBURGER MENUS ========== */
+@media (max-width: 767px) {
+  /* Common hamburger button classes */
+  .hamburger, .hamburger-menu, .hamburger-btn, .hamburger-button,
+  .menu-toggle, .menu-btn, .menu-button, .mobile-menu-toggle,
+  .mobile-menu-btn, .mobile-nav-toggle, .mobile-toggle,
+  .nav-toggle, .navbar-toggle, .navbar-toggler,
+  .burger, .burger-menu, .burger-btn,
+  /* WordPress specific */
+  .wp-block-navigation__responsive-container-open,
+  .wp-block-navigation-button,
+  /* Icon-based selectors */
+  button[aria-label*="menu" i]:not(#avallon-mobile-toggle),
+  button[aria-label*="Menu" i]:not(#avallon-mobile-toggle),
+  button[aria-label*="navigation" i]:not(#avallon-mobile-toggle),
+  button[aria-label*="toggle" i]:not(#avallon-mobile-toggle),
+  /* SVG hamburger icons in buttons */
+  header button:not(#avallon-mobile-toggle),
+  nav button:not(#avallon-mobile-toggle),
+  .header button:not(#avallon-mobile-toggle),
+  .navbar button:not(#avallon-mobile-toggle),
+  /* Three-line hamburger patterns */
+  [class*="hamburger"]:not(#avallon-mobile-toggle),
+  [class*="burger"]:not(#avallon-mobile-toggle),
+  [class*="mobile-menu"]:not(#avallon-mobile-toggle):not(#avallon-mobile-overlay),
+  [class*="menu-toggle"]:not(#avallon-mobile-toggle),
+  [class*="nav-toggle"]:not(#avallon-mobile-toggle) {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+}
+
+/* ========== AVALLON MOBILE TOGGLE BUTTON ========== */
+#avallon-mobile-toggle {
+  display: none;
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 2147483647;
+  width: 48px;
+  height: 48px;
+  background: #1a1a2e;
+  border: 2px solid #fff;
+  border-radius: 10px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 @media (max-width: 767px) {
   #avallon-mobile-toggle {
     display: flex !important;
-    position: fixed !important;
-    top: 15px !important;
-    right: 15px !important;
-    z-index: 99999 !important;
-    width: 44px !important;
-    height: 44px !important;
-    background: #333 !important;
-    border: none !important;
-    border-radius: 8px !important;
-    cursor: pointer !important;
-    align-items: center !important;
-    justify-content: center !important;
-    flex-direction: column !important;
-    gap: 5px !important;
-    padding: 10px !important;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.3) !important;
   }
-  #avallon-mobile-toggle span {
-    display: block !important;
-    width: 22px !important;
-    height: 2px !important;
-    background: white !important;
-    transition: all 0.3s !important;
-  }
-  #avallon-mobile-toggle.active span:nth-child(1) { transform: rotate(45deg) translate(5px, 5px) !important; }
-  #avallon-mobile-toggle.active span:nth-child(2) { opacity: 0 !important; }
-  #avallon-mobile-toggle.active span:nth-child(3) { transform: rotate(-45deg) translate(5px, -5px) !important; }
 }
+@media (min-width: 768px) {
+  #avallon-mobile-toggle,
+  #avallon-mobile-overlay {
+    display: none !important;
+  }
+}
+#avallon-mobile-toggle span {
+  display: block;
+  width: 24px;
+  height: 3px;
+  background: #fff;
+  border-radius: 2px;
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+#avallon-mobile-toggle.active span:nth-child(1) {
+  transform: rotate(45deg) translate(6px, 6px);
+}
+#avallon-mobile-toggle.active span:nth-child(2) {
+  opacity: 0;
+  transform: scaleX(0);
+}
+#avallon-mobile-toggle.active span:nth-child(3) {
+  transform: rotate(-45deg) translate(6px, -6px);
+}
+
+/* ========== MOBILE MENU OVERLAY ========== */
 #avallon-mobile-overlay {
   display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  z-index: 2147483646;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px 20px;
+  overflow-y: auto;
+}
+#avallon-mobile-overlay.active {
+  display: flex !important;
+}
+
+/* ========== MENU LINKS ========== */
+.avm-link {
+  display: block;
+  padding: 18px 32px;
+  margin: 6px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #fff;
+  text-decoration: none;
+  background: rgba(255,255,255,0.1);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 280px;
+  text-align: center;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.avm-link:hover, .avm-link:active {
+  background: rgba(255,255,255,0.2);
+  transform: scale(1.02);
+}
+
+/* ========== BODY SCROLL LOCK ========== */
+body.avm-open {
+  overflow: hidden !important;
   position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
-  background: rgba(255, 255, 255, 0.98) !important;
-  z-index: 99998 !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 20px !important;
-}
-#avallon-mobile-overlay.active { display: flex !important; }
-.avallon-mobile-link {
-  display: block !important;
-  padding: 16px 24px !important;
-  font-size: 20px !important;
-  color: #333 !important;
-  text-decoration: none !important;
-  border-bottom: 1px solid #eee !important;
   width: 100% !important;
-  max-width: 300px !important;
-  text-align: center !important;
 }
-body.avallon-menu-open { overflow: hidden !important; }
 </style>
-<button id="avallon-mobile-toggle" aria-label="Menu">
-  <span></span><span></span><span></span>
+
+<!-- Mobile Menu Toggle Button - Uses inline onclick for maximum compatibility -->
+<button id="avallon-mobile-toggle" 
+        aria-label="Open Menu" 
+        onclick="${toggleFn}">
+  <span></span>
+  <span></span>
+  <span></span>
 </button>
-<div id="avallon-mobile-overlay">
-  ${navLinksHtml || '<p style="color:#666;">Menu</p>'}
+
+<!-- Mobile Menu Overlay -->
+<div id="avallon-mobile-overlay" onclick="if(event.target===this){${toggleFn}}">
+  ${navLinksHtml || '<a href="/" class="avm-link">Home</a>'}
 </div>
+
 <script data-avallon-mobile-nav="true">
+// Backup event listeners (in case inline onclick is stripped)
 (function() {
+  'use strict';
   var toggle = document.getElementById('avallon-mobile-toggle');
   var overlay = document.getElementById('avallon-mobile-overlay');
   if (!toggle || !overlay) return;
-  var touchHandled = false;
-  function toggleMenu() {
+  
+  function toggleMenu(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
     var isOpen = overlay.classList.contains('active');
-    toggle.classList.toggle('active', !isOpen);
     overlay.classList.toggle('active', !isOpen);
-    document.body.classList.toggle('avallon-menu-open', !isOpen);
+    toggle.classList.toggle('active', !isOpen);
+    document.body.classList.toggle('avm-open', !isOpen);
+    toggle.setAttribute('aria-label', isOpen ? 'Open Menu' : 'Close Menu');
   }
-  toggle.addEventListener('touchstart', function() { touchHandled = true; }, { passive: true });
+  
+  // Remove any existing listeners then add fresh ones
+  var newToggle = toggle.cloneNode(true);
+  toggle.parentNode.replaceChild(newToggle, toggle);
+  toggle = newToggle;
+  
+  // Touch handling for iOS
+  var touchStarted = false;
+  toggle.addEventListener('touchstart', function() { touchStarted = true; }, { passive: true });
   toggle.addEventListener('touchend', function(e) {
-    if (touchHandled) { e.preventDefault(); toggleMenu(); setTimeout(function() { touchHandled = false; }, 300); }
-  });
+    if (touchStarted) {
+      e.preventDefault();
+      toggleMenu();
+      touchStarted = false;
+    }
+  }, { passive: false });
+  
+  // Click handler for non-touch
   toggle.addEventListener('click', function(e) {
-    if (touchHandled) { touchHandled = false; return; }
-    e.preventDefault(); toggleMenu();
+    if (!touchStarted) toggleMenu(e);
+    touchStarted = false;
   });
-  overlay.querySelectorAll('a').forEach(function(link) {
-    link.addEventListener('click', function() {
-      toggle.classList.remove('active');
-      overlay.classList.remove('active');
-      document.body.classList.remove('avallon-menu-open');
-    });
+  
+  // Close when clicking overlay background
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) toggleMenu(e);
   });
-  overlay.addEventListener('click', function(e) { if (e.target === overlay) toggleMenu(); });
+  
+  // Close on escape key
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && overlay.classList.contains('active')) toggleMenu();
+  });
 })();
 </script>
+<!-- END AVALLON MOBILE MENU -->
 `;
 
     // Inject before </body>
