@@ -2033,11 +2033,12 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     html = html.replace(/<div[^>]*id="avallon-hover-overlay"[^>]*>[\s\S]*?<\/div>/gi, '');
     html = html.replace(/<div[^>]*class="[^"]*avallon-handle[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '');
     
-    // Remove any orphaned avallon elements
-    html = html.replace(/<[^>]+id="avallon-[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, '');
+    // Remove any orphaned avallon elements (but preserve mobile menu elements)
+    // Use negative lookahead to exclude mobile-toggle and mobile-overlay
+    html = html.replace(/<[^>]+id="avallon-(?!mobile-toggle|mobile-overlay)[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, '');
     
-    // Remove data attributes we may have added
-    html = html.replace(/\s+data-avallon-[a-z-]+="[^"]*"/gi, '');
+    // Remove data attributes we may have added (but preserve mobile menu attributes)
+    html = html.replace(/\s+data-avallon-(?!mobile)[a-z-]+="[^"]*"/gi, '');
     
     // Remove inline style that was added for editing (contenteditable outline)
     html = html.replace(/\s+contenteditable="[^"]*"/gi, '');

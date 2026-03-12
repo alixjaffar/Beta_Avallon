@@ -681,7 +681,12 @@ function fixCommonIssues(html: string): string {
 
 /**
  * Fix WordPress-specific elements that are hidden by default until JS runs
- * Creates a custom Avallon mobile menu that works regardless of original site implementation
+ * Creates a CSS-ONLY mobile menu that works regardless of original site implementation
+ * 
+ * CSS-ONLY VERSION (No JavaScript required):
+ * - Uses checkbox :checked hack for toggle
+ * - Works on all devices including iOS Safari
+ * - Cannot be broken by script removal or CSP
  */
 function fixWordPressElements(html: string): string {
   // Extract navigation links from the HTML to build our custom mobile menu
@@ -689,8 +694,8 @@ function fixWordPressElements(html: string): string {
   
   // Create nav links HTML for our custom mobile overlay
   const navLinksHtml = navLinks.slice(0, 10).map(link => 
-    `<a href="${link.href}" class="avallon-mobile-link">${link.text}</a>`
-  ).join('\n    ');
+    `<a href="${link.href}" class="avm-link">${link.text}</a>`
+  ).join('\n      ');
   
   // Create a fallback desktop navigation bar
   const fallbackNav = navLinks.length > 0 ? `
@@ -699,15 +704,98 @@ function fixWordPressElements(html: string): string {
 </nav>
 ` : '';
 
-  // Comprehensive mobile fix CSS + custom Avallon mobile menu
+  // CSS-only mobile menu - uses checkbox :checked hack (NO JavaScript!)
   const wpFixCSS = `
-<style data-wp-fixes="true">
-/* ===== AVALLON MOBILE MENU SYSTEM ===== */
+<!-- AVALLON CSS-ONLY MOBILE MENU v3 -->
+<style data-avallon-mobile-css="true">
+/* ========== HIDE CHECKBOX (accessibility preserved) ========== */
+#avm-toggle {
+  position: fixed;
+  top: -100px;
+  left: -100px;
+  opacity: 0;
+  pointer-events: none;
+}
 
-/* Hide our custom toggle on desktop */
+/* ========== HAMBURGER LABEL (acts as button) ========== */
+.avm-hamburger {
+  display: none;
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 2147483647;
+  width: 48px;
+  height: 48px;
+  background: #1a1a2e;
+  border: 2px solid #fff;
+  border-radius: 10px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+}
+.avm-hamburger span {
+  display: block;
+  width: 24px;
+  height: 3px;
+  background: #fff;
+  border-radius: 2px;
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+
+/* ========== MOBILE MENU OVERLAY ========== */
+.avm-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  z-index: 2147483646;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px 20px;
+  overflow-y: auto;
+}
+
+/* ========== MENU LINKS ========== */
+.avm-link {
+  display: block;
+  padding: 18px 32px;
+  margin: 6px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #fff !important;
+  text-decoration: none !important;
+  background: rgba(255,255,255,0.1);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 280px;
+  text-align: center;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.avm-link:hover, .avm-link:active {
+  background: rgba(255,255,255,0.2);
+  transform: scale(1.02);
+}
+
+/* ========== DESKTOP: Hide mobile menu, show nav ========== */
 @media (min-width: 768px) {
-  #avallon-mobile-toggle { display: none !important; }
-  #avallon-mobile-overlay { display: none !important; }
+  .avm-hamburger,
+  .avm-overlay,
+  #avm-toggle {
+    display: none !important;
+  }
   
   /* Show desktop navigation */
   .wp-block-navigation,
@@ -717,13 +805,6 @@ function fixWordPressElements(html: string): string {
     display: flex !important;
     visibility: visible !important;
     opacity: 1 !important;
-  }
-  
-  /* Hide original hamburger on desktop */
-  .wp-block-navigation__responsive-container-open,
-  .hamburger, .hamburger-menu, .menu-toggle,
-  .mobile-menu-toggle, .mobile-nav-toggle {
-    display: none !important;
   }
   
   /* Desktop nav layout */
@@ -744,97 +825,51 @@ function fixWordPressElements(html: string): string {
   }
 }
 
-/* Mobile toggle button - always visible on mobile */
+/* ========== MOBILE: Show hamburger, handle toggle ========== */
 @media (max-width: 767px) {
-  #avallon-mobile-toggle {
+  /* Show hamburger */
+  .avm-hamburger {
     display: flex !important;
-    position: fixed !important;
-    top: 15px !important;
-    right: 15px !important;
-    z-index: 99999 !important;
-    width: 44px !important;
-    height: 44px !important;
-    background: #333 !important;
-    border: none !important;
-    border-radius: 8px !important;
-    cursor: pointer !important;
-    align-items: center !important;
-    justify-content: center !important;
-    flex-direction: column !important;
-    gap: 5px !important;
-    padding: 10px !important;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.3) !important;
   }
   
-  #avallon-mobile-toggle span {
-    display: block !important;
-    width: 22px !important;
-    height: 2px !important;
-    background: white !important;
-    transition: all 0.3s !important;
-  }
-  
-  #avallon-mobile-toggle.active span:nth-child(1) {
-    transform: rotate(45deg) translate(5px, 5px) !important;
-  }
-  #avallon-mobile-toggle.active span:nth-child(2) {
-    opacity: 0 !important;
-  }
-  #avallon-mobile-toggle.active span:nth-child(3) {
-    transform: rotate(-45deg) translate(5px, -5px) !important;
-  }
-  
-  /* Hide original hamburgers - we have our own */
+  /* Hide original hamburger buttons */
+  .hamburger, .hamburger-menu, .hamburger-btn, .hamburger-button,
+  .menu-toggle, .menu-btn, .menu-button, .mobile-menu-toggle,
+  .mobile-menu-btn, .mobile-nav-toggle, .mobile-toggle,
+  .nav-toggle, .navbar-toggle, .navbar-toggler,
+  .burger, .burger-menu, .burger-btn,
   .wp-block-navigation__responsive-container-open,
-  .hamburger, .hamburger-menu, .menu-toggle,
-  .mobile-menu-toggle, .mobile-nav-toggle,
-  button[aria-label*="menu" i]:not(#avallon-mobile-toggle),
-  button[aria-label*="Menu" i]:not(#avallon-mobile-toggle) {
+  .wp-block-navigation-button,
+  header button:not(.avm-hamburger),
+  nav button:not(.avm-hamburger),
+  [class*="hamburger"]:not(.avm-hamburger),
+  [class*="burger"]:not(.avm-hamburger),
+  [class*="mobile-menu"]:not(.avm-overlay),
+  [class*="menu-toggle"]:not(.avm-hamburger),
+  [class*="nav-toggle"]:not(.avm-hamburger),
+  button[aria-label*="menu" i]:not(.avm-hamburger),
+  button[aria-label*="Menu" i]:not(.avm-hamburger) {
     display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
   }
-}
-
-/* Mobile overlay menu */
-#avallon-mobile-overlay {
-  display: none;
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
-  background: rgba(255, 255, 255, 0.98) !important;
-  z-index: 99998 !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 20px !important;
-  overflow-y: auto !important;
-}
-
-#avallon-mobile-overlay.active {
-  display: flex !important;
-}
-
-.avallon-mobile-link {
-  display: block !important;
-  padding: 16px 24px !important;
-  font-size: 20px !important;
-  color: #333 !important;
-  text-decoration: none !important;
-  border-bottom: 1px solid #eee !important;
-  width: 100% !important;
-  max-width: 300px !important;
-  text-align: center !important;
-  transition: background 0.2s !important;
-}
-
-.avallon-mobile-link:hover, .avallon-mobile-link:active {
-  background: #f5f5f5 !important;
-}
-
-/* Body scroll lock when menu is open */
-body.avallon-menu-open {
-  overflow: hidden !important;
+  
+  /* ========== CHECKBOX CHECKED = MENU OPEN ========== */
+  #avm-toggle:checked ~ .avm-overlay {
+    display: flex !important;
+  }
+  
+  /* Animate hamburger to X when checked */
+  #avm-toggle:checked ~ .avm-hamburger span:nth-child(1) {
+    transform: rotate(45deg) translate(6px, 6px);
+  }
+  #avm-toggle:checked ~ .avm-hamburger span:nth-child(2) {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+  #avm-toggle:checked ~ .avm-hamburger span:nth-child(3) {
+    transform: rotate(-45deg) translate(6px, -6px);
+  }
 }
 
 /* ===== GENERAL FIXES ===== */
@@ -887,105 +922,30 @@ header .wp-block-group {
 a, button { touch-action: manipulation; }
 </style>
 
-<!-- Avallon Custom Mobile Menu -->
-<button id="avallon-mobile-toggle" aria-label="Menu">
+<!-- CSS-Only Mobile Menu (checkbox hack - no JavaScript!) -->
+<input type="checkbox" id="avm-toggle" />
+<label for="avm-toggle" class="avm-hamburger" aria-label="Toggle Menu">
   <span></span>
   <span></span>
   <span></span>
-</button>
-<div id="avallon-mobile-overlay">
-  ${navLinksHtml || '<p style="color:#666;">No navigation links found</p>'}
-</div>
-<script data-avallon-mobile-nav="true">
-(function() {
-  var toggle = document.getElementById('avallon-mobile-toggle');
-  var overlay = document.getElementById('avallon-mobile-overlay');
-  
-  if (!toggle || !overlay) return;
-  
-  var touchHandled = false;
-  
-  function openMenu() {
-    toggle.classList.add('active');
-    overlay.classList.add('active');
-    document.body.classList.add('avallon-menu-open');
-  }
-  
-  function closeMenu() {
-    toggle.classList.remove('active');
-    overlay.classList.remove('active');
-    document.body.classList.remove('avallon-menu-open');
-  }
-  
-  function toggleMenu() {
-    if (overlay.classList.contains('active')) {
-      closeMenu();
-    } else {
-      openMenu();
-    }
-  }
-  
-  // Handle touch events - prevent ghost click
-  toggle.addEventListener('touchstart', function(e) {
-    touchHandled = true;
-  }, { passive: true });
-  
-  toggle.addEventListener('touchend', function(e) {
-    if (touchHandled) {
-      e.preventDefault();
-      toggleMenu();
-      // Reset after a delay to allow for rapid taps
-      setTimeout(function() { touchHandled = false; }, 300);
-    }
-  });
-  
-  // Click handler for non-touch devices
-  toggle.addEventListener('click', function(e) {
-    // Skip if touch already handled this
-    if (touchHandled) {
-      touchHandled = false;
-      return;
-    }
-    e.preventDefault();
-    toggleMenu();
-  });
-  
-  // Close when clicking a link
-  overlay.querySelectorAll('a').forEach(function(link) {
-    link.addEventListener('click', function() {
-      closeMenu();
-    });
-  });
-  
-  // Close on ESC
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') closeMenu();
-  });
-  
-  // Close when clicking outside menu links
-  overlay.addEventListener('click', function(e) {
-    if (e.target === overlay) closeMenu();
-  });
-  
-  // Also handle touchend on overlay for mobile
-  overlay.addEventListener('touchend', function(e) {
-    if (e.target === overlay) {
-      e.preventDefault();
-      closeMenu();
-    }
-  });
-})();
-</script>
+</label>
+<nav class="avm-overlay" onclick="document.getElementById('avm-toggle').checked=false">
+  ${navLinksHtml || '<a href="/" class="avm-link">Home</a>'}
+</nav>
+<!-- END AVALLON CSS-ONLY MOBILE MENU -->
 `;
 
-  // Insert the fix CSS and mobile menu into the document
-  if (html.includes('</body>')) {
-    // Inject before </body> so our elements are at the end
-    html = html.replace('</body>', wpFixCSS + '\n</body>');
+  // Insert right after <body> tag so checkbox siblings work
+  const bodyMatch = html.match(/<body[^>]*>/i);
+  if (bodyMatch) {
+    html = html.replace(bodyMatch[0], bodyMatch[0] + '\n' + wpFixCSS);
   } else if (html.includes('</head>')) {
-    html = html.replace('</head>', wpFixCSS + '\n</head>');
-  } else if (html.includes('<body')) {
-    html = html.replace(/<body/i, wpFixCSS + '\n<body');
+    html = html.replace('</head>', '</head>\n' + wpFixCSS);
+  } else if (html.includes('<html')) {
+    const htmlMatch = html.match(/<html[^>]*>/i);
+    if (htmlMatch) {
+      html = html.replace(htmlMatch[0], htmlMatch[0] + '\n' + wpFixCSS);
+    }
   }
 
   // Remove ALL data-wp-* attributes that control visibility

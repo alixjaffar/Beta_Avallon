@@ -338,13 +338,13 @@ function extractNavigationLinks(html: string): Array<{text: string; href: string
 }
 
 /**
- * Inject mobile menu fix for published sites
- * Ensures hamburger menus work on mobile devices
+ * Inject CSS-only mobile menu for published sites
  * 
- * BULLETPROOF VERSION:
- * 1. Hides ALL original hamburger/mobile menu buttons
- * 2. Injects our own working hamburger with inline onclick (no JS dependency)
- * 3. Uses extremely high specificity CSS
+ * CSS-ONLY VERSION (No JavaScript required):
+ * 1. Uses checkbox :checked hack for toggle
+ * 2. Works on all devices including iOS Safari
+ * 3. Cannot be broken by script removal or CSP
+ * 4. Uses existing nav links - no duplication
  */
 function injectMobileMenuFix(files: Record<string, string>): Record<string, string> {
   const fixedFiles: Record<string, string> = {};
@@ -356,7 +356,7 @@ function injectMobileMenuFix(files: Record<string, string>): Record<string, stri
     }
     
     // Skip if already has our mobile menu
-    if (content.includes('id="avallon-mobile-toggle"') || content.includes('data-avallon-mobile-nav="true"')) {
+    if (content.includes('id="avm-toggle"') || content.includes('data-avallon-mobile-css="true"')) {
       fixedFiles[filename] = content;
       continue;
     }
@@ -364,51 +364,24 @@ function injectMobileMenuFix(files: Record<string, string>): Record<string, stri
     // Extract navigation links for mobile menu
     const navLinks = extractNavigationLinks(content);
     const navLinksHtml = navLinks.map(link => 
-      `<a href="${link.href}" class="avm-link" onclick="document.getElementById('avallon-mobile-overlay').classList.remove('active');document.getElementById('avallon-mobile-toggle').classList.remove('active');document.body.classList.remove('avm-open');">${link.text}</a>`
-    ).join('\n    ');
+      `<a href="${link.href}" class="avm-link">${link.text}</a>`
+    ).join('\n      ');
     
-    // Inline toggle function - works even if external JS is blocked
-    const toggleFn = `(function(){var o=document.getElementById('avallon-mobile-overlay'),t=document.getElementById('avallon-mobile-toggle');if(!o||!t)return;var isOpen=o.classList.contains('active');o.classList.toggle('active',!isOpen);t.classList.toggle('active',!isOpen);document.body.classList.toggle('avm-open',!isOpen);})()`;
-    
+    // CSS-only mobile menu - uses checkbox :checked hack
     const mobileMenuCode = `
-<!-- AVALLON MOBILE MENU v2 - ${DEPLOY_VERSION} -->
-<style data-avallon-mobile-nav="true">
-/* ========== HIDE ALL ORIGINAL HAMBURGER MENUS ========== */
-@media (max-width: 767px) {
-  /* Common hamburger button classes */
-  .hamburger, .hamburger-menu, .hamburger-btn, .hamburger-button,
-  .menu-toggle, .menu-btn, .menu-button, .mobile-menu-toggle,
-  .mobile-menu-btn, .mobile-nav-toggle, .mobile-toggle,
-  .nav-toggle, .navbar-toggle, .navbar-toggler,
-  .burger, .burger-menu, .burger-btn,
-  /* WordPress specific */
-  .wp-block-navigation__responsive-container-open,
-  .wp-block-navigation-button,
-  /* Icon-based selectors */
-  button[aria-label*="menu" i]:not(#avallon-mobile-toggle),
-  button[aria-label*="Menu" i]:not(#avallon-mobile-toggle),
-  button[aria-label*="navigation" i]:not(#avallon-mobile-toggle),
-  button[aria-label*="toggle" i]:not(#avallon-mobile-toggle),
-  /* SVG hamburger icons in buttons */
-  header button:not(#avallon-mobile-toggle),
-  nav button:not(#avallon-mobile-toggle),
-  .header button:not(#avallon-mobile-toggle),
-  .navbar button:not(#avallon-mobile-toggle),
-  /* Three-line hamburger patterns */
-  [class*="hamburger"]:not(#avallon-mobile-toggle),
-  [class*="burger"]:not(#avallon-mobile-toggle),
-  [class*="mobile-menu"]:not(#avallon-mobile-toggle):not(#avallon-mobile-overlay),
-  [class*="menu-toggle"]:not(#avallon-mobile-toggle),
-  [class*="nav-toggle"]:not(#avallon-mobile-toggle) {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
-  }
+<!-- AVALLON CSS-ONLY MOBILE MENU v3 - ${DEPLOY_VERSION} -->
+<style data-avallon-mobile-css="true">
+/* ========== HIDE CHECKBOX (accessibility preserved) ========== */
+#avm-toggle {
+  position: fixed;
+  top: -100px;
+  left: -100px;
+  opacity: 0;
+  pointer-events: none;
 }
 
-/* ========== AVALLON MOBILE TOGGLE BUTTON ========== */
-#avallon-mobile-toggle {
+/* ========== HAMBURGER LABEL (acts as button) ========== */
+.avm-hamburger {
   display: none;
   position: fixed;
   top: 12px;
@@ -428,19 +401,9 @@ function injectMobileMenuFix(files: Record<string, string>): Record<string, stri
   box-shadow: 0 4px 20px rgba(0,0,0,0.4);
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  user-select: none;
 }
-@media (max-width: 767px) {
-  #avallon-mobile-toggle {
-    display: flex !important;
-  }
-}
-@media (min-width: 768px) {
-  #avallon-mobile-toggle,
-  #avallon-mobile-overlay {
-    display: none !important;
-  }
-}
-#avallon-mobile-toggle span {
+.avm-hamburger span {
   display: block;
   width: 24px;
   height: 3px;
@@ -449,19 +412,9 @@ function injectMobileMenuFix(files: Record<string, string>): Record<string, stri
   transition: all 0.3s ease;
   pointer-events: none;
 }
-#avallon-mobile-toggle.active span:nth-child(1) {
-  transform: rotate(45deg) translate(6px, 6px);
-}
-#avallon-mobile-toggle.active span:nth-child(2) {
-  opacity: 0;
-  transform: scaleX(0);
-}
-#avallon-mobile-toggle.active span:nth-child(3) {
-  transform: rotate(-45deg) translate(6px, -6px);
-}
 
 /* ========== MOBILE MENU OVERLAY ========== */
-#avallon-mobile-overlay {
+.avm-overlay {
   display: none;
   position: fixed;
   top: 0;
@@ -476,9 +429,6 @@ function injectMobileMenuFix(files: Record<string, string>): Record<string, stri
   padding: 80px 20px 20px;
   overflow-y: auto;
 }
-#avallon-mobile-overlay.active {
-  display: flex !important;
-}
 
 /* ========== MENU LINKS ========== */
 .avm-link {
@@ -487,8 +437,8 @@ function injectMobileMenuFix(files: Record<string, string>): Record<string, stri
   margin: 6px 0;
   font-size: 18px;
   font-weight: 600;
-  color: #fff;
-  text-decoration: none;
+  color: #fff !important;
+  text-decoration: none !important;
   background: rgba(255,255,255,0.1);
   border-radius: 12px;
   width: 100%;
@@ -502,95 +452,103 @@ function injectMobileMenuFix(files: Record<string, string>): Record<string, stri
   transform: scale(1.02);
 }
 
-/* ========== BODY SCROLL LOCK ========== */
-body.avm-open {
-  overflow: hidden !important;
-  position: fixed !important;
-  width: 100% !important;
+/* ========== DESKTOP: Hide everything ========== */
+@media (min-width: 768px) {
+  .avm-hamburger,
+  .avm-overlay,
+  #avm-toggle {
+    display: none !important;
+  }
+}
+
+/* ========== MOBILE: Show hamburger, handle toggle ========== */
+@media (max-width: 767px) {
+  /* Show hamburger */
+  .avm-hamburger {
+    display: flex !important;
+  }
+  
+  /* Hide original hamburger buttons */
+  .hamburger, .hamburger-menu, .hamburger-btn, .hamburger-button,
+  .menu-toggle, .menu-btn, .menu-button, .mobile-menu-toggle,
+  .mobile-menu-btn, .mobile-nav-toggle, .mobile-toggle,
+  .nav-toggle, .navbar-toggle, .navbar-toggler,
+  .burger, .burger-menu, .burger-btn,
+  .wp-block-navigation__responsive-container-open,
+  .wp-block-navigation-button,
+  header button:not(.avm-hamburger),
+  nav button:not(.avm-hamburger),
+  [class*="hamburger"]:not(.avm-hamburger),
+  [class*="burger"]:not(.avm-hamburger),
+  [class*="mobile-menu"]:not(.avm-overlay),
+  [class*="menu-toggle"]:not(.avm-hamburger),
+  [class*="nav-toggle"]:not(.avm-hamburger),
+  button[aria-label*="menu" i]:not(.avm-hamburger),
+  button[aria-label*="Menu" i]:not(.avm-hamburger) {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+  
+  /* ========== CHECKBOX CHECKED = MENU OPEN ========== */
+  #avm-toggle:checked ~ .avm-overlay {
+    display: flex !important;
+  }
+  
+  /* Animate hamburger to X when checked */
+  #avm-toggle:checked ~ .avm-hamburger span:nth-child(1) {
+    transform: rotate(45deg) translate(6px, 6px);
+  }
+  #avm-toggle:checked ~ .avm-hamburger span:nth-child(2) {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+  #avm-toggle:checked ~ .avm-hamburger span:nth-child(3) {
+    transform: rotate(-45deg) translate(6px, -6px);
+  }
+  
+  /* Lock body scroll when menu is open */
+  #avm-toggle:checked ~ .avm-body-lock {
+    position: fixed;
+    width: 100%;
+    overflow: hidden;
+  }
 }
 </style>
 
-<!-- Mobile Menu Toggle Button - Uses inline onclick for maximum compatibility -->
-<button id="avallon-mobile-toggle" 
-        aria-label="Open Menu" 
-        onclick="${toggleFn}">
+<!-- CSS-Only Mobile Menu (checkbox hack - no JavaScript!) -->
+<input type="checkbox" id="avm-toggle" />
+<label for="avm-toggle" class="avm-hamburger" aria-label="Toggle Menu">
   <span></span>
   <span></span>
   <span></span>
-</button>
-
-<!-- Mobile Menu Overlay -->
-<div id="avallon-mobile-overlay" onclick="if(event.target===this){${toggleFn}}">
+</label>
+<nav class="avm-overlay" onclick="document.getElementById('avm-toggle').checked=false">
   ${navLinksHtml || '<a href="/" class="avm-link">Home</a>'}
-</div>
-
-<script data-avallon-mobile-nav="true">
-// Backup event listeners (in case inline onclick is stripped)
-(function() {
-  'use strict';
-  var toggle = document.getElementById('avallon-mobile-toggle');
-  var overlay = document.getElementById('avallon-mobile-overlay');
-  if (!toggle || !overlay) return;
-  
-  function toggleMenu(e) {
-    if (e) { e.preventDefault(); e.stopPropagation(); }
-    var isOpen = overlay.classList.contains('active');
-    overlay.classList.toggle('active', !isOpen);
-    toggle.classList.toggle('active', !isOpen);
-    document.body.classList.toggle('avm-open', !isOpen);
-    toggle.setAttribute('aria-label', isOpen ? 'Open Menu' : 'Close Menu');
-  }
-  
-  // Remove any existing listeners then add fresh ones
-  var newToggle = toggle.cloneNode(true);
-  toggle.parentNode.replaceChild(newToggle, toggle);
-  toggle = newToggle;
-  
-  // Touch handling for iOS
-  var touchStarted = false;
-  toggle.addEventListener('touchstart', function() { touchStarted = true; }, { passive: true });
-  toggle.addEventListener('touchend', function(e) {
-    if (touchStarted) {
-      e.preventDefault();
-      toggleMenu();
-      touchStarted = false;
-    }
-  }, { passive: false });
-  
-  // Click handler for non-touch
-  toggle.addEventListener('click', function(e) {
-    if (!touchStarted) toggleMenu(e);
-    touchStarted = false;
-  });
-  
-  // Close when clicking overlay background
-  overlay.addEventListener('click', function(e) {
-    if (e.target === overlay) toggleMenu(e);
-  });
-  
-  // Close on escape key
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && overlay.classList.contains('active')) toggleMenu();
-  });
-})();
-</script>
-<!-- END AVALLON MOBILE MENU -->
+</nav>
+<!-- END AVALLON CSS-ONLY MOBILE MENU -->
 `;
 
-    // Inject before </body>
+    // Inject right after <body> tag so checkbox siblings work
     let fixedContent = content;
-    if (content.includes('</body>')) {
-      fixedContent = content.replace('</body>', mobileMenuCode + '\n</body>');
-    } else if (content.includes('</html>')) {
-      fixedContent = content.replace('</html>', mobileMenuCode + '\n</html>');
+    const bodyMatch = content.match(/<body[^>]*>/i);
+    if (bodyMatch) {
+      fixedContent = content.replace(bodyMatch[0], bodyMatch[0] + '\n' + mobileMenuCode);
+    } else if (content.includes('<html')) {
+      // Inject after <html> tag as fallback
+      const htmlMatch = content.match(/<html[^>]*>/i);
+      if (htmlMatch) {
+        fixedContent = content.replace(htmlMatch[0], htmlMatch[0] + '\n' + mobileMenuCode);
+      }
     } else {
-      fixedContent = content + mobileMenuCode;
+      // Prepend as last resort
+      fixedContent = mobileMenuCode + '\n' + content;
     }
     
     fixedFiles[filename] = fixedContent;
   }
   
-  logInfo('Injected mobile menu fix', { fileCount: Object.keys(fixedFiles).filter(f => f.endsWith('.html')).length });
+  logInfo('Injected CSS-only mobile menu', { fileCount: Object.keys(fixedFiles).filter(f => f.endsWith('.html')).length });
   return fixedFiles;
 }
 
