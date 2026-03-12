@@ -1131,7 +1131,186 @@ export class PlaywrightScraper {
       $('head').prepend(`<meta name="avallon-imported" content="${new Date().toISOString()}">`);
     }
     
+    // Add mobile support (touch events, hamburger menu fixes)
+    this.injectMobileSupport($);
+    
     return $.html();
+  }
+  
+  /**
+   * Inject mobile-friendly scripts and CSS fixes
+   * Ensures hamburger menus work, touch events are handled, and mobile layouts are preserved
+   */
+  private injectMobileSupport($: CheerioAPI): void {
+    // Ensure viewport meta is set
+    if (!$('meta[name="viewport"]').length) {
+      $('head').prepend('<meta name="viewport" content="width=device-width, initial-scale=1.0">');
+    }
+    
+    // Add mobile-friendly CSS that doesn't break anything
+    const mobileCss = `
+<style data-avallon-mobile="true">
+/* ===== MOBILE NAV SUPPORT ===== */
+/* Keep hamburger menus clickable on mobile */
+@media (max-width: 767px) {
+  .hamburger, .hamburger-menu, .menu-toggle, .nav-toggle,
+  .mobile-nav-toggle, .mobile-menu-toggle,
+  .wp-block-navigation__responsive-container-open,
+  button[aria-label*="menu" i], button[aria-label*="navigation" i],
+  [class*="hamburger"], [class*="menu-toggle"], [class*="mobile-menu"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    z-index: 9999 !important;
+    position: relative !important;
+  }
+  
+  /* Mobile menu when open */
+  .is-menu-open, .menu-open, .nav-open, .active,
+  .mobile-menu.is-open, .mobile-menu.active,
+  .wp-block-navigation__responsive-container.is-menu-open {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+  
+  /* Close buttons */
+  .close-menu, .menu-close, .mobile-menu-close,
+  .wp-block-navigation__responsive-close {
+    display: flex !important;
+    visibility: visible !important;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    z-index: 10000 !important;
+  }
+  
+  /* Ensure touch targets are large enough (44px minimum) */
+  nav a, .menu-item a, button, .nav-link {
+    min-height: 44px !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+}
+
+/* ===== TOUCH-FRIENDLY IMPROVEMENTS ===== */
+/* Make links easier to tap */
+a, button {
+  touch-action: manipulation;
+}
+
+/* Prevent text selection on UI elements */
+nav, header, .navigation, .menu {
+  -webkit-user-select: none;
+  user-select: none;
+}
+</style>`;
+
+    // Add mobile navigation script
+    const mobileScript = `
+<script data-avallon-mobile="true">
+(function() {
+  // Mobile menu toggle support
+  function initMobileNav() {
+    // Find hamburger buttons (various common class names)
+    var hamburgerSelectors = [
+      '.hamburger', '.hamburger-menu', '.menu-toggle', '.nav-toggle',
+      '.mobile-nav-toggle', '.mobile-menu-toggle',
+      '.wp-block-navigation__responsive-container-open',
+      'button[aria-label*="menu" i]', 'button[aria-label*="navigation" i]',
+      '[class*="hamburger"]', '[class*="menu-toggle"]'
+    ].join(', ');
+    
+    var hamburgers = document.querySelectorAll(hamburgerSelectors);
+    
+    // Find mobile menus
+    var menuSelectors = [
+      '.mobile-menu', '.mobile-nav', '.nav-menu', '.main-menu',
+      '.wp-block-navigation__responsive-container',
+      '[class*="mobile-menu"]', '[class*="mobile-nav"]'
+    ].join(', ');
+    
+    var menus = document.querySelectorAll(menuSelectors);
+    
+    // Find close buttons
+    var closeSelectors = [
+      '.close-menu', '.menu-close', '.mobile-menu-close',
+      '.wp-block-navigation__responsive-close',
+      '[class*="close-menu"]', '[aria-label*="close" i]'
+    ].join(', ');
+    
+    var closeButtons = document.querySelectorAll(closeSelectors);
+    
+    function openMenu() {
+      menus.forEach(function(menu) {
+        menu.classList.add('is-menu-open', 'is-open', 'active', 'menu-open');
+        menu.setAttribute('aria-hidden', 'false');
+      });
+      document.body.classList.add('menu-open');
+      document.body.style.overflow = 'hidden';
+    }
+    
+    function closeMenu() {
+      menus.forEach(function(menu) {
+        menu.classList.remove('is-menu-open', 'is-open', 'active', 'menu-open');
+        menu.setAttribute('aria-hidden', 'true');
+      });
+      document.body.classList.remove('menu-open');
+      document.body.style.overflow = '';
+    }
+    
+    // Add click and touch handlers
+    function addHandler(el, fn) {
+      el.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        fn();
+      }, { passive: false });
+      
+      el.addEventListener('touchend', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        fn();
+      }, { passive: false });
+    }
+    
+    hamburgers.forEach(function(btn) { addHandler(btn, openMenu); });
+    closeButtons.forEach(function(btn) { addHandler(btn, closeMenu); });
+    
+    // Close on ESC
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') closeMenu();
+    });
+    
+    // Close when clicking menu links (navigate)
+    menus.forEach(function(menu) {
+      menu.querySelectorAll('a').forEach(function(link) {
+        link.addEventListener('click', function() {
+          setTimeout(closeMenu, 100);
+        });
+      });
+    });
+  }
+  
+  // Run when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initMobileNav);
+  } else {
+    initMobileNav();
+  }
+})();
+</script>`;
+
+    // Inject CSS into head
+    $('head').append(mobileCss);
+    
+    // Inject script before closing body
+    if ($('body').length) {
+      $('body').append(mobileScript);
+    } else {
+      $('html').append(mobileScript);
+    }
   }
   
   /**

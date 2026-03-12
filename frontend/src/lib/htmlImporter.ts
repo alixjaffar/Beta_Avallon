@@ -693,91 +693,120 @@ function fixWordPressElements(html: string): string {
 </nav>
 ` : '';
 
-  // More aggressive CSS fix
+  // Mobile-friendly CSS fix - DOES NOT hide hamburger menus
   const wpFixCSS = `
 <style data-wp-fixes="true">
-/* AGGRESSIVE FIX: Force ALL navigation to be visible */
-.wp-block-navigation,
-.wp-block-navigation__responsive-container,
-.wp-block-navigation__responsive-container.is-menu-open,
-.wp-block-navigation__responsive-container.hidden-by-default,
-nav[class*="navigation"],
-[class*="wp-block-navigation"] {
-  display: flex !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  position: relative !important;
-  top: auto !important;
-  left: auto !important;
-  right: auto !important;
-  width: auto !important;
-  height: auto !important;
-  max-height: none !important;
-  transform: none !important;
-  background: transparent !important;
-  pointer-events: auto !important;
-  overflow: visible !important;
-  clip: auto !important;
-  clip-path: none !important;
+/* ===== DESKTOP STYLES (768px+) ===== */
+@media (min-width: 768px) {
+  /* Show desktop navigation */
+  .wp-block-navigation,
+  .wp-block-navigation__responsive-container,
+  nav[class*="navigation"],
+  [class*="wp-block-navigation"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+  
+  /* Hide hamburger on desktop */
+  .wp-block-navigation__responsive-container-open,
+  .hamburger, .hamburger-menu, .menu-toggle,
+  .mobile-menu-toggle, .mobile-nav-toggle,
+  button[aria-label*="menu" i],
+  button[aria-label*="navigation" i] {
+    display: none !important;
+  }
+  
+  /* Desktop nav layout */
+  .wp-block-navigation__responsive-container-content,
+  .wp-block-navigation__container {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 1.5rem !important;
+    align-items: center !important;
+  }
+  
+  .wp-block-navigation-item,
+  .wp-block-navigation-link,
+  .menu-item,
+  nav li {
+    display: inline-flex !important;
+    visibility: visible !important;
+  }
 }
 
-/* Hide hamburger/mobile menu buttons */
-.wp-block-navigation__responsive-container-open,
-.wp-block-navigation__responsive-close,
-button[aria-label*="menu"],
-button[aria-label*="Menu"],
-.menu-toggle,
-.mobile-menu-toggle {
-  display: none !important;
+/* ===== MOBILE STYLES (below 768px) ===== */
+@media (max-width: 767px) {
+  /* KEEP hamburger button visible and clickable on mobile */
+  .wp-block-navigation__responsive-container-open,
+  .hamburger, .hamburger-menu, .menu-toggle,
+  .mobile-menu-toggle, .mobile-nav-toggle,
+  button[aria-label*="menu" i],
+  button[aria-label*="navigation" i] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    z-index: 9999 !important;
+    position: relative !important;
+  }
+  
+  /* Mobile menu overlay - show when open */
+  .wp-block-navigation__responsive-container.is-menu-open,
+  .mobile-menu.is-open, .mobile-menu.active,
+  .nav-menu.is-open, .nav-menu.active {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 9998 !important;
+    background: rgba(255,255,255,0.98) !important;
+    flex-direction: column !important;
+    padding: 80px 20px 20px !important;
+  }
+  
+  /* Close button in mobile menu */
+  .wp-block-navigation__responsive-close,
+  .mobile-menu-close, .close-menu {
+    display: flex !important;
+    visibility: visible !important;
+    position: absolute !important;
+    top: 20px !important;
+    right: 20px !important;
+    z-index: 10000 !important;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+  }
+  
+  /* Mobile nav items stacked */
+  .wp-block-navigation__responsive-container.is-menu-open .wp-block-navigation-item,
+  .mobile-menu.is-open a,
+  .nav-menu.is-open a {
+    display: block !important;
+    padding: 12px 0 !important;
+    font-size: 18px !important;
+    border-bottom: 1px solid #eee !important;
+  }
 }
 
-/* Force nav content to show */
-.wp-block-navigation__responsive-container-content,
-.wp-block-navigation__container {
-  display: flex !important;
-  flex-direction: row !important;
-  gap: 1.5rem !important;
-  align-items: center !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  position: relative !important;
-  transform: none !important;
-}
-
-/* Force nav items visible */
-.wp-block-navigation-item,
-.wp-block-navigation-link,
-.menu-item,
-nav li {
-  display: inline-flex !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-}
-
-.wp-block-navigation-item__content,
-.wp-block-navigation-link__content,
-nav a {
-  display: inline-block !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  color: inherit !important;
-}
-
-/* Remove any hiding transforms/clips */
-[style*="display: none"],
-[style*="display:none"],
-[style*="visibility: hidden"],
-[style*="visibility:hidden"] {
-  display: revert !important;
-  visibility: visible !important;
-}
-
+/* ===== GENERAL FIXES ===== */
 /* Fix header layout */
 header, .site-header, .header, .wp-block-template-part {
   display: flex !important;
   visibility: visible !important;
   overflow: visible !important;
   align-items: center !important;
+}
+
+/* Ensure links are clickable */
+nav a, .menu-item a, .wp-block-navigation-item__content {
+  pointer-events: auto !important;
+  cursor: pointer !important;
 }
 
 /* Fallback nav styling */
@@ -788,14 +817,16 @@ header, .site-header, .header, .wp-block-template-part {
   margin-left: auto !important;
 }
 
+@media (max-width: 767px) {
+  .avallon-fallback-nav {
+    display: none !important;
+  }
+}
+
 .avallon-fallback-nav a {
   color: inherit !important;
   text-decoration: none !important;
   font-weight: 500 !important;
-}
-
-.avallon-fallback-nav a:hover {
-  opacity: 0.7 !important;
 }
 
 /* Ensure the row layout for header */
@@ -808,7 +839,92 @@ header .wp-block-group {
   justify-content: space-between !important;
   width: 100% !important;
 }
+
+/* Touch-friendly tap targets */
+@media (max-width: 767px) {
+  nav a, .menu-item a, button {
+    min-height: 44px !important;
+    min-width: 44px !important;
+  }
+}
 </style>
+
+<!-- Mobile menu toggle script -->
+<script data-avallon-mobile-nav="true">
+(function() {
+  // Wait for DOM
+  function initMobileNav() {
+    // Find all hamburger buttons
+    const hamburgers = document.querySelectorAll(
+      '.wp-block-navigation__responsive-container-open, ' +
+      '.hamburger, .hamburger-menu, .menu-toggle, ' +
+      '.mobile-menu-toggle, .mobile-nav-toggle, ' +
+      'button[aria-label*="menu" i], button[aria-label*="navigation" i]'
+    );
+    
+    // Find mobile menu containers
+    const mobileMenus = document.querySelectorAll(
+      '.wp-block-navigation__responsive-container, ' +
+      '.mobile-menu, .mobile-nav, .nav-menu'
+    );
+    
+    // Find close buttons
+    const closeButtons = document.querySelectorAll(
+      '.wp-block-navigation__responsive-close, ' +
+      '.mobile-menu-close, .close-menu'
+    );
+    
+    function openMenu() {
+      mobileMenus.forEach(function(menu) {
+        menu.classList.add('is-menu-open', 'is-open', 'active');
+        menu.setAttribute('aria-hidden', 'false');
+      });
+      document.body.style.overflow = 'hidden';
+    }
+    
+    function closeMenu() {
+      mobileMenus.forEach(function(menu) {
+        menu.classList.remove('is-menu-open', 'is-open', 'active');
+        menu.setAttribute('aria-hidden', 'true');
+      });
+      document.body.style.overflow = '';
+    }
+    
+    // Add click AND touch handlers to hamburgers
+    hamburgers.forEach(function(btn) {
+      ['click', 'touchend'].forEach(function(evt) {
+        btn.addEventListener(evt, function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          openMenu();
+        }, { passive: false });
+      });
+    });
+    
+    // Add handlers to close buttons
+    closeButtons.forEach(function(btn) {
+      ['click', 'touchend'].forEach(function(evt) {
+        btn.addEventListener(evt, function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          closeMenu();
+        }, { passive: false });
+      });
+    });
+    
+    // Close on ESC
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') closeMenu();
+    });
+  }
+  
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initMobileNav);
+  } else {
+    initMobileNav();
+  }
+})();
+</script>
 `;
 
   // Insert the fix CSS into the head

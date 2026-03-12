@@ -149,59 +149,83 @@ function fixImageUrls(html: string): string {
   return html;
 }
 
-// Inject CSS to ensure navigation is always visible in the editor
-// This overrides responsive CSS that might hide nav on smaller viewports
+// Inject CSS to ensure navigation works in the editor
+// Responsive: shows desktop nav on large viewports, mobile nav on small
 function injectEditorOverrideCSS(html: string): string {
   if (!html || typeof html !== 'string') return html;
   
   const overrideCSS = `
 <style data-avallon-editor-override="true">
-/* Force navigation to always be visible in the editor */
-nav, header nav, .nav, .navbar, .navigation, .site-header, 
-.header, #header, #nav, #navbar, .main-navigation,
-.menu, .main-menu, #main-menu, .site-navigation {
-  display: block !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  position: relative !important;
-  transform: none !important;
-  max-height: none !important;
-  overflow: visible !important;
+/* ===== DESKTOP VIEW (768px+) ===== */
+@media (min-width: 768px) {
+  /* Force navigation to always be visible in the editor */
+  nav, header nav, .nav, .navbar, .navigation, .site-header, 
+  .header, #header, #nav, #navbar, .main-navigation,
+  .menu, .main-menu, #main-menu, .site-navigation {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative !important;
+    transform: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Hide mobile-menu buttons on desktop */
+  .mobile-menu, .hamburger-menu, .menu-toggle, .nav-toggle,
+  .mobile-nav-toggle, .mobile-menu-toggle,
+  .wp-block-navigation__responsive-container-open {
+    display: none !important;
+  }
+
+  /* Show desktop navigation items */
+  .nav-menu, .menu-items, nav ul, header nav ul, 
+  .navbar-nav, .nav-links, .desktop-menu, .desktop-nav {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  /* WordPress specific overrides */
+  .wp-block-navigation, .wp-block-navigation__container,
+  .wp-block-navigation-item, .wp-block-navigation-link {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
 }
 
-/* Override mobile-menu hiding */
-.mobile-menu, .hamburger-menu, .menu-toggle, .nav-toggle,
-.mobile-nav-toggle, .mobile-menu-toggle {
-  display: none !important;
+/* ===== MOBILE VIEW (below 768px) ===== */
+@media (max-width: 767px) {
+  /* KEEP hamburger buttons visible and working on mobile */
+  .hamburger, .hamburger-menu, .menu-toggle, .nav-toggle,
+  .mobile-nav-toggle, .mobile-menu-toggle,
+  .wp-block-navigation__responsive-container-open,
+  button[aria-label*="menu" i], button[aria-label*="navigation" i] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    z-index: 9999 !important;
+  }
+  
+  /* Mobile nav items should be tappable */
+  nav a, .menu-item a, button {
+    min-height: 44px !important;
+    padding: 10px !important;
+  }
 }
 
-/* Show desktop navigation items */
-.nav-menu, .menu-items, nav ul, header nav ul, 
-.navbar-nav, .nav-links, .desktop-menu, .desktop-nav {
-  display: flex !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  position: relative !important;
-  flex-wrap: wrap !important;
-  max-height: none !important;
-  height: auto !important;
-  transform: none !important;
-}
-
-/* Show all nav links */
+/* ===== GENERAL ===== */
+/* Ensure all nav links are clickable */
 nav a, header nav a, .nav a, .navbar a, .nav-link,
 .menu-item, .menu-item a, nav li, header nav li {
   display: inline-block !important;
   visibility: visible !important;
   opacity: 1 !important;
-}
-
-/* WordPress specific overrides */
-.wp-block-navigation, .wp-block-navigation__container,
-.wp-block-navigation-item, .wp-block-navigation-link {
-  display: flex !important;
-  visibility: visible !important;
-  opacity: 1 !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
 }
 </style>`;
 
@@ -215,26 +239,54 @@ nav a, header nav a, .nav a, .navbar a, .nav-link,
   return overrideCSS + html;
 }
 
-// Inject navigation script for multi-page support
+// Inject navigation script for multi-page support with touch event support
 function injectNavigationScript(html: string): string {
   if (!html || typeof html !== 'string') return html;
   
   const navScript = `
 <script>
 (function() {
-  document.querySelectorAll('a[href]').forEach(function(link) {
+  // Handle both click and touch events for mobile support
+  function addNavHandler(link) {
     var href = link.getAttribute('href');
-    if (href && !href.startsWith('http') && !href.startsWith('#') && !href.startsWith('javascript:') && !href.startsWith('mailto:')) {
-      link.addEventListener('click', function(e) {
+    if (href && !href.startsWith('http') && !href.startsWith('#') && !href.startsWith('javascript:') && !href.startsWith('mailto:') && !href.startsWith('tel:')) {
+      
+      function handleNav(e) {
         e.preventDefault();
+        e.stopPropagation();
         var page = href;
         if (!page.endsWith('.html')) page = page + '.html';
         if (page.startsWith('/')) page = page.substring(1);
         if (page.startsWith('./')) page = page.substring(2);
         window.parent.postMessage({ type: 'navigate', page: page }, '*');
-      });
+      }
+      
+      // Add both click and touchend for reliable mobile support
+      link.addEventListener('click', handleNav, { passive: false });
+      link.addEventListener('touchend', handleNav, { passive: false });
+      
+      // Prevent ghost clicks on touch
+      link.addEventListener('touchstart', function(e) {
+        link.dataset.touched = 'true';
+      }, { passive: true });
     }
+  }
+  
+  // Process all links
+  document.querySelectorAll('a[href]').forEach(addNavHandler);
+  
+  // Also handle dynamically added links
+  var observer = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+      mutation.addedNodes.forEach(function(node) {
+        if (node.nodeType === 1) {
+          if (node.tagName === 'A') addNavHandler(node);
+          node.querySelectorAll && node.querySelectorAll('a[href]').forEach(addNavHandler);
+        }
+      });
+    });
   });
+  observer.observe(document.body, { childList: true, subtree: true });
 })();
 </script>`;
 
