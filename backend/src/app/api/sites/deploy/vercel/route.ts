@@ -1,6 +1,8 @@
 // API endpoint for deploying websites to GitHub and Vercel
 // CHANGELOG: 2026-01-07 - Added proper CORS handling
 // CHANGELOG: 2026-01-22 - Added image downloading and navigation link fixing
+// CHANGELOG: 2026-03-12 - Added bulletproof mobile menu injection (v2)
+const DEPLOY_VERSION = "2026-03-12-mobile-menu-v2";
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 import { z } from "zod";
@@ -297,7 +299,7 @@ function injectMobileMenuFix(files: Record<string, string>): Record<string, stri
     const toggleFn = `(function(){var o=document.getElementById('avallon-mobile-overlay'),t=document.getElementById('avallon-mobile-toggle');if(!o||!t)return;var isOpen=o.classList.contains('active');o.classList.toggle('active',!isOpen);t.classList.toggle('active',!isOpen);document.body.classList.toggle('avm-open',!isOpen);})()`;
     
     const mobileMenuCode = `
-<!-- AVALLON MOBILE MENU - Injected for reliable mobile navigation -->
+<!-- AVALLON MOBILE MENU v2 - ${DEPLOY_VERSION} -->
 <style data-avallon-mobile-nav="true">
 /* ========== HIDE ALL ORIGINAL HAMBURGER MENUS ========== */
 @media (max-width: 767px) {
