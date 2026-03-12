@@ -212,56 +212,128 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
 }
 
 /**
+ * Extract text content from HTML, stripping all tags
+ */
+function extractTextFromHtml(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, ' ')  // Replace tags with space
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, ' ')      // Collapse whitespace
+    .trim();
+}
+
+/**
+ * Check if a link is a valid navigation link
+ */
+function isValidNavLink(href: string, text: string): boolean {
+  if (!href || !text) return false;
+  if (text.length > 50 || text.length < 1) return false;
+  if (href.startsWith('javascript:')) return false;
+  if (href.startsWith('mailto:')) return false;
+  if (href.startsWith('tel:')) return false;
+  if (href.startsWith('data:')) return false;
+  if (href === '#') return false;
+  // Allow relative URLs, absolute URLs, and hash links with content
+  return true;
+}
+
+/**
  * Extract navigation links from HTML to build mobile menu
+ * Handles nested elements like <a href="/about"><span>About</span></a>
  */
 function extractNavigationLinks(html: string): Array<{text: string; href: string}> {
   const links: Array<{text: string; href: string}> = [];
   const seen = new Set<string>();
   
-  // Try nav elements first
-  const navLinkRegex = /<a[^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/gi;
-  const navSections = html.match(/<nav[^>]*>[\s\S]*?<\/nav>/gi) || [];
+  // Regex that captures the full content between <a> tags (including nested elements)
+  const linkRegex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   
-  for (const navSection of navSections) {
+  // Helper to extract links from a section
+  const extractFromSection = (section: string) => {
     let match;
-    const regex = new RegExp(navLinkRegex.source, 'gi');
-    while ((match = regex.exec(navSection)) !== null) {
+    const regex = new RegExp(linkRegex.source, 'gi');
+    while ((match = regex.exec(section)) !== null) {
       const href = match[1];
-      const text = match[2].trim();
-      if (text && href && !seen.has(href) && 
-          !href.startsWith('#') && 
-          !href.startsWith('javascript') &&
-          !href.includes('mailto:') &&
-          !href.includes('tel:') &&
-          text.length < 50) {
+      const rawContent = match[2];
+      const text = extractTextFromHtml(rawContent);
+      
+      if (isValidNavLink(href, text) && !seen.has(href)) {
+        seen.add(href);
+        links.push({ text, href });
+      }
+    }
+  };
+  
+  // Strategy 1: Try <nav> elements
+  const navSections = html.match(/<nav[^>]*>[\s\S]*?<\/nav>/gi) || [];
+  for (const section of navSections) {
+    extractFromSection(section);
+  }
+  
+  // Strategy 2: Try <header> elements
+  if (links.length === 0) {
+    const headerSections = html.match(/<header[^>]*>[\s\S]*?<\/header>/gi) || [];
+    for (const section of headerSections) {
+      extractFromSection(section);
+    }
+  }
+  
+  // Strategy 3: Try elements with nav-related classes
+  if (links.length === 0) {
+    const navClassSections = html.match(/<[^>]*class="[^"]*(?:nav|menu|navigation)[^"]*"[^>]*>[\s\S]*?<\/(?:div|ul|section)>/gi) || [];
+    for (const section of navClassSections) {
+      extractFromSection(section);
+    }
+  }
+  
+  // Strategy 4: Try top-level links (first 500 chars often contain nav)
+  if (links.length === 0) {
+    const topSection = html.substring(0, Math.min(html.length, 5000));
+    extractFromSection(topSection);
+  }
+  
+  // Strategy 5: Last resort - find ANY internal links in the whole document
+  if (links.length === 0) {
+    let match;
+    const regex = new RegExp(linkRegex.source, 'gi');
+    while ((match = regex.exec(html)) !== null && links.length < 10) {
+      const href = match[1];
+      const text = extractTextFromHtml(match[2]);
+      
+      // Only include links that look like navigation (short text, internal links)
+      const isInternal = href.startsWith('/') || href.startsWith('./') || href.startsWith('#') || 
+                        href.includes('.html') || !href.includes('://');
+      
+      if (isValidNavLink(href, text) && !seen.has(href) && isInternal && text.length <= 25) {
         seen.add(href);
         links.push({ text, href });
       }
     }
   }
   
-  // If no nav links found, try header area
+  // If still no links, create basic navigation
   if (links.length === 0) {
-    const headerSections = html.match(/<header[^>]*>[\s\S]*?<\/header>/gi) || [];
-    for (const section of headerSections) {
-      let match;
-      const regex = new RegExp(navLinkRegex.source, 'gi');
-      while ((match = regex.exec(section)) !== null) {
-        const href = match[1];
-        const text = match[2].trim();
-        if (text && href && !seen.has(href) && 
-            !href.startsWith('#') && 
-            !href.startsWith('javascript') &&
-            !href.includes('mailto:') &&
-            !href.includes('tel:') &&
-            text.length < 50) {
-          seen.add(href);
-          links.push({ text, href });
-        }
+    // Check if common pages exist by looking for links to them
+    const commonPages = ['/', '/about', '/services', '/contact', '/home'];
+    for (const page of commonPages) {
+      if (html.toLowerCase().includes(`href="${page}"`) || html.toLowerCase().includes(`href="${page}.html"`)) {
+        const name = page === '/' ? 'Home' : page.replace('/', '').replace('.html', '');
+        links.push({ text: name.charAt(0).toUpperCase() + name.slice(1), href: page });
       }
     }
   }
   
+  // Final fallback - just provide Home link
+  if (links.length === 0) {
+    links.push({ text: 'Home', href: '/' });
+  }
+  
+  logInfo('Extracted navigation links', { count: links.length, links: links.slice(0, 5) });
   return links.slice(0, 10);
 }
 
