@@ -681,23 +681,34 @@ function fixCommonIssues(html: string): string {
 
 /**
  * Fix WordPress-specific elements that are hidden by default until JS runs
+ * Creates a custom Avallon mobile menu that works regardless of original site implementation
  */
 function fixWordPressElements(html: string): string {
-  // Extract navigation links from the HTML to build a fallback nav
+  // Extract navigation links from the HTML to build our custom mobile menu
   const navLinks = extractNavigationLinks(html);
   
-  // Create a fallback navigation bar
+  // Create nav links HTML for our custom mobile overlay
+  const navLinksHtml = navLinks.slice(0, 10).map(link => 
+    `<a href="${link.href}" class="avallon-mobile-link">${link.text}</a>`
+  ).join('\n    ');
+  
+  // Create a fallback desktop navigation bar
   const fallbackNav = navLinks.length > 0 ? `
 <nav class="avallon-fallback-nav" style="display: flex; align-items: center; gap: 2rem; margin-left: auto;">
   ${navLinks.map(link => `<a href="${link.href}" style="color: inherit; text-decoration: none; font-weight: 500; font-size: 14px;">${link.text}</a>`).join('\n  ')}
 </nav>
 ` : '';
 
-  // Mobile-friendly CSS fix - DOES NOT hide hamburger menus
+  // Comprehensive mobile fix CSS + custom Avallon mobile menu
   const wpFixCSS = `
 <style data-wp-fixes="true">
-/* ===== DESKTOP STYLES (768px+) ===== */
+/* ===== AVALLON MOBILE MENU SYSTEM ===== */
+
+/* Hide our custom toggle on desktop */
 @media (min-width: 768px) {
+  #avallon-mobile-toggle { display: none !important; }
+  #avallon-mobile-overlay { display: none !important; }
+  
   /* Show desktop navigation */
   .wp-block-navigation,
   .wp-block-navigation__responsive-container,
@@ -708,12 +719,10 @@ function fixWordPressElements(html: string): string {
     opacity: 1 !important;
   }
   
-  /* Hide hamburger on desktop */
+  /* Hide original hamburger on desktop */
   .wp-block-navigation__responsive-container-open,
   .hamburger, .hamburger-menu, .menu-toggle,
-  .mobile-menu-toggle, .mobile-nav-toggle,
-  button[aria-label*="menu" i],
-  button[aria-label*="navigation" i] {
+  .mobile-menu-toggle, .mobile-nav-toggle {
     display: none !important;
   }
   
@@ -735,63 +744,97 @@ function fixWordPressElements(html: string): string {
   }
 }
 
-/* ===== MOBILE STYLES (below 768px) ===== */
+/* Mobile toggle button - always visible on mobile */
 @media (max-width: 767px) {
-  /* KEEP hamburger button visible and clickable on mobile */
+  #avallon-mobile-toggle {
+    display: flex !important;
+    position: fixed !important;
+    top: 15px !important;
+    right: 15px !important;
+    z-index: 99999 !important;
+    width: 44px !important;
+    height: 44px !important;
+    background: #333 !important;
+    border: none !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-direction: column !important;
+    gap: 5px !important;
+    padding: 10px !important;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3) !important;
+  }
+  
+  #avallon-mobile-toggle span {
+    display: block !important;
+    width: 22px !important;
+    height: 2px !important;
+    background: white !important;
+    transition: all 0.3s !important;
+  }
+  
+  #avallon-mobile-toggle.active span:nth-child(1) {
+    transform: rotate(45deg) translate(5px, 5px) !important;
+  }
+  #avallon-mobile-toggle.active span:nth-child(2) {
+    opacity: 0 !important;
+  }
+  #avallon-mobile-toggle.active span:nth-child(3) {
+    transform: rotate(-45deg) translate(5px, -5px) !important;
+  }
+  
+  /* Hide original hamburgers - we have our own */
   .wp-block-navigation__responsive-container-open,
   .hamburger, .hamburger-menu, .menu-toggle,
   .mobile-menu-toggle, .mobile-nav-toggle,
-  button[aria-label*="menu" i],
-  button[aria-label*="navigation" i] {
-    display: flex !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    cursor: pointer !important;
-    z-index: 9999 !important;
-    position: relative !important;
+  button[aria-label*="menu" i]:not(#avallon-mobile-toggle),
+  button[aria-label*="Menu" i]:not(#avallon-mobile-toggle) {
+    display: none !important;
   }
-  
-  /* Mobile menu overlay - show when open */
-  .wp-block-navigation__responsive-container.is-menu-open,
-  .mobile-menu.is-open, .mobile-menu.active,
-  .nav-menu.is-open, .nav-menu.active {
-    display: flex !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    z-index: 9998 !important;
-    background: rgba(255,255,255,0.98) !important;
-    flex-direction: column !important;
-    padding: 80px 20px 20px !important;
-  }
-  
-  /* Close button in mobile menu */
-  .wp-block-navigation__responsive-close,
-  .mobile-menu-close, .close-menu {
-    display: flex !important;
-    visibility: visible !important;
-    position: absolute !important;
-    top: 20px !important;
-    right: 20px !important;
-    z-index: 10000 !important;
-    cursor: pointer !important;
-    pointer-events: auto !important;
-  }
-  
-  /* Mobile nav items stacked */
-  .wp-block-navigation__responsive-container.is-menu-open .wp-block-navigation-item,
-  .mobile-menu.is-open a,
-  .nav-menu.is-open a {
-    display: block !important;
-    padding: 12px 0 !important;
-    font-size: 18px !important;
-    border-bottom: 1px solid #eee !important;
-  }
+}
+
+/* Mobile overlay menu */
+#avallon-mobile-overlay {
+  display: none;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: rgba(255, 255, 255, 0.98) !important;
+  z-index: 99998 !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 20px !important;
+  overflow-y: auto !important;
+}
+
+#avallon-mobile-overlay.active {
+  display: flex !important;
+}
+
+.avallon-mobile-link {
+  display: block !important;
+  padding: 16px 24px !important;
+  font-size: 20px !important;
+  color: #333 !important;
+  text-decoration: none !important;
+  border-bottom: 1px solid #eee !important;
+  width: 100% !important;
+  max-width: 300px !important;
+  text-align: center !important;
+  transition: background 0.2s !important;
+}
+
+.avallon-mobile-link:hover, .avallon-mobile-link:active {
+  background: #f5f5f5 !important;
+}
+
+/* Body scroll lock when menu is open */
+body.avallon-menu-open {
+  overflow: hidden !important;
 }
 
 /* ===== GENERAL FIXES ===== */
@@ -809,7 +852,7 @@ nav a, .menu-item a, .wp-block-navigation-item__content {
   cursor: pointer !important;
 }
 
-/* Fallback nav styling */
+/* Fallback desktop nav styling */
 .avallon-fallback-nav {
   display: flex !important;
   align-items: center !important;
@@ -840,95 +883,83 @@ header .wp-block-group {
   width: 100% !important;
 }
 
-/* Touch-friendly tap targets */
-@media (max-width: 767px) {
-  nav a, .menu-item a, button {
-    min-height: 44px !important;
-    min-width: 44px !important;
-  }
-}
+/* Touch-friendly */
+a, button { touch-action: manipulation; }
 </style>
 
-<!-- Mobile menu toggle script -->
+<!-- Avallon Custom Mobile Menu -->
+<button id="avallon-mobile-toggle" aria-label="Menu">
+  <span></span>
+  <span></span>
+  <span></span>
+</button>
+<div id="avallon-mobile-overlay">
+  ${navLinksHtml || '<p style="color:#666;">No navigation links found</p>'}
+</div>
 <script data-avallon-mobile-nav="true">
 (function() {
-  // Wait for DOM
-  function initMobileNav() {
-    // Find all hamburger buttons
-    const hamburgers = document.querySelectorAll(
-      '.wp-block-navigation__responsive-container-open, ' +
-      '.hamburger, .hamburger-menu, .menu-toggle, ' +
-      '.mobile-menu-toggle, .mobile-nav-toggle, ' +
-      'button[aria-label*="menu" i], button[aria-label*="navigation" i]'
-    );
-    
-    // Find mobile menu containers
-    const mobileMenus = document.querySelectorAll(
-      '.wp-block-navigation__responsive-container, ' +
-      '.mobile-menu, .mobile-nav, .nav-menu'
-    );
-    
-    // Find close buttons
-    const closeButtons = document.querySelectorAll(
-      '.wp-block-navigation__responsive-close, ' +
-      '.mobile-menu-close, .close-menu'
-    );
-    
-    function openMenu() {
-      mobileMenus.forEach(function(menu) {
-        menu.classList.add('is-menu-open', 'is-open', 'active');
-        menu.setAttribute('aria-hidden', 'false');
-      });
-      document.body.style.overflow = 'hidden';
-    }
-    
-    function closeMenu() {
-      mobileMenus.forEach(function(menu) {
-        menu.classList.remove('is-menu-open', 'is-open', 'active');
-        menu.setAttribute('aria-hidden', 'true');
-      });
-      document.body.style.overflow = '';
-    }
-    
-    // Add click AND touch handlers to hamburgers
-    hamburgers.forEach(function(btn) {
-      ['click', 'touchend'].forEach(function(evt) {
-        btn.addEventListener(evt, function(e) {
-          e.preventDefault();
-          e.stopPropagation();
-          openMenu();
-        }, { passive: false });
-      });
-    });
-    
-    // Add handlers to close buttons
-    closeButtons.forEach(function(btn) {
-      ['click', 'touchend'].forEach(function(evt) {
-        btn.addEventListener(evt, function(e) {
-          e.preventDefault();
-          e.stopPropagation();
-          closeMenu();
-        }, { passive: false });
-      });
-    });
-    
-    // Close on ESC
-    document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') closeMenu();
-    });
+  var toggle = document.getElementById('avallon-mobile-toggle');
+  var overlay = document.getElementById('avallon-mobile-overlay');
+  
+  if (!toggle || !overlay) return;
+  
+  function openMenu() {
+    toggle.classList.add('active');
+    overlay.classList.add('active');
+    document.body.classList.add('avallon-menu-open');
   }
   
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initMobileNav);
-  } else {
-    initMobileNav();
+  function closeMenu() {
+    toggle.classList.remove('active');
+    overlay.classList.remove('active');
+    document.body.classList.remove('avallon-menu-open');
   }
+  
+  function toggleMenu() {
+    if (overlay.classList.contains('active')) {
+      closeMenu();
+    } else {
+      openMenu();
+    }
+  }
+  
+  // Toggle button handlers
+  toggle.addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleMenu();
+  });
+  toggle.addEventListener('touchend', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleMenu();
+  });
+  
+  // Close when clicking a link
+  overlay.querySelectorAll('a').forEach(function(link) {
+    link.addEventListener('click', function() {
+      closeMenu();
+    });
+  });
+  
+  // Close on ESC
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeMenu();
+  });
+  
+  // Close when clicking outside menu links
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) closeMenu();
+  });
 })();
 </script>
 `;
 
-  // Insert the fix CSS into the head
-  if (html.includes('</head>')) {
+  // Insert the fix CSS and mobile menu into the document
+  if (html.includes('</body>')) {
+    // Inject before </body> so our elements are at the end
+    html = html.replace('</body>', wpFixCSS + '\n</body>');
+  } else if (html.includes('</head>')) {
     html = html.replace('</head>', wpFixCSS + '\n</head>');
   } else if (html.includes('<body')) {
     html = html.replace(/<body/i, wpFixCSS + '\n<body');
