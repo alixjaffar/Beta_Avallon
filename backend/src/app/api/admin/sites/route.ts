@@ -8,7 +8,7 @@ import { logInfo, logError } from "@/lib/log";
 
 const ADMIN_EMAIL = 'alij123402@gmail.com';
 
-function isAdmin(email: string | undefined): boolean {
+function isAdmin(email: string | null | undefined): boolean {
   if (!email) return false;
   return email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 }
