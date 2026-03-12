@@ -340,11 +340,11 @@ function extractNavigationLinks(html: string): Array<{text: string; href: string
 /**
  * Inject CSS-only mobile menu for published sites
  * 
- * CSS-ONLY VERSION (No JavaScript required):
- * 1. Uses checkbox :checked hack for toggle
- * 2. Works on all devices including iOS Safari
- * 3. Cannot be broken by script removal or CSP
- * 4. Uses existing nav links - no duplication
+ * CSS-ONLY VERSION v4 (Seamless design like Ascendance Foundry):
+ * 1. Uses checkbox :checked hack for toggle - HIDDEN by default
+ * 2. Seamless hamburger that blends with site header
+ * 3. Only shows overlay when hamburger is clicked
+ * 4. Click anywhere on overlay or links to close
  */
 function injectMobileMenuFix(files: Record<string, string>): Record<string, string> {
   const fixedFiles: Record<string, string> = {};
@@ -364,169 +364,171 @@ function injectMobileMenuFix(files: Record<string, string>): Record<string, stri
     // Extract navigation links for mobile menu
     const navLinks = extractNavigationLinks(content);
     const navLinksHtml = navLinks.map(link => 
-      `<a href="${link.href}" class="avm-link">${link.text}</a>`
+      `<a href="${link.href}" class="avm-link" onclick="document.getElementById('avm-toggle').checked=false">${link.text}</a>`
     ).join('\n      ');
     
-    // CSS-only mobile menu - uses checkbox :checked hack
+    // CSS-only mobile menu v4 - Seamless design
     const mobileMenuCode = `
-<!-- AVALLON CSS-ONLY MOBILE MENU v3 - ${DEPLOY_VERSION} -->
+<!-- AVALLON MOBILE MENU v4 - ${DEPLOY_VERSION} -->
 <style data-avallon-mobile-css="true">
-/* ========== HIDE CHECKBOX (accessibility preserved) ========== */
+/* ========== CHECKBOX - Hidden off-screen ========== */
 #avm-toggle {
-  position: fixed;
-  top: -100px;
-  left: -100px;
-  opacity: 0;
-  pointer-events: none;
+  position: absolute !important;
+  left: -9999px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
-/* ========== HAMBURGER LABEL (acts as button) ========== */
+/* ========== HAMBURGER - Seamless design like Ascendance Foundry ========== */
 .avm-hamburger {
   display: none;
   position: fixed;
-  top: 12px;
-  right: 12px;
-  z-index: 2147483647;
-  width: 48px;
-  height: 48px;
-  background: #1a1a2e;
-  border: 2px solid #fff;
-  border-radius: 10px;
+  top: 16px;
+  right: 16px;
+  z-index: 100000;
+  width: 40px;
+  height: 40px;
+  background: transparent;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 8px;
   cursor: pointer;
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  gap: 6px;
-  padding: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  gap: 5px;
+  padding: 8px;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
   user-select: none;
+  transition: all 0.2s ease;
+}
+.avm-hamburger:hover {
+  background: rgba(128, 128, 128, 0.1);
 }
 .avm-hamburger span {
   display: block;
-  width: 24px;
-  height: 3px;
-  background: #fff;
-  border-radius: 2px;
+  width: 20px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 1px;
   transition: all 0.3s ease;
   pointer-events: none;
 }
 
-/* ========== MOBILE MENU OVERLAY ========== */
+/* ========== OVERLAY - HIDDEN BY DEFAULT ========== */
 .avm-overlay {
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  z-index: 2147483646;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 80px 20px 20px;
-  overflow-y: auto;
+  display: none !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%) !important;
+  z-index: 99999 !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  padding: 80px 20px 40px !important;
+  overflow-y: auto !important;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
 /* ========== MENU LINKS ========== */
 .avm-link {
-  display: block;
-  padding: 18px 32px;
-  margin: 6px 0;
-  font-size: 18px;
-  font-weight: 600;
+  display: block !important;
+  padding: 16px 32px !important;
+  margin: 8px 0 !important;
+  font-size: 18px !important;
+  font-weight: 600 !important;
   color: #fff !important;
   text-decoration: none !important;
-  background: rgba(255,255,255,0.1);
-  border-radius: 12px;
-  width: 100%;
-  max-width: 280px;
-  text-align: center;
-  transition: all 0.2s ease;
+  background: rgba(255,255,255,0.08) !important;
+  border-radius: 12px !important;
+  width: 100% !important;
+  max-width: 320px !important;
+  text-align: center !important;
+  transition: all 0.2s ease !important;
   -webkit-tap-highlight-color: transparent;
 }
 .avm-link:hover, .avm-link:active {
-  background: rgba(255,255,255,0.2);
-  transform: scale(1.02);
+  background: rgba(255,255,255,0.15) !important;
+  transform: translateY(-2px) !important;
 }
 
-/* ========== DESKTOP: Hide everything ========== */
+/* ========== DESKTOP: Hide mobile menu completely ========== */
 @media (min-width: 768px) {
+  #avm-toggle,
   .avm-hamburger,
-  .avm-overlay,
-  #avm-toggle {
+  .avm-overlay {
     display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
   }
 }
 
-/* ========== MOBILE: Show hamburger, handle toggle ========== */
+/* ========== MOBILE: Show hamburger, toggle overlay ========== */
 @media (max-width: 767px) {
-  /* Show hamburger */
+  /* Show seamless hamburger */
   .avm-hamburger {
     display: flex !important;
   }
   
   /* Hide original hamburger buttons */
-  .hamburger, .hamburger-menu, .hamburger-btn, .hamburger-button,
-  .menu-toggle, .menu-btn, .menu-button, .mobile-menu-toggle,
-  .mobile-menu-btn, .mobile-nav-toggle, .mobile-toggle,
+  .hamburger, .hamburger-menu, .hamburger-btn,
+  .menu-toggle, .menu-btn, .mobile-menu-toggle,
+  .mobile-nav-toggle, .mobile-toggle,
   .nav-toggle, .navbar-toggle, .navbar-toggler,
-  .burger, .burger-menu, .burger-btn,
+  .burger, .burger-menu,
   .wp-block-navigation__responsive-container-open,
-  .wp-block-navigation-button,
-  header button:not(.avm-hamburger),
+  header button:not(.avm-hamburger):not([type="submit"]),
   nav button:not(.avm-hamburger),
   [class*="hamburger"]:not(.avm-hamburger),
   [class*="burger"]:not(.avm-hamburger),
-  [class*="mobile-menu"]:not(.avm-overlay),
+  [class*="mobile-menu"]:not(.avm-overlay):not(.avm-link),
   [class*="menu-toggle"]:not(.avm-hamburger),
-  [class*="nav-toggle"]:not(.avm-hamburger),
-  button[aria-label*="menu" i]:not(.avm-hamburger),
-  button[aria-label*="Menu" i]:not(.avm-hamburger) {
+  button[aria-label*="menu" i]:not(.avm-hamburger) {
     display: none !important;
     visibility: hidden !important;
     pointer-events: none !important;
   }
   
-  /* ========== CHECKBOX CHECKED = MENU OPEN ========== */
-  #avm-toggle:checked ~ .avm-overlay {
+  /* ========== WHEN CHECKBOX IS CHECKED = SHOW MENU ========== */
+  #avm-toggle:checked + .avm-hamburger + .avm-overlay {
     display: flex !important;
+    opacity: 1 !important;
+    visibility: visible !important;
   }
   
-  /* Animate hamburger to X when checked */
-  #avm-toggle:checked ~ .avm-hamburger span:nth-child(1) {
-    transform: rotate(45deg) translate(6px, 6px);
+  /* Animate hamburger to X when open */
+  #avm-toggle:checked + .avm-hamburger {
+    background: rgba(255,255,255,0.1);
   }
-  #avm-toggle:checked ~ .avm-hamburger span:nth-child(2) {
+  #avm-toggle:checked + .avm-hamburger span:nth-child(1) {
+    transform: rotate(45deg) translate(5px, 5px);
+  }
+  #avm-toggle:checked + .avm-hamburger span:nth-child(2) {
     opacity: 0;
     transform: scaleX(0);
   }
-  #avm-toggle:checked ~ .avm-hamburger span:nth-child(3) {
-    transform: rotate(-45deg) translate(6px, -6px);
-  }
-  
-  /* Lock body scroll when menu is open */
-  #avm-toggle:checked ~ .avm-body-lock {
-    position: fixed;
-    width: 100%;
-    overflow: hidden;
+  #avm-toggle:checked + .avm-hamburger span:nth-child(3) {
+    transform: rotate(-45deg) translate(5px, -5px);
   }
 }
 </style>
 
-<!-- CSS-Only Mobile Menu (checkbox hack - no JavaScript!) -->
+<!-- Mobile Menu: Checkbox (hidden) + Hamburger + Overlay -->
 <input type="checkbox" id="avm-toggle" />
 <label for="avm-toggle" class="avm-hamburger" aria-label="Toggle Menu">
   <span></span>
   <span></span>
   <span></span>
 </label>
-<nav class="avm-overlay" onclick="document.getElementById('avm-toggle').checked=false">
-  ${navLinksHtml || '<a href="/" class="avm-link">Home</a>'}
-</nav>
-<!-- END AVALLON CSS-ONLY MOBILE MENU -->
+<div class="avm-overlay" onclick="if(event.target===this)document.getElementById('avm-toggle').checked=false">
+  ${navLinksHtml || '<a href="/" class="avm-link" onclick="document.getElementById(\'avm-toggle\').checked=false">Home</a>'}
+</div>
+<!-- END AVALLON MOBILE MENU v4 -->
 `;
 
     // Inject right after <body> tag so checkbox siblings work
@@ -535,20 +537,18 @@ function injectMobileMenuFix(files: Record<string, string>): Record<string, stri
     if (bodyMatch) {
       fixedContent = content.replace(bodyMatch[0], bodyMatch[0] + '\n' + mobileMenuCode);
     } else if (content.includes('<html')) {
-      // Inject after <html> tag as fallback
       const htmlMatch = content.match(/<html[^>]*>/i);
       if (htmlMatch) {
         fixedContent = content.replace(htmlMatch[0], htmlMatch[0] + '\n' + mobileMenuCode);
       }
     } else {
-      // Prepend as last resort
       fixedContent = mobileMenuCode + '\n' + content;
     }
     
     fixedFiles[filename] = fixedContent;
   }
   
-  logInfo('Injected CSS-only mobile menu', { fileCount: Object.keys(fixedFiles).filter(f => f.endsWith('.html')).length });
+  logInfo('Injected mobile menu v4', { fileCount: Object.keys(fixedFiles).filter(f => f.endsWith('.html')).length });
   return fixedFiles;
 }
 
