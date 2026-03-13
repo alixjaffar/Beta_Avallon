@@ -2,7 +2,8 @@
 // CHANGELOG: 2026-01-07 - Added proper CORS handling
 // CHANGELOG: 2026-01-22 - Added image downloading and navigation link fixing
 // CHANGELOG: 2026-03-12 - Added bulletproof mobile menu injection (v2)
-const DEPLOY_VERSION = "2026-03-12-mobile-menu-v2";
+// CHANGELOG: 2026-03-12 - Accept websiteContent directly from frontend to avoid stale data
+const DEPLOY_VERSION = "2026-03-12-direct-content-v3";
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 import { z } from "zod";
@@ -11,6 +12,10 @@ import { getSiteById, updateSite } from "@/data/sites";
 import { GitHubClient } from "@/lib/clients/github";
 import { VercelProvider } from "@/lib/providers/impl/vercel";
 import { getCorsHeaders } from "@/lib/cors";
+
+// Route segment config to allow larger request bodies (for base64 images)
+export const maxDuration = 120; // 2 minutes timeout
+export const runtime = 'nodejs';
 
 const DeployToVercelSchema = z.object({
   siteId: z.string().min(1, "Site ID is required"),

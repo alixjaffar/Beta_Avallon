@@ -1940,9 +1940,10 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         // Push to history for undo/redo
         pushToHistory(updatedContent);
         setCurrentWebsiteContent(updatedContent);
-        setHasUnsavedChanges(false);
+        // Mark as having unsaved changes - persistChangesToBackend will clear this on success
+        setHasUnsavedChanges(true);
         
-        // Persist to backend immediately
+        // Persist to backend immediately (this will set hasUnsavedChanges(false) on success)
         persistChangesToBackend(updatedContent);
       }
       
@@ -2598,6 +2599,9 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         // The backend might return stale data due to caching or race conditions
         const { websiteContent: _, ...siteWithoutContent } = updatedSite;
         onUpdate({ ...site, ...siteWithoutContent, websiteContent: updatedContent, status: 'deployed' });
+        
+        // Mark changes as saved
+        setHasUnsavedChanges(false);
         
         // Clear backup on successful save
         localStorage.removeItem(`avallon_backup_${site.id}`);

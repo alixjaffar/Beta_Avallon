@@ -4,6 +4,10 @@ import { getSiteById, updateSite, deleteSite } from '@/data/sites';
 import { z } from 'zod';
 import { getCorsHeaders } from '@/lib/cors';
 
+// Route segment config to allow larger request bodies (for base64 images)
+export const maxDuration = 60; // 1 minute timeout
+export const runtime = 'nodejs';
+
 // Utility function to fix broken image URLs in HTML content
 function fixImageUrls(html: string): string {
   if (!html || typeof html !== 'string') return html;
