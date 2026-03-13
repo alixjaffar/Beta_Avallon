@@ -1718,6 +1718,8 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
   const chatEndRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const saveInProgressRef = useRef<boolean>(false);
+  const pendingSaveRef = useRef<Record<string, string> | null>(null);
   
   // Get available pages
   const availablePages = Object.keys(currentWebsiteContent).filter(
@@ -2521,6 +2523,14 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
 
   // Save changes to backend
   const persistChangesToBackend = async (updatedContent: Record<string, string>) => {
+    // Prevent race conditions - if a save is already in progress, queue this one
+    if (saveInProgressRef.current) {
+      pendingSaveRef.current = updatedContent;
+      return;
+    }
+    
+    saveInProgressRef.current = true;
+    
     try {
       const response = await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`, {
         method: 'PUT',
@@ -2536,7 +2546,10 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
           title: "Saved!",
           description: "Your changes have been saved successfully.",
         });
-        onUpdate({ ...site, websiteContent: updatedContent, status: 'deployed', ...updatedSite });
+        // IMPORTANT: Keep our local websiteContent - don't let backend response overwrite it
+        // The backend might return stale data due to caching or race conditions
+        const { websiteContent: _, ...siteWithoutContent } = updatedSite;
+        onUpdate({ ...site, ...siteWithoutContent, websiteContent: updatedContent, status: 'deployed' });
       } else {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
         const errorMessage = errorData.message || errorData.error || 'Failed to save';
@@ -2561,6 +2574,15 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         description: error.message || "Failed to save changes. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      saveInProgressRef.current = false;
+      
+      // If there was a pending save while we were saving, execute it now
+      if (pendingSaveRef.current) {
+        const pendingContent = pendingSaveRef.current;
+        pendingSaveRef.current = null;
+        persistChangesToBackend(pendingContent);
+      }
     }
   };
 
@@ -2577,7 +2599,9 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       
       if (response.ok) {
         const updatedSite = await response.json();
-        onUpdate({ ...site, websiteContent: content, status: 'deployed', ...updatedSite });
+        // IMPORTANT: Keep our local websiteContent - don't let backend response overwrite it
+        const { websiteContent: _, ...siteWithoutContent } = updatedSite;
+        onUpdate({ ...site, ...siteWithoutContent, websiteContent: content, status: 'deployed' });
         setHasUnsavedChanges(false);
         return true;
       }
