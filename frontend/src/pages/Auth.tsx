@@ -47,7 +47,13 @@ const Auth = () => {
   
   // Admin impersonation state
   const [showAdminMode, setShowAdminMode] = useState(false);
-  const [adminEmail, setAdminEmail] = useState("");
+  const [adminEmail, setAdminEmail] = useState(() => {
+    // Remember admin email from localStorage for convenience
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('avallon_admin_email') || '';
+    }
+    return '';
+  });
   const [targetEmail, setTargetEmail] = useState("");
   
   // Password strength indicators
@@ -79,11 +85,24 @@ const Auth = () => {
     e.preventDefault();
     setLoading(true);
 
-    if (!adminEmail || !targetEmail) {
+    // Use stored admin email or require it on first use
+    const effectiveAdminEmail = adminEmail || localStorage.getItem('avallon_admin_email') || '';
+    
+    if (!effectiveAdminEmail) {
+      setLoading(false);
+      toast({
+        title: "Admin Email Required",
+        description: "Please enter your admin email (only needed once).",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!targetEmail) {
       setLoading(false);
       toast({
         title: "Missing Information",
-        description: "Please enter both admin email and target user email.",
+        description: "Please enter the user email to access.",
         variant: "destructive",
       });
       return;
@@ -98,7 +117,7 @@ const Auth = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          adminEmail,
+          adminEmail: effectiveAdminEmail,
           targetEmail,
         }),
       });
@@ -115,13 +134,16 @@ const Auth = () => {
         return;
       }
 
+      // Save admin email for future use (so they don't have to enter it again)
+      localStorage.setItem('avallon_admin_email', effectiveAdminEmail);
+
       // Create session for the target user
       localStorage.setItem("avallon_session", JSON.stringify({
         email: data.user.email,
         name: data.user.name,
         ts: Date.now(),
         isImpersonated: true,
-        impersonatedBy: adminEmail,
+        impersonatedBy: effectiveAdminEmail,
       }));
 
       setLoading(false);
@@ -130,6 +152,8 @@ const Auth = () => {
         description: `Logged in as ${targetEmail}`,
       });
 
+      // Clear target email for next use
+      setTargetEmail("");
       navigate("/dashboard");
 
     } catch (error: any) {
@@ -625,6 +649,8 @@ const Auth = () => {
 
   // Admin Impersonation View
   if (showAdminMode) {
+    const hasStoredAdminEmail = !!localStorage.getItem('avallon_admin_email');
+    
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="w-full max-w-md">
@@ -636,50 +662,72 @@ const Auth = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-red-600">
                 <Lock className="w-5 h-5" />
-                Admin Impersonation
+                Quick Login
               </CardTitle>
               <CardDescription>
-                Login as any user without their password
+                Enter any user's email to access their account
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleAdminImpersonate} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="admin-email">
-                    <Mail className="w-4 h-4 inline mr-1" />
-                    Your Admin Email
-                  </Label>
-                  <Input
-                    id="admin-email"
-                    type="email"
-                    placeholder="alij123402@gmail.com"
-                    value={adminEmail}
-                    onChange={(e) => setAdminEmail(e.target.value)}
-                    required
-                  />
-                </div>
+                {/* Target email is the primary input */}
                 <div className="space-y-2">
                   <Label htmlFor="target-email">
                     <User className="w-4 h-4 inline mr-1" />
-                    User Email to Access
+                    User Email
                   </Label>
                   <Input
                     id="target-email"
                     type="email"
-                    placeholder="client@example.com"
+                    placeholder="Enter user email..."
                     value={targetEmail}
                     onChange={(e) => setTargetEmail(e.target.value)}
+                    autoFocus
                     required
                   />
                 </div>
+                
+                {/* Admin email - shown collapsed if already stored */}
+                {!hasStoredAdminEmail ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="admin-email" className="text-muted-foreground text-sm">
+                      <Mail className="w-4 h-4 inline mr-1" />
+                      Your Admin Email (saved for future use)
+                    </Label>
+                    <Input
+                      id="admin-email"
+                      type="email"
+                      placeholder="alij123402@gmail.com"
+                      value={adminEmail}
+                      onChange={(e) => setAdminEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">
+                    Logged in as admin: {localStorage.getItem('avallon_admin_email')}
+                    <Button 
+                      variant="link" 
+                      className="p-0 h-auto ml-2 text-xs"
+                      type="button"
+                      onClick={() => {
+                        localStorage.removeItem('avallon_admin_email');
+                        setAdminEmail('');
+                      }}
+                    >
+                      Change
+                    </Button>
+                  </div>
+                )}
+                
                 <Button type="submit" className="w-full bg-red-600 hover:bg-red-700" disabled={loading}>
                   {loading ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Logging in...
+                      Accessing account...
                     </>
                   ) : (
-                    "Login as User"
+                    "Access Account"
                   )}
                 </Button>
               </form>
