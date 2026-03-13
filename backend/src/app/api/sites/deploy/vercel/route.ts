@@ -14,6 +14,8 @@ import { getCorsHeaders } from "@/lib/cors";
 
 const DeployToVercelSchema = z.object({
   siteId: z.string().min(1, "Site ID is required"),
+  // Optional: Frontend can send content directly to avoid stale data issues
+  websiteContent: z.record(z.any()).optional(),
 });
 
 /**
@@ -860,9 +862,13 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { siteId } = DeployToVercelSchema.parse(body);
+    const { siteId, websiteContent: frontendContent } = DeployToVercelSchema.parse(body);
 
-    logInfo('Starting deployment to GitHub and Vercel', { siteId, userId: user.id });
+    logInfo('Starting deployment to GitHub and Vercel', { 
+      siteId, 
+      userId: user.id,
+      contentProvidedByFrontend: !!frontendContent 
+    });
 
     // Get the site with its files
     const site = await getSiteById(siteId, user.id);
@@ -876,11 +882,19 @@ export async function POST(req: NextRequest) {
     
     logInfo('Site found for deployment', { siteId: site.id, siteName: site.name, ownerId: site.ownerId });
 
-    // Get website files from websiteContent
-    const rawFiles = site.websiteContent?.files || site.websiteContent || {};
+    // CRITICAL: Prefer content from frontend (most up-to-date) over database
+    // This avoids stale data issues when save hasn't completed yet
+    const sourceContent = frontendContent || site.websiteContent;
+    const rawFiles = sourceContent?.files || sourceContent || {};
+    
     if (!rawFiles || Object.keys(rawFiles).length === 0) {
       return NextResponse.json({ error: "No website files found" }, { status: 400, headers: corsHeaders });
     }
+    
+    logInfo('Using content for deployment', { 
+      source: frontendContent ? 'frontend' : 'database',
+      fileCount: Object.keys(rawFiles).filter(k => !k.startsWith('_')).length 
+    });
 
     let repoUrl: string | undefined;
     let previewUrl: string;

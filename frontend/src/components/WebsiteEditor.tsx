@@ -2317,23 +2317,21 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     // Show immediate feedback
     toast({
       title: "🚀 Publishing...",
-      description: "Saving and deploying your website. This may take 30-60 seconds.",
+      description: "Deploying your website. This may take 30-60 seconds.",
     });
-    
-    // First, ensure the site is saved
-    try {
-      await autoSaveContent(currentWebsiteContent);
-    } catch (saveError) {
-      console.error('Pre-deploy save error:', saveError);
-    }
     
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
       
+      // Send the website content directly to avoid stale data issues
+      // This ensures we publish exactly what the user sees, not what's in the database
       const response = await fetchWithAuth(`${baseUrl}/api/sites/deploy/vercel`, {
         method: 'POST',
-        body: JSON.stringify({ siteId: site.id }),
+        body: JSON.stringify({ 
+          siteId: site.id,
+          websiteContent: currentWebsiteContent // Send content directly!
+        }),
         signal: controller.signal,
       });
       
