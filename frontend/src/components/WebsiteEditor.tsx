@@ -1979,12 +1979,11 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
           const siteData = data.data || data.site || data;
           
           if (siteData.websiteContent) {
-            // Check if we have a local backup that might be newer
-            const hasLocalContent = Object.keys(currentWebsiteContent).length > 0;
-            const backupIsNewer = localBackup && localBackup.timestamp > (Date.now() - 24 * 60 * 60 * 1000); // Within 24 hours
+            // Check if we have a local backup that might be newer (within 24 hours)
+            const backupIsNewer = localBackup && localBackup.timestamp > (Date.now() - 24 * 60 * 60 * 1000);
             
             if (backupIsNewer && localBackup) {
-              // Use local backup - it's likely more recent than what's on server
+              // Use local backup - it's likely unsaved changes from a previous session
               console.log('Using local backup (likely unsaved changes from previous session)');
               setCurrentWebsiteContent(localBackup.content);
               setHasUnsavedChanges(true);
@@ -1992,11 +1991,12 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
                 title: "Recovered Unsaved Changes",
                 description: "Found unsaved changes from your previous session. Click Save to keep them.",
               });
-            } else if (!hasLocalContent) {
-              // Only update from server if we don't have local content
+            } else {
+              // ALWAYS use server data - it's the authoritative source of truth
+              // This fixes the bug where stale prop data was incorrectly preserved
+              console.log('Using server data (authoritative source)');
               setCurrentWebsiteContent(siteData.websiteContent);
             }
-            // If we have local content, don't overwrite it with server data
           }
           if (siteData.messages) {
             setMessages(siteData.messages.map((msg: any) => ({
@@ -2364,11 +2364,34 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         description: `Your site is live at ${result.previewUrl}`,
       });
 
-        window.open(result.previewUrl, '_blank');
+      window.open(result.previewUrl, '_blank');
+      
+      // IMPORTANT: Also save to backend to keep database in sync with what was published
+      // This ensures that on refresh, the server has the latest content
+      try {
+        await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            websiteContent: currentWebsiteContent,
+            status: 'deployed',
+            previewUrl: result.previewUrl,
+            vercelProjectId: result.vercelProjectId,
+            vercelDeploymentId: result.vercelDeploymentId,
+          }),
+        });
+        console.log('Content saved to database after publish');
+        // Clear any localStorage backup since we've successfully saved
+        localStorage.removeItem(`avallon_backup_${site.id}`);
+        setHasUnsavedChanges(false);
+      } catch (saveError) {
+        console.error('Failed to save content after publish:', saveError);
+        // Don't fail the publish - the content is live, just not in DB
+      }
       
       // Update site with ALL deployment info including vercelProjectId for domain management
       onUpdate({ 
         ...site, 
+        websiteContent: currentWebsiteContent, // Include current content!
         previewUrl: result.previewUrl, 
         vercelProjectId: result.vercelProjectId,
         vercelDeploymentId: result.vercelDeploymentId,
