@@ -260,6 +260,16 @@ export async function updateSite(id: string, userId: string, data: {
     if (data.chatHistory !== undefined) updateData.chatHistory = data.chatHistory ?? [];
     if (data.websiteContent !== undefined) updateData.websiteContent = data.websiteContent ?? {};
     
+    // Log what we're about to save
+    const contentPageCount = updateData.websiteContent 
+      ? Object.keys(updateData.websiteContent).filter((k: string) => k.endsWith('.html')).length 
+      : 0;
+    logInfo('Updating site in database', { 
+      siteId: id, 
+      hasWebsiteContent: !!updateData.websiteContent,
+      contentPageCount
+    });
+    
     const site = await prisma.site.update({
       where: { id },
       data: updateData,
@@ -268,7 +278,17 @@ export async function updateSite(id: string, userId: string, data: {
     // Save to file as backup
     saveSiteToFile(site as Site);
     
-    logInfo('Site updated', { siteId: id });
+    // Verify the update worked by re-reading
+    const verifiedSite = await prisma.site.findUnique({ where: { id } });
+    const verifiedPageCount = verifiedSite?.websiteContent 
+      ? Object.keys(verifiedSite.websiteContent as Record<string, any>).filter((k: string) => k.endsWith('.html')).length 
+      : 0;
+    logInfo('Site updated', { 
+      siteId: id, 
+      verifiedPageCount,
+      updatedAt: site.updatedAt
+    });
+    
     return site as Site;
   } catch (error: any) {
     logError('Error updating site in database', error);

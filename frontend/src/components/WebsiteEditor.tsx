@@ -1973,10 +1973,28 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       }
       
       try {
+        console.log('[Load] Fetching site data...', { siteId: site.id });
         const response = await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`);
+        console.log('[Load] Response status:', response.status);
+        
         if (response.ok) {
           const data = await response.json();
           const siteData = data.data || data.site || data;
+          
+          const serverPageCount = siteData.websiteContent 
+            ? Object.keys(siteData.websiteContent).filter((k: string) => k.endsWith('.html')).length 
+            : 0;
+          const serverContentSize = siteData.websiteContent 
+            ? JSON.stringify(siteData.websiteContent).length 
+            : 0;
+          
+          console.log('[Load] Server returned:', { 
+            siteId: siteData.id,
+            hasWebsiteContent: !!siteData.websiteContent,
+            serverPageCount,
+            serverContentSize,
+            updatedAt: siteData.updatedAt
+          });
           
           if (siteData.websiteContent) {
             // Check if we have a local backup that might be newer (within 24 hours)
@@ -1984,7 +2002,12 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
             
             if (backupIsNewer && localBackup) {
               // Use local backup - it's likely unsaved changes from a previous session
-              console.log('Using local backup (likely unsaved changes from previous session)');
+              const backupPageCount = Object.keys(localBackup.content).filter(k => k.endsWith('.html')).length;
+              console.log('[Load] Using local backup (newer than server)', { 
+                backupPageCount, 
+                serverPageCount,
+                backupTimestamp: new Date(localBackup.timestamp).toISOString()
+              });
               setCurrentWebsiteContent(localBackup.content);
               setHasUnsavedChanges(true);
               toast({
@@ -1993,10 +2016,11 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
               });
             } else {
               // ALWAYS use server data - it's the authoritative source of truth
-              // This fixes the bug where stale prop data was incorrectly preserved
-              console.log('Using server data (authoritative source)');
+              console.log('[Load] Using server data (authoritative source)', { serverPageCount, serverContentSize });
               setCurrentWebsiteContent(siteData.websiteContent);
             }
+          } else {
+            console.warn('[Load] Server returned NO websiteContent!');
           }
           if (siteData.messages) {
             setMessages(siteData.messages.map((msg: any) => ({
@@ -2004,9 +2028,11 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
               timestamp: new Date(msg.timestamp)
             })));
           }
+        } else {
+          console.error('[Load] Server error:', response.status);
         }
       } catch (error) {
-        console.error('Error loading site data:', error);
+        console.error('[Load] Error loading site data:', error);
         
         // If we can't load from server but have a backup, use it
         if (localBackup) {
@@ -2599,11 +2625,18 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         content: updatedContent,
         timestamp: Date.now(),
       }));
+      console.log('[Save] Backed up to localStorage', { siteId: site.id, pageCount: Object.keys(updatedContent).filter(k => k.endsWith('.html')).length });
     } catch (e) {
-      console.warn('Failed to backup to localStorage:', e);
+      console.warn('[Save] Failed to backup to localStorage:', e);
     }
     
     try {
+      console.log('[Save] Sending save request...', { 
+        siteId: site.id, 
+        pageCount: Object.keys(updatedContent).filter(k => k.endsWith('.html')).length,
+        contentSize: JSON.stringify(updatedContent).length 
+      });
+      
       const response = await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`, {
         method: 'PUT',
         body: JSON.stringify({
@@ -2612,8 +2645,16 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         }),
       });
       
+      console.log('[Save] Response status:', response.status);
+      
       if (response.ok) {
         const updatedSite = await response.json();
+        console.log('[Save] Backend returned:', { 
+          siteId: updatedSite.id, 
+          hasWebsiteContent: !!updatedSite.websiteContent,
+          updatedAt: updatedSite.updatedAt 
+        });
+        
         toast({
           title: "Saved!",
           description: "Your changes have been saved successfully.",
@@ -2628,13 +2669,39 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         
         // Clear backup on successful save
         localStorage.removeItem(`avallon_backup_${site.id}`);
+        
+        // VERIFICATION: Immediately re-fetch to confirm save persisted
+        try {
+          const verifyResponse = await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`);
+          if (verifyResponse.ok) {
+            const verifyData = await verifyResponse.json();
+            const verifiedContent = verifyData.websiteContent || verifyData.data?.websiteContent;
+            const localPageCount = Object.keys(updatedContent).filter(k => k.endsWith('.html')).length;
+            const serverPageCount = verifiedContent ? Object.keys(verifiedContent).filter((k: string) => k.endsWith('.html')).length : 0;
+            console.log('[Save] Verification:', { localPageCount, serverPageCount, match: localPageCount === serverPageCount });
+            
+            if (serverPageCount === 0 || serverPageCount < localPageCount) {
+              console.error('[Save] VERIFICATION FAILED - Server content missing!');
+              toast({
+                title: "Warning: Save May Have Failed",
+                description: "Server returned less content than expected. Your changes are backed up locally.",
+                variant: "destructive",
+              });
+              // Re-save the backup
+              localStorage.setItem(`avallon_backup_${site.id}`, JSON.stringify({ content: updatedContent, timestamp: Date.now() }));
+            }
+          }
+        } catch (verifyError) {
+          console.warn('[Save] Verification failed:', verifyError);
+        }
       } else {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
         const errorMessage = errorData.message || errorData.error || 'Failed to save';
+        console.error('[Save] Server error:', { status: response.status, error: errorMessage });
         
         // If site not found, try to create it
         if (response.status === 404) {
-          console.warn('Site not found, attempting to create it...');
+          console.warn('[Save] Site not found, attempting to create it...');
           toast({
             title: "Note",
             description: "Site will be saved when you publish it.",
@@ -2645,7 +2712,7 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         throw new Error(errorMessage);
       }
     } catch (error: any) {
-      console.error('Error saving:', error);
+      console.error('[Save] Error:', error);
       
       // Detect network/CORS errors specifically
       const isNetworkError = error.message?.includes('Load failed') || 

@@ -523,6 +523,21 @@ export async function PUT(
       validatedData.chatHistory = validatedData.messages;
     }
 
+    // Log received content for debugging
+    const receivedPageCount = validatedData.websiteContent 
+      ? Object.keys(validatedData.websiteContent).filter((k: string) => k.endsWith('.html')).length 
+      : 0;
+    const receivedContentSize = validatedData.websiteContent 
+      ? JSON.stringify(validatedData.websiteContent).length 
+      : 0;
+    console.log('[PUT /sites/:id] Received:', { 
+      siteId: id, 
+      userId: user.id,
+      receivedPageCount,
+      receivedContentSize,
+      hasWebsiteContent: !!validatedData.websiteContent
+    });
+
     // Check if site exists first - reload to ensure latest data
     let existingSite = await getSiteById(id, user.id);
     
@@ -544,7 +559,7 @@ export async function PUT(
 
     const updatedSite = await updateSite(id, user.id, validatedData);
     if (!updatedSite) {
-      console.error('Failed to update site', { siteId: id, userId: user.id });
+      console.error('[PUT /sites/:id] Failed to update site', { siteId: id, userId: user.id });
       return NextResponse.json({ 
         error: 'Failed to update site',
         message: 'Site was found but update failed'
@@ -553,6 +568,16 @@ export async function PUT(
         headers: corsHeaders,
       });
     }
+
+    // Log what we're returning
+    const returnedPageCount = updatedSite.websiteContent 
+      ? Object.keys(updatedSite.websiteContent).filter((k: string) => k.endsWith('.html')).length 
+      : 0;
+    console.log('[PUT /sites/:id] Success:', { 
+      siteId: updatedSite.id, 
+      returnedPageCount,
+      updatedAt: updatedSite.updatedAt
+    });
 
     return NextResponse.json(updatedSite, {
       headers: corsHeaders,
