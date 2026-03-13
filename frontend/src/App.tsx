@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Settings from "./pages/Settings";
 import BetaNotification from "./pages/BetaNotification";
 import AdminDashboard from "./pages/AdminDashboard";
+import AdminLogin from "./pages/AdminLogin";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import Integrations from "./pages/Integrations";
@@ -34,6 +35,7 @@ const App = () => (
             <Route path="/settings" element={<Settings />} />
             <Route path="/beta-notification" element={<BetaNotification />} />
             <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/terms" element={<TermsOfService />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/integrations" element={<Integrations />} />
