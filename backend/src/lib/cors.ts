@@ -13,10 +13,12 @@ const ALLOWED_ORIGINS = [
   'https://beta-avallon.onrender.com',
   'https://avallon.ca',
   'https://www.avallon.ca',
+  'https://app.avallon.ca',
 ];
 
-// Pattern for Vercel-deployed generated websites
+// Pattern for Vercel-deployed generated websites and avallon subdomains
 const VERCEL_APP_PATTERN = /^https:\/\/[a-z0-9-]+\.vercel\.app$/;
+const AVALLON_PATTERN = /^https:\/\/([a-z0-9-]+\.)?avallon\.ca$/;
 
 /**
  * Get CORS headers with dynamic origin support
@@ -55,7 +57,7 @@ export function getCorsHeaders(req?: NextRequest | null): Record<string, string>
     ? [...ALLOWED_ORIGINS, appUrl].map(o => o.toLowerCase().replace(/\/$/, ''))
     : ALLOWED_ORIGINS.map(o => o.toLowerCase().replace(/\/$/, ''));
   
-  // Check if origin is in allowed list or matches Vercel app pattern (for generated websites)
+  // Check if origin is in allowed list or matches patterns
   const isAllowedOrigin = origin && (
     allowedOrigins.some(allowed => {
       // Exact match
@@ -68,7 +70,8 @@ export function getCorsHeaders(req?: NextRequest | null): Record<string, string>
       }
       return false;
     }) ||
-    VERCEL_APP_PATTERN.test(origin)
+    VERCEL_APP_PATTERN.test(origin) ||
+    AVALLON_PATTERN.test(origin)
   );
   
   // Use the origin if allowed, otherwise fallback
@@ -86,7 +89,7 @@ export function getCorsHeaders(req?: NextRequest | null): Record<string, string>
   return {
     'Access-Control-Allow-Origin': allowedOrigin || 'http://localhost:5173',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-email',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-email, x-admin-email, user-email',
     'Access-Control-Allow-Credentials': 'true',
   };
 }
@@ -98,7 +101,7 @@ export function getCorsHeaders(req?: NextRequest | null): Record<string, string>
 export const publicCorsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-email',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-email, x-admin-email, user-email',
 };
 
 
