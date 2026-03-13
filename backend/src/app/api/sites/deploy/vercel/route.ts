@@ -49,20 +49,40 @@ function cleanEditorScripts(html: string): string {
   html = html.replace(/<script>\s*<\/script>/gi, '');
   
   // =====================================================
-  // FIX: Remove hardcoded viewport widths from WordPress sections
+  // FIX: Remove hardcoded viewport widths that break mobile display
   // These are calculated based on editor viewport and break on other screen sizes
   // =====================================================
   
-  // Remove hardcoded width from full-width sections (alignfull, has-background)
-  // Pattern: style="...width: 1315px;..." -> remove just the width part
+  // Remove hardcoded width from WordPress sections (alignfull, has-background)
   html = html.replace(
     /(<div[^>]*class="[^"]*(?:alignfull|has-background|wp-block-group)[^"]*"[^>]*style="[^"]*)(width:\s*\d{3,}(?:\.\d+)?px;?\s*)/gi,
     '$1'
   );
   
-  // Also remove hardcoded heights from these sections
+  // Remove hardcoded heights from these sections
   html = html.replace(
     /(<div[^>]*class="[^"]*(?:alignfull|has-background|wp-block-group)[^"]*"[^>]*style="[^"]*)(height:\s*\d{3,}(?:\.\d+)?px;?\s*)/gi,
+    '$1'
+  );
+  
+  // BROADER FIX: Remove large fixed widths (>500px) from section, main, div elements
+  // These are likely layout widths that should be responsive
+  html = html.replace(
+    /(<(?:section|main|div|article|header|footer)[^>]*style="[^"]*)(width:\s*[5-9]\d{2}(?:\.\d+)?px;?\s*)/gi,
+    '$1'
+  );
+  html = html.replace(
+    /(<(?:section|main|div|article|header|footer)[^>]*style="[^"]*)(width:\s*\d{4,}(?:\.\d+)?px;?\s*)/gi,
+    '$1'
+  );
+  
+  // Remove min-width larger than 500px from layout containers
+  html = html.replace(
+    /(<(?:section|main|div|article|header|footer)[^>]*style="[^"]*)(min-width:\s*[5-9]\d{2}(?:\.\d+)?px;?\s*)/gi,
+    '$1'
+  );
+  html = html.replace(
+    /(<(?:section|main|div|article|header|footer)[^>]*style="[^"]*)(min-width:\s*\d{4,}(?:\.\d+)?px;?\s*)/gi,
     '$1'
   );
   
@@ -72,6 +92,160 @@ function cleanEditorScripts(html: string): string {
   html = html.replace(/style=";\s*/gi, 'style="');
   
   return html;
+}
+
+/**
+ * Inject responsive styles to ensure proper mobile display
+ * - Ensures viewport meta tag exists
+ * - Adds global CSS to prevent overflow and ensure images/media scale properly
+ */
+function injectResponsiveStyles(files: Record<string, string>): Record<string, string> {
+  const fixedFiles: Record<string, string> = {};
+  
+  const responsiveCSS = `
+<!-- AVALLON RESPONSIVE FIXES - ${DEPLOY_VERSION} -->
+<style data-avallon-responsive="true">
+/* ========== GLOBAL OVERFLOW CONTROL ========== */
+html, body {
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+}
+
+/* ========== RESPONSIVE MEDIA ========== */
+img, video, iframe, embed, object, svg {
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+/* ========== PREVENT FIXED-WIDTH CONTAINERS FROM OVERFLOWING ========== */
+[style*="width:"] {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* ========== RESPONSIVE TABLES ========== */
+table {
+  max-width: 100% !important;
+  display: block !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+/* ========== COMMON LAYOUT CONTAINERS ========== */
+.container, .wrapper, .content, main, article, section, .section,
+.row, .col, .column, .grid, .flex,
+.wp-block-group, .wp-block-columns, .wp-block-column,
+.elementor-container, .elementor-row, .elementor-column {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* ========== HERO AND FULL-WIDTH SECTIONS ========== */
+.hero, .banner, .header-image, .full-width, .alignfull,
+[class*="hero"], [class*="banner"], [class*="full-width"] {
+  max-width: 100vw !important;
+  overflow-x: hidden !important;
+}
+
+/* ========== PREVENT HORIZONTAL SCROLL FROM POSITIONED ELEMENTS ========== */
+.absolute, .fixed, [style*="position: absolute"], [style*="position:absolute"],
+[style*="position: fixed"], [style*="position:fixed"] {
+  max-width: 100vw !important;
+}
+
+/* ========== MOBILE-SPECIFIC FIXES ========== */
+@media (max-width: 767px) {
+  /* Ensure text doesn't overflow */
+  h1, h2, h3, h4, h5, h6, p, span, a, li, td, th {
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    hyphens: auto !important;
+  }
+  
+  /* Scale down large headings on mobile */
+  h1 {
+    font-size: clamp(1.75rem, 5vw, 3rem) !important;
+  }
+  h2 {
+    font-size: clamp(1.5rem, 4vw, 2.5rem) !important;
+  }
+  
+  /* Ensure buttons and inputs fit */
+  button, input, select, textarea, .btn, [class*="button"] {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  
+  /* Prevent pre/code from causing overflow */
+  pre, code {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+  }
+  
+  /* Fix flexbox containers that might overflow */
+  .flex, .d-flex, [style*="display: flex"], [style*="display:flex"] {
+    flex-wrap: wrap !important;
+  }
+  
+  /* Ensure grid items don't overflow */
+  .grid, [style*="display: grid"], [style*="display:grid"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+</style>
+<!-- END AVALLON RESPONSIVE FIXES -->
+`;
+
+  for (const [filename, content] of Object.entries(files)) {
+    if (!filename.endsWith('.html') || typeof content !== 'string') {
+      fixedFiles[filename] = content;
+      continue;
+    }
+    
+    // Skip if already has our responsive styles
+    if (content.includes('data-avallon-responsive="true"')) {
+      fixedFiles[filename] = content;
+      continue;
+    }
+    
+    let fixedContent = content;
+    
+    // 1. Ensure viewport meta tag exists
+    const hasViewport = /<meta[^>]*name=["']viewport["'][^>]*>/i.test(content);
+    if (!hasViewport) {
+      const viewportMeta = '<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">';
+      
+      // Try to inject after <head>
+      if (fixedContent.includes('<head>')) {
+        fixedContent = fixedContent.replace('<head>', '<head>\n' + viewportMeta);
+      } else if (fixedContent.includes('<head ')) {
+        fixedContent = fixedContent.replace(/<head[^>]*>/, (match) => match + '\n' + viewportMeta);
+      } else if (fixedContent.includes('<html')) {
+        // If no head tag, add one after html
+        fixedContent = fixedContent.replace(/<html[^>]*>/, (match) => match + '\n<head>\n' + viewportMeta + '\n</head>');
+      } else {
+        // Last resort: prepend to content
+        fixedContent = '<!DOCTYPE html>\n<html>\n<head>\n' + viewportMeta + '\n</head>\n' + fixedContent;
+      }
+      logInfo('Injected viewport meta tag', { filename });
+    }
+    
+    // 2. Inject responsive CSS after <head> or existing viewport meta
+    const headMatch = fixedContent.match(/<head[^>]*>/i);
+    if (headMatch) {
+      fixedContent = fixedContent.replace(headMatch[0], headMatch[0] + '\n' + responsiveCSS);
+    } else {
+      // If somehow still no head, prepend CSS
+      fixedContent = responsiveCSS + '\n' + fixedContent;
+    }
+    
+    fixedFiles[filename] = fixedContent;
+  }
+  
+  logInfo('Injected responsive styles', { fileCount: Object.keys(fixedFiles).filter(f => f.endsWith('.html')).length });
+  return fixedFiles;
 }
 
 /**
@@ -725,12 +899,16 @@ export async function POST(req: NextRequest) {
       }
       logInfo('Cleaned editor scripts from HTML files');
       
+      // Step 0.25: Inject responsive styles for proper mobile display
+      const responsiveFiles = injectResponsiveStyles(cleanedFiles);
+      logInfo('Injected responsive styles for mobile display');
+      
       // Step 0.5: Inject custom scripts/widgets
       const customScripts = rawFiles._customScripts as Array<{ code: string; applyTo: string }> | undefined;
       if (customScripts && customScripts.length > 0) {
         logInfo('Injecting custom scripts', { count: customScripts.length });
         
-        for (const [filename, content] of Object.entries(cleanedFiles)) {
+        for (const [filename, content] of Object.entries(responsiveFiles)) {
           if (!filename.endsWith('.html') || typeof content !== 'string') continue;
           
           // Find scripts that apply to this page
@@ -745,11 +923,11 @@ export async function POST(req: NextRequest) {
           
           // Inject before </body> or </html>
           if (content.includes('</body>')) {
-            cleanedFiles[filename] = content.replace('</body>', `\n<!-- Custom Widgets -->\n${scriptBlock}\n</body>`);
+            responsiveFiles[filename] = content.replace('</body>', `\n<!-- Custom Widgets -->\n${scriptBlock}\n</body>`);
           } else if (content.includes('</html>')) {
-            cleanedFiles[filename] = content.replace('</html>', `\n<!-- Custom Widgets -->\n${scriptBlock}\n</html>`);
+            responsiveFiles[filename] = content.replace('</html>', `\n<!-- Custom Widgets -->\n${scriptBlock}\n</html>`);
           } else {
-            cleanedFiles[filename] = content + `\n<!-- Custom Widgets -->\n${scriptBlock}`;
+            responsiveFiles[filename] = content + `\n<!-- Custom Widgets -->\n${scriptBlock}`;
           }
           
           logInfo('Injected scripts into page', { filename, scriptCount: scriptsForPage.length });
@@ -757,10 +935,10 @@ export async function POST(req: NextRequest) {
       }
       
       // Remove _customScripts from files (it's metadata, not a file)
-      delete cleanedFiles._customScripts;
+      delete responsiveFiles._customScripts;
       
       // Step 0.75: Inject mobile menu fix for reliable mobile navigation
-      const filesWithMobileMenu = injectMobileMenuFix(cleanedFiles);
+      const filesWithMobileMenu = injectMobileMenuFix(responsiveFiles);
       
       // Step 1: Fix navigation links for multi-page sites
       const filesWithFixedNav = fixNavigationLinks(filesWithMobileMenu);
