@@ -1959,6 +1959,18 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
   // Load site data and check preview
   useEffect(() => {
     const loadSiteData = async () => {
+      // First check for localStorage backup (in case previous save failed)
+      let localBackup: { content: Record<string, string>; timestamp: number } | null = null;
+      try {
+        const backupData = localStorage.getItem(`avallon_backup_${site.id}`);
+        if (backupData) {
+          localBackup = JSON.parse(backupData);
+          console.log('Found local backup from', new Date(localBackup.timestamp).toLocaleString());
+        }
+      } catch (e) {
+        console.warn('Failed to read localStorage backup:', e);
+      }
+      
       try {
         const response = await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`);
         if (response.ok) {
@@ -1966,7 +1978,24 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
           const siteData = data.data || data.site || data;
           
           if (siteData.websiteContent) {
-            setCurrentWebsiteContent(siteData.websiteContent);
+            // Check if we have a local backup that might be newer
+            const hasLocalContent = Object.keys(currentWebsiteContent).length > 0;
+            const backupIsNewer = localBackup && localBackup.timestamp > (Date.now() - 24 * 60 * 60 * 1000); // Within 24 hours
+            
+            if (backupIsNewer && localBackup) {
+              // Use local backup - it's likely more recent than what's on server
+              console.log('Using local backup (likely unsaved changes from previous session)');
+              setCurrentWebsiteContent(localBackup.content);
+              setHasUnsavedChanges(true);
+              toast({
+                title: "Recovered Unsaved Changes",
+                description: "Found unsaved changes from your previous session. Click Save to keep them.",
+              });
+            } else if (!hasLocalContent) {
+              // Only update from server if we don't have local content
+              setCurrentWebsiteContent(siteData.websiteContent);
+            }
+            // If we have local content, don't overwrite it with server data
           }
           if (siteData.messages) {
             setMessages(siteData.messages.map((msg: any) => ({
@@ -1977,6 +2006,17 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         }
       } catch (error) {
         console.error('Error loading site data:', error);
+        
+        // If we can't load from server but have a backup, use it
+        if (localBackup) {
+          console.log('Using local backup due to network error');
+          setCurrentWebsiteContent(localBackup.content);
+          setHasUnsavedChanges(true);
+          toast({
+            title: "Offline Mode",
+            description: "Using locally saved content. Changes will sync when connection is restored.",
+          });
+        }
       }
       
       checkPreviewReady();
@@ -2531,6 +2571,16 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     
     saveInProgressRef.current = true;
     
+    // Always backup to localStorage first (in case network fails)
+    try {
+      localStorage.setItem(`avallon_backup_${site.id}`, JSON.stringify({
+        content: updatedContent,
+        timestamp: Date.now(),
+      }));
+    } catch (e) {
+      console.warn('Failed to backup to localStorage:', e);
+    }
+    
     try {
       const response = await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`, {
         method: 'PUT',
@@ -2550,6 +2600,9 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         // The backend might return stale data due to caching or race conditions
         const { websiteContent: _, ...siteWithoutContent } = updatedSite;
         onUpdate({ ...site, ...siteWithoutContent, websiteContent: updatedContent, status: 'deployed' });
+        
+        // Clear backup on successful save
+        localStorage.removeItem(`avallon_backup_${site.id}`);
       } else {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
         const errorMessage = errorData.message || errorData.error || 'Failed to save';
@@ -2557,7 +2610,6 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
         // If site not found, try to create it
         if (response.status === 404) {
           console.warn('Site not found, attempting to create it...');
-          // Site might not exist yet - this is okay for new sites
           toast({
             title: "Note",
             description: "Site will be saved when you publish it.",
@@ -2569,11 +2621,23 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       }
     } catch (error: any) {
       console.error('Error saving:', error);
+      
+      // Detect network/CORS errors specifically
+      const isNetworkError = error.message?.includes('Load failed') || 
+                            error.message?.includes('NetworkError') ||
+                            error.message?.includes('Failed to fetch') ||
+                            error.name === 'TypeError';
+      
       toast({
-        title: "Error",
-        description: error.message || "Failed to save changes. Please try again.",
+        title: isNetworkError ? "Network Error" : "Save Failed",
+        description: isNetworkError 
+          ? "Could not connect to server. Your changes are saved locally and will sync when connection is restored."
+          : (error.message || "Failed to save changes. Please try again."),
         variant: "destructive",
       });
+      
+      // Mark that we have unsaved changes
+      setHasUnsavedChanges(true);
     } finally {
       saveInProgressRef.current = false;
       
