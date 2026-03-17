@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Zap, MousePointer, Sparkles } from "lucide-react";
+import { ArrowRight, Zap, MousePointer, Sparkles, Home, Layers, FileText, Rocket } from "lucide-react";
 import { GradientDots } from "@/components/ui/gradient-dots";
+import { NavBar } from "@/components/ui/tubelight-navbar";
 
 // Avallon color palette - Gray & Black
 const colors = {
@@ -21,8 +22,15 @@ const Index = () => {
   const navigate = useNavigate();
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("Home");
   const gradientRef = useRef<HTMLDivElement>(null);
+
+  const navItems = [
+    { name: 'Home', icon: Home, onClick: () => window.scrollTo({ top: 0, behavior: 'smooth' }) },
+    { name: 'Features', icon: Layers, onClick: () => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }) },
+    { name: 'Docs', icon: FileText, onClick: () => window.open('https://docs.avallon.ca', '_blank') },
+    { name: 'Start', icon: Rocket, onClick: () => navigate('/auth') },
+  ];
 
   useEffect(() => {
     // Animate words
@@ -106,115 +114,12 @@ const Index = () => {
         className="fixed inset-0 z-0 opacity-40"
       />
 
-      {/* Header */}
-      <header className="sticky top-0 z-50 w-full backdrop-blur-xl border-b" style={{ borderColor: `${colors[200]}15`, background: `${colors[900]}ee` }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-              <span className="text-xl font-bold tracking-tight" style={{ color: colors[50] }}>Avallon</span>
-            </div>
-            <nav className="hidden md:flex items-center gap-8">
-              <a 
-                className="text-sm font-medium transition-colors cursor-pointer hover:opacity-100 opacity-70" 
-                style={{ color: colors[100] }}
-                onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
-              >
-                Product
-              </a>
-              <a 
-                className="text-sm font-medium transition-colors cursor-pointer hover:opacity-100 opacity-70" 
-                style={{ color: colors[100] }}
-                onClick={() => navigate('/auth')}
-              >
-                Pricing
-              </a>
-              <a 
-                className="text-sm font-medium transition-colors hover:opacity-100 opacity-70" 
-                style={{ color: colors[100] }}
-                href="https://docs.avallon.ca" 
-                target="_blank" 
-                rel="noopener noreferrer"
-              >
-                Docs
-              </a>
-            </nav>
-            <div className="flex items-center gap-4">
-              <button 
-                onClick={handleStartBuilding}
-                className="hidden sm:flex items-center justify-center px-5 py-2 text-sm font-medium tracking-wide transition-all duration-300 hover:tracking-wider rounded"
-                style={{ 
-                  color: colors[900],
-                  background: colors[100],
-                }}
-              >
-                Start Building
-              </button>
-              <button 
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="md:hidden p-2 rounded-lg transition-colors"
-                style={{ color: colors[100] }}
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  {isMobileMenuOpen ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                  )}
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Mobile Menu */}
-      {isMobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 z-40" style={{ background: colors[900] }}>
-          <div className="pt-20 px-6">
-            <nav className="flex flex-col gap-4">
-              <a 
-                className="text-lg font-medium py-3 border-b transition-colors"
-                style={{ color: colors[100], borderColor: `${colors[200]}20` }}
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' });
-                }}
-              >
-                Product
-              </a>
-              <a 
-                className="text-lg font-medium py-3 border-b transition-colors"
-                style={{ color: colors[100], borderColor: `${colors[200]}20` }}
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  navigate('/auth');
-                }}
-              >
-                Pricing
-              </a>
-              <a 
-                className="text-lg font-medium py-3 border-b transition-colors"
-                style={{ color: colors[100], borderColor: `${colors[200]}20` }}
-                href="https://docs.avallon.ca" 
-                target="_blank" 
-                rel="noopener noreferrer"
-              >
-                Docs
-              </a>
-              <button 
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  navigate('/auth');
-                }}
-                className="mt-4 w-full flex items-center justify-center px-5 py-3 text-base font-medium rounded"
-                style={{ color: colors[900], background: colors[100] }}
-              >
-                Start Building
-              </button>
-            </nav>
-          </div>
-        </div>
-      )}
+      {/* Tubelight Navigation */}
+      <NavBar 
+        items={navItems} 
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
 
       {/* Hero Section */}
       <section className="relative min-h-[90vh] flex flex-col justify-center items-center px-4 sm:px-6 lg:px-8 py-20 overflow-hidden z-10">
