@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Zap, MousePointer, Sparkles, Home, Layers, FileText, Rocket } from "lucide-react";
+import { ArrowRight, Zap, MousePointer, Sparkles, Home, Layers, FileText } from "lucide-react";
 import { GradientDots } from "@/components/ui/gradient-dots";
 import { NavBar } from "@/components/ui/tubelight-navbar";
 
@@ -29,7 +29,6 @@ const Index = () => {
     { name: 'Home', icon: Home, onClick: () => window.scrollTo({ top: 0, behavior: 'smooth' }) },
     { name: 'Features', icon: Layers, onClick: () => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }) },
     { name: 'Docs', icon: FileText, onClick: () => window.open('https://docs.avallon.ca', '_blank') },
-    { name: 'Start', icon: Rocket, onClick: () => navigate('/auth') },
   ];
 
   useEffect(() => {
@@ -119,10 +118,13 @@ const Index = () => {
         items={navItems} 
         activeTab={activeTab}
         onTabChange={setActiveTab}
+        logo="Avallon"
+        ctaLabel="Login"
+        ctaOnClick={() => navigate('/auth')}
       />
 
       {/* Hero Section */}
-      <section className="relative min-h-[90vh] flex flex-col justify-center items-center px-4 sm:px-6 lg:px-8 py-20 overflow-hidden z-10">
+      <section className="relative min-h-screen flex flex-col justify-center items-center px-4 sm:px-6 lg:px-8 pt-24 pb-20 overflow-hidden z-10">
         {/* Top tagline */}
         <div className="text-center mb-12">
           <h2
