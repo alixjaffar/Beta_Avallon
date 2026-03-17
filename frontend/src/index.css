@@ -283,7 +283,7 @@ input[type=number]::-webkit-outer-spin-button {
 
 /* Grid line styling */
 .grid-line {
-  stroke: rgba(56, 189, 248, 0.1);
+  stroke: rgba(161, 161, 170, 0.1);
   stroke-width: 0.5;
   stroke-dasharray: 1000;
   stroke-dashoffset: 1000;
@@ -292,7 +292,7 @@ input[type=number]::-webkit-outer-spin-button {
 
 /* Detail dot styling */
 .detail-dot {
-  fill: rgba(56, 189, 248, 0.3);
+  fill: rgba(161, 161, 170, 0.3);
   opacity: 0;
   animation: word-appear 0.5s ease-out forwards;
 }
@@ -309,38 +309,38 @@ input[type=number]::-webkit-outer-spin-button {
   position: absolute;
   width: 4px;
   height: 4px;
-  background: rgba(56, 189, 248, 0.3);
+  background: rgba(161, 161, 170, 0.3);
   border-radius: 50%;
   animation: float 8s ease-in-out infinite;
   animation-play-state: paused;
 }
 
-/* Avallon theme colors - Blue & Black */
+/* Avallon theme colors - Gray & Black */
 .avallon-bg-dark {
-  background: linear-gradient(135deg, #020617 0%, #0a0a0f 50%, #0f172a 100%);
+  background: linear-gradient(135deg, #09090b 0%, #0f0f10 50%, #18181b 100%);
 }
 
 .avallon-text-light {
-  color: #e0f2fe;
+  color: #f4f4f5;
 }
 
 .avallon-text-muted {
-  color: #7dd3fc;
+  color: #a1a1aa;
 }
 
 .avallon-border {
-  border-color: rgba(56, 189, 248, 0.2);
+  border-color: rgba(161, 161, 170, 0.2);
 }
 
 /* Card hover effect for Avallon theme */
 .avallon-card {
-  background: rgba(15, 23, 42, 0.5);
-  border: 1px solid rgba(56, 189, 248, 0.1);
+  background: rgba(15, 15, 16, 0.5);
+  border: 1px solid rgba(161, 161, 170, 0.1);
   transition: all 0.3s ease;
 }
 
 .avallon-card:hover {
-  background: rgba(15, 23, 42, 0.8);
-  border-color: rgba(56, 189, 248, 0.25);
+  background: rgba(24, 24, 27, 0.8);
+  border-color: rgba(161, 161, 170, 0.25);
   transform: translateY(-2px);
 }

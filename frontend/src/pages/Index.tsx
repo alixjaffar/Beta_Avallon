@@ -1,19 +1,20 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Zap, MousePointer, Sparkles, Check } from "lucide-react";
+import { ArrowRight, Zap, MousePointer, Sparkles } from "lucide-react";
+import { GradientDots } from "@/components/ui/gradient-dots";
 
-// Avallon color palette - Blue & Black
+// Avallon color palette - Gray & Black
 const colors = {
-  50: "#f0f9ff",
-  100: "#e0f2fe",
-  200: "#7dd3fc",
-  300: "#38bdf8",
-  400: "#0ea5e9",
-  500: "#0284c7",
-  600: "#0369a1",
-  700: "#0c4a6e",
-  800: "#0f172a",
-  900: "#020617",
+  50: "#fafafa",
+  100: "#f4f4f5",
+  200: "#a1a1aa",
+  300: "#71717a",
+  400: "#52525b",
+  500: "#3f3f46",
+  600: "#27272a",
+  700: "#18181b",
+  800: "#0f0f10",
+  900: "#09090b",
 };
 
 const Index = () => {
@@ -51,7 +52,7 @@ const Index = () => {
     // Word hover effects
     words.forEach((word) => {
       word.addEventListener("mouseenter", () => {
-        word.style.textShadow = "0 0 20px rgba(56, 189, 248, 0.5)";
+        word.style.textShadow = "0 0 20px rgba(161, 161, 170, 0.5)";
       });
       word.addEventListener("mouseleave", () => {
         word.style.textShadow = "none";
@@ -66,7 +67,7 @@ const Index = () => {
       ripple.style.top = e.clientY + "px";
       ripple.style.width = "4px";
       ripple.style.height = "4px";
-      ripple.style.background = "rgba(56, 189, 248, 0.6)";
+      ripple.style.background = "rgba(161, 161, 170, 0.6)";
       ripple.style.borderRadius = "50%";
       ripple.style.transform = "translate(-50%, -50%)";
       ripple.style.pointerEvents = "none";
@@ -94,30 +95,19 @@ const Index = () => {
   };
 
   return (
-    <div className="font-display bg-gradient-to-br from-[#020617] via-[#0a0a0f] to-[#0f172a] text-[#e0f2fe] overflow-x-hidden antialiased min-h-screen">
-      {/* Grid Background - Fixed across entire page */}
-      <svg className="fixed inset-0 w-full h-full z-0" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
-            <path
-              d="M 60 0 L 0 0 0 60"
-              fill="none"
-              stroke="rgba(56,189,248,0.06)"
-              strokeWidth="0.5"
-            />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#grid)" />
-      </svg>
-
-      {/* Floating elements */}
-      <div className="floating-element" style={{ top: "25%", left: "15%", animationDelay: "0s", animationPlayState: "running" }}></div>
-      <div className="floating-element" style={{ top: "60%", left: "85%", animationDelay: "2s", animationPlayState: "running" }}></div>
-      <div className="floating-element" style={{ top: "40%", left: "10%", animationDelay: "4s", animationPlayState: "running" }}></div>
-      <div className="floating-element" style={{ top: "75%", left: "90%", animationDelay: "6s", animationPlayState: "running" }}></div>
+    <div className="font-display bg-[#09090b] text-[#f4f4f5] overflow-x-hidden antialiased min-h-screen relative">
+      {/* Gradient Dots Background */}
+      <GradientDots 
+        duration={25} 
+        colorCycleDuration={8}
+        dotSize={6}
+        spacing={12}
+        backgroundColor="#09090b"
+        className="fixed inset-0 z-0 opacity-40"
+      />
 
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full backdrop-blur-xl border-b" style={{ borderColor: `${colors[200]}15`, background: `${colors[900]}cc` }}>
+      <header className="sticky top-0 z-50 w-full backdrop-blur-xl border-b" style={{ borderColor: `${colors[200]}15`, background: `${colors[900]}ee` }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
@@ -151,7 +141,7 @@ const Index = () => {
             <div className="flex items-center gap-4">
               <button 
                 onClick={handleStartBuilding}
-                className="hidden sm:flex items-center justify-center px-5 py-2 text-sm font-medium tracking-wide transition-all duration-300 hover:tracking-wider"
+                className="hidden sm:flex items-center justify-center px-5 py-2 text-sm font-medium tracking-wide transition-all duration-300 hover:tracking-wider rounded"
                 style={{ 
                   color: colors[900],
                   background: colors[100],
@@ -216,7 +206,7 @@ const Index = () => {
                   setIsMobileMenuOpen(false);
                   navigate('/auth');
                 }}
-                className="mt-4 w-full flex items-center justify-center px-5 py-3 text-base font-medium"
+                className="mt-4 w-full flex items-center justify-center px-5 py-3 text-base font-medium rounded"
                 style={{ color: colors[900], background: colors[100] }}
               >
                 Start Building
@@ -228,14 +218,6 @@ const Index = () => {
 
       {/* Hero Section */}
       <section className="relative min-h-[90vh] flex flex-col justify-center items-center px-4 sm:px-6 lg:px-8 py-20 overflow-hidden z-10">
-        {/* Corner elements */}
-        <div className="corner-element top-8 left-8" style={{ animationDelay: "0.5s" }}>
-          <div className="w-2 h-2 opacity-30" style={{ background: colors[200] }}></div>
-        </div>
-        <div className="corner-element top-8 right-8" style={{ animationDelay: "0.7s" }}>
-          <div className="w-2 h-2 opacity-30" style={{ background: colors[200] }}></div>
-        </div>
-
         {/* Top tagline */}
         <div className="text-center mb-12">
           <h2
@@ -268,7 +250,7 @@ const Index = () => {
             <span className="word" data-delay="1950">with</span>{" "}
             <span className="word" data-delay="2100">AI</span>
             <br className="hidden md:block" />
-            <span className="word font-medium" data-delay="2250" style={{ color: colors[200] }}>instantly.</span>
+            <span className="word font-medium" data-delay="2250" style={{ color: colors[100] }}>instantly.</span>
           </h1>
           <p className="text-lg md:text-xl font-light leading-relaxed max-w-2xl mx-auto" style={{ color: colors[300] }}>
             <span className="word" data-delay="2400">No</span>{" "}
@@ -295,7 +277,7 @@ const Index = () => {
           className="w-full max-w-2xl p-1 rounded-lg opacity-0 relative z-20"
           style={{ 
             background: `${colors[800]}90`,
-            border: `1px solid ${colors[200]}20`,
+            border: `1px solid ${colors[400]}30`,
             animation: "word-appear 1s ease-out forwards",
             animationDelay: "4s",
           }}
@@ -317,7 +299,7 @@ const Index = () => {
                 }}
               />
             </div>
-            <div className="flex items-center justify-between border-t pt-3 px-2" style={{ borderColor: `${colors[200]}15` }}>
+            <div className="flex items-center justify-between border-t pt-3 px-2" style={{ borderColor: `${colors[400]}20` }}>
               <div className="hidden sm:flex items-center gap-2">
                 <button 
                   className="p-2 rounded-lg transition-colors opacity-50 hover:opacity-100"
@@ -342,7 +324,7 @@ const Index = () => {
                 <button 
                   onClick={handleGenerate}
                   disabled={isGenerating || !prompt.trim()}
-                  className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium tracking-wide transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium tracking-wide transition-all disabled:opacity-30 disabled:cursor-not-allowed rounded"
                   style={{ 
                     color: colors[900],
                     background: colors[100],
@@ -389,7 +371,7 @@ const Index = () => {
       </section>
 
       {/* Features Section */}
-      <section id="features" className="py-24 border-y relative z-10" style={{ borderColor: `${colors[200]}10`, background: `${colors[900]}80` }}>
+      <section id="features" className="py-24 border-y relative z-10" style={{ borderColor: `${colors[400]}15`, background: `${colors[900]}cc` }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <div className="w-16 h-px mx-auto mb-8 opacity-30" style={{ background: `linear-gradient(to right, transparent, ${colors[200]}, transparent)` }}></div>
@@ -402,12 +384,10 @@ const Index = () => {
           </div>
           <div className="grid md:grid-cols-3 gap-8">
             {/* Feature 1 */}
-            <div 
-              className="avallon-card p-8 rounded-lg group cursor-pointer"
-            >
+            <div className="avallon-card p-8 rounded-lg group cursor-pointer">
               <div 
                 className="w-12 h-12 rounded-lg flex items-center justify-center mb-6 transition-all group-hover:scale-110"
-                style={{ background: `${colors[200]}15` }}
+                style={{ background: `${colors[400]}20` }}
               >
                 <Zap className="w-6 h-6" style={{ color: colors[200] }} />
               </div>
@@ -417,12 +397,10 @@ const Index = () => {
               </p>
             </div>
             {/* Feature 2 */}
-            <div 
-              className="avallon-card p-8 rounded-lg group cursor-pointer"
-            >
+            <div className="avallon-card p-8 rounded-lg group cursor-pointer">
               <div 
                 className="w-12 h-12 rounded-lg flex items-center justify-center mb-6 transition-all group-hover:scale-110"
-                style={{ background: `${colors[200]}15` }}
+                style={{ background: `${colors[400]}20` }}
               >
                 <MousePointer className="w-6 h-6" style={{ color: colors[200] }} />
               </div>
@@ -432,12 +410,10 @@ const Index = () => {
               </p>
             </div>
             {/* Feature 3 */}
-            <div 
-              className="avallon-card p-8 rounded-lg group cursor-pointer"
-            >
+            <div className="avallon-card p-8 rounded-lg group cursor-pointer">
               <div 
                 className="w-12 h-12 rounded-lg flex items-center justify-center mb-6 transition-all group-hover:scale-110"
-                style={{ background: `${colors[200]}15` }}
+                style={{ background: `${colors[400]}20` }}
               >
                 <Sparkles className="w-6 h-6" style={{ color: colors[200] }} />
               </div>
@@ -458,7 +434,7 @@ const Index = () => {
             <h2 className="text-3xl md:text-4xl font-extralight tracking-tight" style={{ color: colors[50] }}>How Avallon works</h2>
           </div>
           <div className="relative">
-            <div className="hidden md:block absolute top-1/2 left-0 w-full h-px -translate-y-1/2 z-0" style={{ background: `${colors[200]}15` }}></div>
+            <div className="hidden md:block absolute top-1/2 left-0 w-full h-px -translate-y-1/2 z-0" style={{ background: `${colors[400]}20` }}></div>
             <div className="grid md:grid-cols-3 gap-12 relative z-10">
               {/* Step 1 */}
               <div className="flex flex-col items-center text-center">
@@ -483,7 +459,7 @@ const Index = () => {
                   className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-light mb-6"
                   style={{ 
                     background: colors[800],
-                    border: `2px solid ${colors[200]}40`,
+                    border: `2px solid ${colors[400]}`,
                     color: colors[300]
                   }}
                 >
@@ -500,7 +476,7 @@ const Index = () => {
                   className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-light mb-6"
                   style={{ 
                     background: colors[800],
-                    border: `2px solid ${colors[200]}40`,
+                    border: `2px solid ${colors[400]}`,
                     color: colors[300]
                   }}
                 >
@@ -517,7 +493,7 @@ const Index = () => {
       </section>
 
       {/* Use Cases Section */}
-      <section className="py-24 relative z-10" style={{ background: `${colors[900]}80` }}>
+      <section className="py-24 relative z-10" style={{ background: `${colors[900]}cc` }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-4">
             <div>
@@ -532,9 +508,7 @@ const Index = () => {
           <div className="grid md:grid-cols-3 gap-8">
             {/* Use Case 1 */}
             <div className="group cursor-pointer" onClick={() => navigate('/auth')}>
-              <div 
-                className="overflow-hidden rounded-lg mb-4 aspect-[4/3] relative avallon-card"
-              >
+              <div className="overflow-hidden rounded-lg mb-4 aspect-[4/3] relative avallon-card">
                 <div 
                   className="absolute top-3 left-3 z-10 text-xs font-mono uppercase tracking-wider px-2 py-1 rounded"
                   style={{ background: `${colors[800]}cc`, color: colors[200] }}
@@ -545,11 +519,11 @@ const Index = () => {
                   className="h-full w-full flex flex-col p-4 group-hover:scale-105 transition-transform duration-500"
                   style={{ background: `linear-gradient(135deg, ${colors[800]}, ${colors[700]})` }}
                 >
-                  <div className="w-1/3 h-4 rounded mb-4" style={{ background: `${colors[200]}30` }}></div>
-                  <div className="w-full h-32 rounded mb-4" style={{ background: `${colors[200]}20` }}></div>
+                  <div className="w-1/3 h-4 rounded mb-4" style={{ background: `${colors[400]}40` }}></div>
+                  <div className="w-full h-32 rounded mb-4" style={{ background: `${colors[400]}30` }}></div>
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="h-16 rounded" style={{ background: `${colors[200]}20` }}></div>
-                    <div className="h-16 rounded" style={{ background: `${colors[200]}20` }}></div>
+                    <div className="h-16 rounded" style={{ background: `${colors[400]}30` }}></div>
+                    <div className="h-16 rounded" style={{ background: `${colors[400]}30` }}></div>
                   </div>
                 </div>
               </div>
@@ -558,9 +532,7 @@ const Index = () => {
             </div>
             {/* Use Case 2 */}
             <div className="group cursor-pointer" onClick={() => navigate('/auth')}>
-              <div 
-                className="overflow-hidden rounded-lg mb-4 aspect-[4/3] relative avallon-card"
-              >
+              <div className="overflow-hidden rounded-lg mb-4 aspect-[4/3] relative avallon-card">
                 <div 
                   className="absolute top-3 left-3 z-10 text-xs font-mono uppercase tracking-wider px-2 py-1 rounded"
                   style={{ background: `${colors[800]}cc`, color: colors[200] }}
@@ -572,16 +544,16 @@ const Index = () => {
                   style={{ background: `linear-gradient(135deg, ${colors[700]}, ${colors[800]})` }}
                 >
                   <div className="flex gap-4 mb-4">
-                    <div className="w-12 h-12 rounded-full" style={{ background: `${colors[200]}30` }}></div>
+                    <div className="w-12 h-12 rounded-full" style={{ background: `${colors[400]}40` }}></div>
                     <div className="flex-1">
-                      <div className="w-1/2 h-3 rounded mb-2" style={{ background: `${colors[200]}30` }}></div>
-                      <div className="w-3/4 h-2 rounded" style={{ background: `${colors[200]}20` }}></div>
+                      <div className="w-1/2 h-3 rounded mb-2" style={{ background: `${colors[400]}40` }}></div>
+                      <div className="w-3/4 h-2 rounded" style={{ background: `${colors[400]}30` }}></div>
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-2 flex-1">
-                    <div className="rounded h-full" style={{ background: `${colors[200]}20` }}></div>
-                    <div className="rounded h-full" style={{ background: `${colors[200]}20` }}></div>
-                    <div className="rounded h-full" style={{ background: `${colors[200]}20` }}></div>
+                    <div className="rounded h-full" style={{ background: `${colors[400]}30` }}></div>
+                    <div className="rounded h-full" style={{ background: `${colors[400]}30` }}></div>
+                    <div className="rounded h-full" style={{ background: `${colors[400]}30` }}></div>
                   </div>
                 </div>
               </div>
@@ -590,9 +562,7 @@ const Index = () => {
             </div>
             {/* Use Case 3 */}
             <div className="group cursor-pointer" onClick={() => navigate('/auth')}>
-              <div 
-                className="overflow-hidden rounded-lg mb-4 aspect-[4/3] relative avallon-card"
-              >
+              <div className="overflow-hidden rounded-lg mb-4 aspect-[4/3] relative avallon-card">
                 <div 
                   className="absolute top-3 left-3 z-10 text-xs font-mono uppercase tracking-wider px-2 py-1 rounded"
                   style={{ background: `${colors[800]}cc`, color: colors[200] }}
@@ -603,9 +573,9 @@ const Index = () => {
                   className="h-full w-full flex flex-col p-4 items-center justify-center text-center group-hover:scale-105 transition-transform duration-500"
                   style={{ background: `linear-gradient(135deg, ${colors[800]}, ${colors[700]})` }}
                 >
-                  <div className="w-2/3 h-4 rounded mb-2" style={{ background: `${colors[200]}30` }}></div>
-                  <div className="w-1/2 h-2 rounded mb-4" style={{ background: `${colors[200]}20` }}></div>
-                  <div className="w-24 h-6 rounded" style={{ background: `${colors[200]}30` }}></div>
+                  <div className="w-2/3 h-4 rounded mb-2" style={{ background: `${colors[400]}40` }}></div>
+                  <div className="w-1/2 h-2 rounded mb-4" style={{ background: `${colors[400]}30` }}></div>
+                  <div className="w-24 h-6 rounded" style={{ background: `${colors[400]}40` }}></div>
                 </div>
               </div>
               <h3 className="font-medium" style={{ color: colors[50] }}>SaaS Product</h3>
@@ -620,12 +590,12 @@ const Index = () => {
         <div 
           className="max-w-4xl mx-auto rounded-lg p-12 md:p-20 text-center relative overflow-hidden"
           style={{ 
-            background: `linear-gradient(135deg, ${colors[800]}80, ${colors[700]}60)`,
-            border: `1px solid ${colors[200]}15`
+            background: `linear-gradient(135deg, ${colors[800]}, ${colors[700]})`,
+            border: `1px solid ${colors[400]}20`
           }}
         >
           <div 
-            className="absolute top-0 right-0 w-64 h-64 rounded-full blur-3xl opacity-20 -translate-y-1/2 translate-x-1/2 pointer-events-none"
+            className="absolute top-0 right-0 w-64 h-64 rounded-full blur-3xl opacity-10 -translate-y-1/2 translate-x-1/2 pointer-events-none"
             style={{ background: colors[200] }}
           ></div>
           <div className="relative z-10">
@@ -637,7 +607,7 @@ const Index = () => {
             </p>
             <button 
               onClick={handleStartBuilding}
-              className="group inline-flex items-center gap-2 px-8 py-4 text-sm font-medium uppercase tracking-[0.15em] transition-all duration-300 hover:tracking-[0.2em]"
+              className="group inline-flex items-center gap-2 px-8 py-4 text-sm font-medium uppercase tracking-[0.15em] transition-all duration-300 hover:tracking-[0.2em] rounded"
               style={{ 
                 color: colors[900],
                 background: colors[100],
@@ -651,7 +621,7 @@ const Index = () => {
       </section>
 
       {/* Footer */}
-      <footer className="border-t pt-16 pb-12 relative z-10" style={{ borderColor: `${colors[200]}10` }}>
+      <footer className="border-t pt-16 pb-12 relative z-10" style={{ borderColor: `${colors[400]}15` }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-12">
             <div className="col-span-2">
@@ -690,7 +660,7 @@ const Index = () => {
               </ul>
             </div>
           </div>
-          <div className="border-t pt-8 flex flex-col md:flex-row justify-between items-center gap-4" style={{ borderColor: `${colors[200]}10` }}>
+          <div className="border-t pt-8 flex flex-col md:flex-row justify-between items-center gap-4" style={{ borderColor: `${colors[400]}15` }}>
             <p className="text-sm font-light" style={{ color: colors[400] }}>© 2026 Powered by Avallon. All rights reserved.</p>
             <div className="flex gap-6">
               <a className="opacity-50 hover:opacity-100 transition-opacity" href="#" style={{ color: colors[200] }}>
@@ -719,7 +689,7 @@ const Index = () => {
         ref={gradientRef}
         className="fixed pointer-events-none w-96 h-96 rounded-full blur-3xl transition-all duration-500 ease-out opacity-0 z-0"
         style={{
-          background: `radial-gradient(circle, ${colors[500]}15 0%, transparent 100%)`,
+          background: `radial-gradient(circle, ${colors[400]}20 0%, transparent 100%)`,
         }}
       ></div>
     </div>

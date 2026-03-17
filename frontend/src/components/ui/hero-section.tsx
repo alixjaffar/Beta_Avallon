@@ -3,18 +3,18 @@
 import React, { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-// Avallon Blue & Black color palette
+// Avallon Gray & Black color palette
 const colors = {
-  50: "#f0f9ff",
-  100: "#e0f2fe",
-  200: "#7dd3fc",
-  300: "#38bdf8",
-  400: "#0ea5e9",
-  500: "#0284c7",
-  600: "#0369a1",
-  700: "#0c4a6e",
-  800: "#0f172a",
-  900: "#020617",
+  50: "#fafafa",
+  100: "#f4f4f5",
+  200: "#a1a1aa",
+  300: "#71717a",
+  400: "#52525b",
+  500: "#3f3f46",
+  600: "#27272a",
+  700: "#18181b",
+  800: "#0f0f10",
+  900: "#09090b",
 };
 
 interface HeroSectionProps {
@@ -53,7 +53,7 @@ export function HeroSection({ onGetStarted }: HeroSectionProps) {
     // Word hover effects
     words.forEach((word) => {
       word.addEventListener("mouseenter", () => {
-        word.style.textShadow = "0 0 20px rgba(56, 189, 248, 0.5)";
+        word.style.textShadow = "0 0 20px rgba(161, 161, 170, 0.5)";
       });
       word.addEventListener("mouseleave", () => {
         word.style.textShadow = "none";
@@ -68,7 +68,7 @@ export function HeroSection({ onGetStarted }: HeroSectionProps) {
       ripple.style.top = e.clientY + "px";
       ripple.style.width = "4px";
       ripple.style.height = "4px";
-      ripple.style.background = "rgba(56, 189, 248, 0.6)";
+      ripple.style.background = "rgba(161, 161, 170, 0.6)";
       ripple.style.borderRadius = "50%";
       ripple.style.transform = "translate(-50%, -50%)";
       ripple.style.pointerEvents = "none";
@@ -109,7 +109,7 @@ export function HeroSection({ onGetStarted }: HeroSectionProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#020617] via-[#0a0a0f] to-[#0f172a] text-[#e0f2fe] overflow-hidden relative w-full">
+    <div className="min-h-screen bg-gradient-to-br from-[#09090b] via-[#0f0f10] to-[#18181b] text-[#f4f4f5] overflow-hidden relative w-full">
       {/* Grid Background */}
       <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -117,7 +117,7 @@ export function HeroSection({ onGetStarted }: HeroSectionProps) {
             <path
               d="M 60 0 L 0 0 0 60"
               fill="none"
-              stroke="rgba(56,189,248,0.08)"
+              stroke="rgba(161,161,170,0.08)"
               strokeWidth="0.5"
             />
           </pattern>
