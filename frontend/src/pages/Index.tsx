@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Zap, MousePointer, Sparkles, Home, Layers, FileText } from "lucide-react";
-import { GradientDots } from "@/components/ui/gradient-dots";
+import HeroWave from "@/components/ui/dynamic-wave-canvas-background";
 import { NavBar } from "@/components/ui/tubelight-navbar";
 
 // Avallon color palette - Gray & Black
@@ -103,15 +103,10 @@ const Index = () => {
 
   return (
     <div className="font-display bg-[#09090b] text-[#f4f4f5] overflow-x-hidden antialiased min-h-screen relative">
-      {/* Gradient Dots Background */}
-      <GradientDots 
-        duration={25} 
-        colorCycleDuration={8}
-        dotSize={6}
-        spacing={12}
-        backgroundColor="#09090b"
-        className="fixed inset-0 z-0 opacity-40"
-      />
+      {/* Dynamic Wave Background */}
+      <div className="fixed inset-0 z-0">
+        <HeroWave />
+      </div>
 
       {/* Tubelight Navigation */}
       <NavBar 
