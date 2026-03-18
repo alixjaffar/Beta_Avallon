@@ -15,8 +15,8 @@ import {
   Zap,
   Crown,
   Loader2,
-  AlertTriangle,
-  ExternalLink
+  ExternalLink,
+  HelpCircle
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -33,6 +33,20 @@ interface Subscription {
   status: string;
   currentPeriodEnd?: string;
 }
+
+// Color palette matching the theme
+const colors = {
+  50: "#fafafa",
+  100: "#f4f4f5",
+  200: "#a1a1aa",
+  300: "#71717a",
+  400: "#52525b",
+  500: "#3f3f46",
+  600: "#27272a",
+  700: "#18181b",
+  800: "#0f0f10",
+  900: "#09090b",
+};
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
@@ -221,21 +235,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         return (
           <div className="space-y-8">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-1">Workspace settings</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
+              <h2 className="text-xl font-medium" style={{ color: colors[50] }}>Workspace settings</h2>
+              <p className="text-sm mt-1" style={{ color: colors[300] }}>
                 Workspaces allow you to collaborate on projects in real time.
               </p>
             </div>
 
-            {/* Workspace Avatar */}
             <div>
-              <h3 className="text-sm font-medium text-slate-900 dark:text-white mb-1">Workspace avatar</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">Set an avatar for your workspace.</p>
+              <h3 className="text-sm font-medium mb-1" style={{ color: colors[100] }}>Workspace avatar</h3>
+              <p className="text-sm mb-3" style={{ color: colors[300] }}>Set an avatar for your workspace.</p>
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => avatarInputRef.current?.click()}
-                  className="size-12 rounded-full bg-primary flex items-center justify-center text-white font-bold text-lg overflow-hidden hover:ring-2 hover:ring-primary/50 transition-all"
-                  style={workspaceAvatar ? { backgroundImage: `url(${workspaceAvatar})`, backgroundSize: 'cover' } : {}}
+                  className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg overflow-hidden transition-all hover:ring-2 hover:ring-zinc-500"
+                  style={{ 
+                    background: workspaceAvatar ? `url(${workspaceAvatar}) center/cover` : colors[500]
+                  }}
                 >
                   {!workspaceAvatar && userInitial}
                 </button>
@@ -249,28 +264,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             </div>
 
-            {/* Workspace Name */}
             <div>
-              <h3 className="text-sm font-medium text-slate-900 dark:text-white mb-1">Workspace name</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">Your full workspace name, as visible to others.</p>
+              <h3 className="text-sm font-medium mb-1" style={{ color: colors[100] }}>Workspace name</h3>
+              <p className="text-sm mb-3" style={{ color: colors[300] }}>Your full workspace name, as visible to others.</p>
               <div className="relative">
                 <input
                   type="text"
                   value={workspaceName}
                   onChange={(e) => saveWorkspaceName(e.target.value)}
                   maxLength={100}
-                  className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                  className="w-full px-4 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-zinc-500"
+                  style={{ 
+                    background: colors[800], 
+                    border: `1px solid ${colors[600]}`,
+                    color: colors[100]
+                  }}
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
-                  {workspaceName.length} / 100 characters
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs" style={{ color: colors[400] }}>
+                  {workspaceName.length} / 100
                 </span>
               </div>
             </div>
 
-            {/* Workspace Description */}
             <div>
-              <h3 className="text-sm font-medium text-slate-900 dark:text-white mb-1">Workspace description</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">A short description about your workspace or team.</p>
+              <h3 className="text-sm font-medium mb-1" style={{ color: colors[100] }}>Workspace description</h3>
+              <p className="text-sm mb-3" style={{ color: colors[300] }}>A short description about your workspace or team.</p>
               <div className="relative">
                 <textarea
                   value={workspaceDescription}
@@ -278,21 +296,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   maxLength={500}
                   rows={4}
                   placeholder="Description"
-                  className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary resize-none"
+                  className="w-full px-4 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-zinc-500 resize-none"
+                  style={{ 
+                    background: colors[800], 
+                    border: `1px solid ${colors[600]}`,
+                    color: colors[100]
+                  }}
                 />
-                <span className="absolute right-3 bottom-3 text-xs text-slate-400">
-                  {workspaceDescription.length} / 500 characters
+                <span className="absolute right-3 bottom-3 text-xs" style={{ color: colors[400] }}>
+                  {workspaceDescription.length} / 500
                 </span>
               </div>
             </div>
 
-            {/* Danger Zone */}
-            <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-              <h3 className="text-sm font-medium text-slate-900 dark:text-white mb-1">Leave workspace</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
+            <div className="pt-4 border-t" style={{ borderColor: colors[700] }}>
+              <h3 className="text-sm font-medium mb-1" style={{ color: colors[100] }}>Leave workspace</h3>
+              <p className="text-sm mb-3" style={{ color: colors[300] }}>
                 You cannot leave your last workspace. Your account must be a member of at least one workspace.
               </p>
-              <button className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors">
+              <button className="px-4 py-2 text-sm font-medium text-red-400 rounded-lg transition-colors hover:bg-red-900/30" style={{ background: 'rgba(239, 68, 68, 0.1)' }}>
                 Leave workspace
               </button>
             </div>
@@ -303,87 +325,74 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         return (
           <div className="space-y-8">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-1">Plans & credits</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
+              <h2 className="text-xl font-medium" style={{ color: colors[50] }}>Plans & credits</h2>
+              <p className="text-sm mt-1" style={{ color: colors[300] }}>
                 Manage your subscription and credit balance.
               </p>
             </div>
 
-            {/* Current Plan Card */}
-            <div className="p-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+            <div className="p-6 rounded-xl" style={{ background: colors[800], border: `1px solid ${colors[600]}` }}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className={`size-10 rounded-lg flex items-center justify-center ${
-                    subscription?.plan === 'growth' ? 'bg-purple-500' :
-                    subscription?.plan === 'starter' ? 'bg-blue-500' : 'bg-slate-400'
-                  }`}>
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{
+                    background:
+                      subscription?.plan === 'growth'
+                        ? 'linear-gradient(135deg, #3f3f46, #18181b)'
+                        : subscription?.plan === 'starter'
+                          ? 'linear-gradient(135deg, #52525b, #27272a)'
+                          : colors[500]
+                  }}>
                     {subscription?.plan === 'growth' ? <Crown className="w-5 h-5 text-white" /> :
                      subscription?.plan === 'starter' ? <Zap className="w-5 h-5 text-white" /> :
                      <CreditCard className="w-5 h-5 text-white" />}
                   </div>
                   <div>
-                    <h3 className="font-semibold text-slate-900 dark:text-white capitalize">
+                    <h3 className="font-medium capitalize" style={{ color: colors[50] }}>
                       {subscription?.plan || 'Free'} Plan
                     </h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                    <p className="text-sm" style={{ color: colors[300] }}>
                       {subscription?.plan === 'growth' ? '$39.99/mo' :
                        subscription?.plan === 'starter' ? '$24.99/mo' : 'Free'}
                     </p>
                   </div>
                 </div>
-                <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                  subscription?.status === 'active' 
-                    ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' 
-                    : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
-                }`}>
+                <span className="px-3 py-1 text-xs font-medium rounded-full" style={{
+                  background: subscription?.status === 'active' ? 'rgba(34, 197, 94, 0.1)' : colors[700],
+                  color: subscription?.status === 'active' ? '#4ade80' : colors[300]
+                }}>
                   {subscription?.status || 'Active'}
                 </span>
               </div>
 
-              {/* Credits */}
-              <div className="flex items-center justify-between py-4 border-t border-slate-200 dark:border-slate-700">
+              <div className="flex items-center justify-between py-4 border-t" style={{ borderColor: colors[700] }}>
                 <div>
-                  <p className="font-medium text-slate-900 dark:text-white">Credits</p>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                  <p className="font-medium" style={{ color: colors[50] }}>Credits</p>
+                  <p className="text-sm" style={{ color: colors[300] }}>
                     {subscription?.plan === 'growth' ? '250' :
                      subscription?.plan === 'starter' ? '100' : '15'} credits/month with your plan
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-bold text-slate-900 dark:text-white">{credits ?? '...'}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">available</p>
+                  <p className="text-2xl font-bold" style={{ color: colors[50] }}>{credits ?? '...'}</p>
+                  <p className="text-xs" style={{ color: colors[400] }}>available</p>
                 </div>
               </div>
-
-              {/* Next billing */}
-              {subscription?.currentPeriodEnd && (
-                <div className="flex items-center justify-between py-4 border-t border-slate-200 dark:border-slate-700">
-                  <div>
-                    <p className="font-medium text-slate-900 dark:text-white">Next billing date</p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Your subscription renews automatically</p>
-                  </div>
-                  <p className="font-medium text-slate-900 dark:text-white">
-                    {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
-                  </p>
-                </div>
-              )}
             </div>
 
-            {/* Buy Credits - Pay As You Go */}
-            <div className="p-6 rounded-xl border border-amber-200 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/20">
+            <div className="p-6 rounded-xl" style={{ background: colors[800], border: `1px solid ${colors[600]}` }}>
               <div className="flex items-center gap-3 mb-4">
-                <div className="size-10 rounded-lg bg-amber-500 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #52525b, #27272a)' }}>
                   <Zap className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-slate-900 dark:text-white">Buy Credits</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Pay-as-you-go • $0.30 per credit</p>
+                  <h3 className="font-medium" style={{ color: colors[50] }}>Buy Credits</h3>
+                  <p className="text-sm" style={{ color: colors[300] }}>Pay-as-you-go • $0.30 per credit</p>
                 </div>
               </div>
               
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <label className="text-sm text-slate-600 dark:text-slate-400 mb-2 block">How many credits?</label>
+                  <label className="text-sm mb-2 block" style={{ color: colors[300] }}>How many credits?</label>
                   <div className="flex items-center gap-2">
                     <input
                       type="range"
@@ -392,16 +401,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       step="5"
                       value={creditQuantity}
                       onChange={(e) => setCreditQuantity(Number(e.target.value))}
-                      className="flex-1 accent-amber-500"
+                      className="flex-1 accent-zinc-400"
                     />
                     <div className="w-20 text-center">
-                      <span className="text-lg font-bold text-slate-900 dark:text-white">{creditQuantity}</span>
-                      <span className="text-sm text-slate-500 dark:text-slate-400"> credits</span>
+                      <span className="text-lg font-bold" style={{ color: colors[50] }}>{creditQuantity}</span>
+                      <span className="text-sm" style={{ color: colors[300] }}> credits</span>
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                  <p className="text-2xl font-bold" style={{ color: colors[100] }}>
                     ${(creditQuantity * 0.30).toFixed(2)}
                   </p>
                 </div>
@@ -410,7 +419,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <button
                 onClick={handleBuyCredits}
                 disabled={buyingCredits}
-                className="w-full mt-4 flex items-center justify-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                className="w-full mt-4 flex items-center justify-center gap-2 px-6 py-3 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                style={{ background: 'linear-gradient(135deg, #52525b, #27272a)' }}
               >
                 {buyingCredits ? (
                   <>
@@ -426,19 +436,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </button>
             </div>
 
-            {/* Upgrade Options */}
             {(!subscription?.plan || subscription.plan === 'free') && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <button
                   onClick={() => handleUpgrade('starter')}
-                  className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-colors"
+                  className="flex items-center justify-center gap-2 px-6 py-3 text-white font-medium rounded-lg transition-opacity"
+                  style={{ background: 'linear-gradient(135deg, #52525b, #27272a)' }}
                 >
                   <Zap className="w-4 h-4" />
                   Upgrade to Starter ($24.99/mo)
                 </button>
                 <button
                   onClick={() => handleUpgrade('growth')}
-                  className="flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90 text-white font-medium rounded-lg transition-colors"
+                  className="flex items-center justify-center gap-2 px-6 py-3 text-white font-medium rounded-lg transition-opacity hover:opacity-90"
+                  style={{ background: 'linear-gradient(135deg, #3f3f46, #18181b)' }}
                 >
                   <Crown className="w-4 h-4" />
                   Upgrade to Growth ($39.99/mo)
@@ -446,90 +457,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
 
-            {/* Plan Comparison */}
             <div>
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Compare plans</h3>
+              <h3 className="text-lg font-medium mb-4" style={{ color: colors[50] }}>Compare plans</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Free */}
-                <div className={`p-4 rounded-xl border ${
-                  (!subscription?.plan || subscription.plan === 'free') 
-                    ? 'border-primary bg-primary/5' 
-                    : 'border-slate-200 dark:border-slate-700'
-                }`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <CreditCard className="w-4 h-4 text-slate-500" />
-                    <span className="font-semibold text-slate-900 dark:text-white">Free</span>
-                    {(!subscription?.plan || subscription.plan === 'free') && (
-                      <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">Current</span>
-                    )}
+                {[
+                  { id: 'free', name: 'Free', price: '$0', icon: CreditCard, features: ['30 credits/month', '1 website', '✗ AI Agents'] },
+                  { id: 'starter', name: 'Starter', price: '$24.99', icon: Zap, features: ['100 credits/month', 'Multi-site creation', '1 AI Agent'] },
+                  { id: 'growth', name: 'Growth', price: '$39.99', icon: Crown, features: ['250 credits/month', '4 AI Agents', 'Email Hosting'], popular: true },
+                ].map((plan) => (
+                  <div 
+                    key={plan.id}
+                    className="p-4 rounded-xl transition-all"
+                    style={{ 
+                      background: colors[800],
+                      border: `${plan.popular ? '2px' : '1px'} solid ${
+                        subscription?.plan === plan.id ? colors[200] : 
+                        plan.popular ? colors[500] : colors[600]
+                      }`
+                    }}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <plan.icon className="w-4 h-4" style={{ color: plan.popular ? colors[200] : colors[300] }} />
+                      <span className="font-medium" style={{ color: colors[50] }}>{plan.name}</span>
+                      {subscription?.plan === plan.id && (
+                        <span className="px-2 py-0.5 text-xs rounded-full" style={{ background: `${colors[200]}20`, color: colors[200] }}>Current</span>
+                      )}
+                      {plan.popular && subscription?.plan !== plan.id && (
+                        <span className="px-2 py-0.5 text-xs text-white rounded-full" style={{ background: colors[500] }}>Popular</span>
+                      )}
+                    </div>
+                    <p className="text-2xl font-bold mb-4" style={{ color: colors[50] }}>{plan.price}<span className="text-sm font-normal" style={{ color: colors[400] }}>/mo</span></p>
+                    <ul className="space-y-2 text-sm">
+                      {plan.features.map((feature, i) => (
+                        <li key={i} className="flex items-center gap-2" style={{ color: feature.startsWith('✗') ? colors[400] : colors[300] }}>
+                          {!feature.startsWith('✗') && <Check className="w-4 h-4 text-green-500" />}
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <p className="text-2xl font-bold text-slate-900 dark:text-white mb-4">$0<span className="text-sm font-normal text-slate-500">/mo</span></p>
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                      <Check className="w-4 h-4 text-green-500" /> 30 credits/month
-                    </li>
-                    <li className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                      <Check className="w-4 h-4 text-green-500" /> 1 website
-                    </li>
-                    <li className="flex items-center gap-2 text-slate-400">✗ AI Agents</li>
-                  </ul>
-                </div>
-
-                {/* Starter */}
-                <div className={`p-4 rounded-xl border ${
-                  subscription?.plan === 'starter' 
-                    ? 'border-primary bg-primary/5' 
-                    : 'border-slate-200 dark:border-slate-700'
-                }`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Zap className="w-4 h-4 text-blue-500" />
-                    <span className="font-semibold text-slate-900 dark:text-white">Starter</span>
-                    {subscription?.plan === 'starter' && (
-                      <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">Current</span>
-                    )}
-                  </div>
-                  <p className="text-2xl font-bold text-slate-900 dark:text-white mb-4">$24.99<span className="text-sm font-normal text-slate-500">/mo</span></p>
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                      <Check className="w-4 h-4 text-green-500" /> 100 credits/month
-                    </li>
-                    <li className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                      <Check className="w-4 h-4 text-green-500" /> Multi-site creation
-                    </li>
-                    <li className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                      <Check className="w-4 h-4 text-green-500" /> 1 AI Agent
-                    </li>
-                  </ul>
-                </div>
-
-                {/* Growth */}
-                <div className={`p-4 rounded-xl border-2 ${
-                  subscription?.plan === 'growth' 
-                    ? 'border-primary bg-primary/5' 
-                    : 'border-purple-500'
-                }`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Crown className="w-4 h-4 text-purple-500" />
-                    <span className="font-semibold text-slate-900 dark:text-white">Growth</span>
-                    {subscription?.plan === 'growth' ? (
-                      <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">Current</span>
-                    ) : (
-                      <span className="px-2 py-0.5 text-xs bg-purple-500 text-white rounded-full">Popular</span>
-                    )}
-                  </div>
-                  <p className="text-2xl font-bold text-slate-900 dark:text-white mb-4">$39.99<span className="text-sm font-normal text-slate-500">/mo</span></p>
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                      <Check className="w-4 h-4 text-green-500" /> 250 credits/month
-                    </li>
-                    <li className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                      <Check className="w-4 h-4 text-green-500" /> 4 AI Agents
-                    </li>
-                    <li className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                      <Check className="w-4 h-4 text-green-500" /> Email Hosting
-                    </li>
-                  </ul>
-                </div>
+                ))}
               </div>
             </div>
           </div>
@@ -539,42 +506,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         return (
           <div className="space-y-8">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-1">Account settings</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
+              <h2 className="text-xl font-medium" style={{ color: colors[50] }}>Account settings</h2>
+              <p className="text-sm mt-1" style={{ color: colors[300] }}>
                 Manage your personal account settings and preferences.
               </p>
             </div>
 
-            {/* Profile */}
-            <div className="flex items-center gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center gap-4 p-4 rounded-xl" style={{ background: colors[800], border: `1px solid ${colors[600]}` }}>
               <div 
-                className="size-16 rounded-full bg-primary flex items-center justify-center text-white font-bold text-xl overflow-hidden"
-                style={profilePhoto ? { backgroundImage: `url(${profilePhoto})`, backgroundSize: 'cover' } : {}}
+                className="w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-xl overflow-hidden"
+                style={{ 
+                  background: profilePhoto ? `url(${profilePhoto}) center/cover` : colors[500]
+                }}
               >
                 {!profilePhoto && userInitial}
               </div>
               <div>
-                <h3 className="font-semibold text-slate-900 dark:text-white">{userName}</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400">{userEmail}</p>
+                <h3 className="font-medium" style={{ color: colors[50] }}>{userName}</h3>
+                <p className="text-sm" style={{ color: colors[300] }}>{userEmail}</p>
               </div>
             </div>
 
-            {/* Account Actions */}
             <div className="space-y-3">
-              <button className="w-full flex items-center justify-between p-4 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                <span className="text-sm font-medium text-slate-900 dark:text-white">Change email</span>
-                <ExternalLink className="w-4 h-4 text-slate-400" />
-              </button>
-              <button className="w-full flex items-center justify-between p-4 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                <span className="text-sm font-medium text-slate-900 dark:text-white">Change password</span>
-                <ExternalLink className="w-4 h-4 text-slate-400" />
-              </button>
+              {['Change email', 'Change password'].map((action) => (
+                <button 
+                  key={action}
+                  className="w-full flex items-center justify-between p-4 rounded-lg transition-colors hover:bg-zinc-800"
+                  style={{ border: `1px solid ${colors[600]}` }}
+                >
+                  <span className="text-sm font-medium" style={{ color: colors[100] }}>{action}</span>
+                  <ExternalLink className="w-4 h-4" style={{ color: colors[400] }} />
+                </button>
+              ))}
             </div>
 
-            {/* Danger Zone */}
-            <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-              <h3 className="text-sm font-medium text-red-600 dark:text-red-400 mb-3">Danger zone</h3>
-              <button className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors">
+            <div className="pt-4 border-t" style={{ borderColor: colors[700] }}>
+              <h3 className="text-sm font-medium text-red-400 mb-3">Danger zone</h3>
+              <button className="px-4 py-2 text-sm font-medium text-red-400 rounded-lg transition-colors hover:bg-red-900/30" style={{ background: 'rgba(239, 68, 68, 0.1)' }}>
                 Delete account
               </button>
             </div>
@@ -586,46 +554,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         return (
           <div className="space-y-8">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-1">Connectors</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
+              <h2 className="text-xl font-medium" style={{ color: colors[50] }}>Connectors</h2>
+              <p className="text-sm mt-1" style={{ color: colors[300] }}>
                 Connect external services to enhance your workflow.
               </p>
             </div>
 
             <div className="space-y-4">
-              {/* GitHub */}
-              <div className="flex items-center justify-between p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                <div className="flex items-center gap-3">
-                  <div className="size-10 rounded-lg bg-slate-900 dark:bg-white flex items-center justify-center">
-                    <Github className="w-5 h-5 text-white dark:text-slate-900" />
+              {[
+                { name: 'GitHub', desc: 'Deploy directly to GitHub repos', icon: Github, connected: false },
+                { name: 'Vercel', desc: 'Deploy to Vercel hosting', icon: () => (
+                  <svg className="w-5 h-5 text-white" viewBox="0 0 76 65" fill="currentColor">
+                    <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
+                  </svg>
+                ), connected: true },
+              ].map((service) => (
+                <div key={service.name} className="flex items-center justify-between p-4 rounded-xl" style={{ background: colors[800], border: `1px solid ${colors[600]}` }}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: colors[900] }}>
+                      <service.icon />
+                    </div>
+                    <div>
+                      <h3 className="font-medium" style={{ color: colors[50] }}>{service.name}</h3>
+                      <p className="text-sm" style={{ color: colors[300] }}>{service.desc}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-medium text-slate-900 dark:text-white">GitHub</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Deploy directly to GitHub repos</p>
-                  </div>
+                  {service.connected ? (
+                    <span className="px-3 py-1 text-xs font-medium rounded-full" style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#4ade80' }}>
+                      Connected
+                    </span>
+                  ) : (
+                    <button className="px-4 py-2 text-sm font-medium rounded-lg transition-colors" style={{ border: `1px solid ${colors[400]}`, color: colors[200] }}>
+                      Connect
+                    </button>
+                  )}
                 </div>
-                <button className="px-4 py-2 text-sm font-medium text-primary border border-primary rounded-lg hover:bg-primary/10 transition-colors">
-                  Connect
-                </button>
-              </div>
-
-              {/* Vercel */}
-              <div className="flex items-center justify-between p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                <div className="flex items-center gap-3">
-                  <div className="size-10 rounded-lg bg-black flex items-center justify-center">
-                    <svg className="w-5 h-5 text-white" viewBox="0 0 76 65" fill="currentColor">
-                      <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="font-medium text-slate-900 dark:text-white">Vercel</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Deploy to Vercel hosting</p>
-                  </div>
-                </div>
-                <span className="px-3 py-1 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full">
-                  Connected
-                </span>
-              </div>
+              ))}
             </div>
           </div>
         );
@@ -634,16 +598,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         return (
           <div className="space-y-8">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-1">Labs</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
+              <h2 className="text-xl font-medium" style={{ color: colors[50] }}>Labs</h2>
+              <p className="text-sm mt-1" style={{ color: colors[300] }}>
                 Try experimental features before they're released.
               </p>
             </div>
 
-            <div className="p-6 rounded-xl border border-dashed border-slate-300 dark:border-slate-600 text-center">
-              <FlaskConical className="w-10 h-10 text-slate-400 mx-auto mb-3" />
-              <p className="text-slate-500 dark:text-slate-400">No experimental features available yet.</p>
-              <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">Check back soon!</p>
+            <div className="p-6 rounded-xl border border-dashed text-center" style={{ borderColor: colors[600] }}>
+              <FlaskConical className="w-10 h-10 mx-auto mb-3" style={{ color: colors[400] }} />
+              <p style={{ color: colors[300] }}>No experimental features available yet.</p>
+              <p className="text-sm mt-1" style={{ color: colors[400] }}>Check back soon!</p>
             </div>
           </div>
         );
@@ -651,88 +615,84 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       default:
         return (
           <div className="flex items-center justify-center h-64">
-            <p className="text-slate-500 dark:text-slate-400">Coming soon...</p>
+            <p style={{ color: colors[300] }}>Coming soon...</p>
           </div>
         );
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)' }}>
       <div 
         ref={modalRef}
-        className="w-full max-w-4xl max-h-[85vh] bg-white dark:bg-[#1a1d2d] rounded-2xl shadow-2xl overflow-hidden flex animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
+        className="w-full max-w-4xl max-h-[85vh] rounded-xl shadow-2xl overflow-hidden flex"
+        style={{ background: colors[900], border: `1px solid ${colors[600]}` }}
       >
         {/* Sidebar */}
-        <div className="w-64 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex flex-col overflow-y-auto">
+        <div className="w-64 border-r flex flex-col overflow-y-auto" style={{ borderColor: colors[700], background: colors[800] }}>
           <div className="p-4 flex-1">
             {sidebarItems.map((item, index) => {
-              // Render section header
               if (item.section && (index === 0 || sidebarItems[index - 1].section !== item.section)) {
                 return (
                   <React.Fragment key={`section-${item.section}`}>
-                    {index > 0 && <div className="h-px bg-slate-200 dark:bg-slate-700 my-3" />}
-                    <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-3 py-2">
+                    {index > 0 && <div className="h-px my-3" style={{ background: colors[700] }} />}
+                    <p className="text-[10px] font-semibold uppercase tracking-wider px-3 py-2" style={{ color: colors[400] }}>
                       {item.section}
                     </p>
                     <button
                       key={item.id}
                       onClick={() => setActiveTab(item.id as SettingsTab)}
-                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                        activeTab === item.id
-                          ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
-                          : 'text-slate-600 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-slate-700/50'
-                      }`}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors"
+                      style={{ 
+                        background: activeTab === item.id ? colors[700] : 'transparent',
+                        color: activeTab === item.id ? colors[50] : colors[300]
+                      }}
                     >
                       {item.isWorkspace && (
                         <div 
-                          className="size-6 rounded-md bg-primary flex items-center justify-center text-white text-xs font-bold overflow-hidden"
-                          style={workspaceAvatar ? { backgroundImage: `url(${workspaceAvatar})`, backgroundSize: 'cover' } : {}}
+                          className="w-6 h-6 rounded-md flex items-center justify-center text-white text-xs font-bold overflow-hidden"
+                          style={{ background: workspaceAvatar ? `url(${workspaceAvatar}) center/cover` : colors[500] }}
                         >
                           {!workspaceAvatar && userInitial}
                         </div>
                       )}
                       {item.isAccount && (
                         <div 
-                          className="size-6 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold overflow-hidden"
-                          style={profilePhoto ? { backgroundImage: `url(${profilePhoto})`, backgroundSize: 'cover' } : {}}
+                          className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold overflow-hidden"
+                          style={{ background: profilePhoto ? `url(${profilePhoto}) center/cover` : colors[500] }}
                         >
                           {!profilePhoto && userInitial}
                         </div>
                       )}
                       {item.icon && <item.icon className="w-4 h-4" />}
                       <span className="truncate">{item.label}</span>
-                      {activeTab === item.id && item.isWorkspace && (
-                        <Check className="w-4 h-4 ml-auto text-primary" />
-                      )}
                     </button>
                   </React.Fragment>
                 );
               }
 
-              // Render regular item
               return (
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id as SettingsTab)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                    activeTab === item.id
-                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-slate-700/50'
-                  }`}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors"
+                  style={{ 
+                    background: activeTab === item.id ? colors[700] : 'transparent',
+                    color: activeTab === item.id ? colors[50] : colors[300]
+                  }}
                 >
                   {item.isWorkspace && (
                     <div 
-                      className="size-6 rounded-md bg-primary flex items-center justify-center text-white text-xs font-bold overflow-hidden"
-                      style={workspaceAvatar ? { backgroundImage: `url(${workspaceAvatar})`, backgroundSize: 'cover' } : {}}
+                      className="w-6 h-6 rounded-md flex items-center justify-center text-white text-xs font-bold overflow-hidden"
+                      style={{ background: workspaceAvatar ? `url(${workspaceAvatar}) center/cover` : colors[500] }}
                     >
                       {!workspaceAvatar && userInitial}
                     </div>
                   )}
                   {item.isAccount && (
                     <div 
-                      className="size-6 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold overflow-hidden"
-                      style={profilePhoto ? { backgroundImage: `url(${profilePhoto})`, backgroundSize: 'cover' } : {}}
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold overflow-hidden"
+                      style={{ background: profilePhoto ? `url(${profilePhoto}) center/cover` : colors[500] }}
                     >
                       {!profilePhoto && userInitial}
                     </div>
@@ -748,16 +708,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+          <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: colors[700] }}>
             <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-slate-400">help</span>
-              <span className="text-sm text-slate-500 dark:text-slate-400">Docs</span>
+              <HelpCircle className="w-4 h-4" style={{ color: colors[400] }} />
+              <span className="text-sm" style={{ color: colors[300] }}>Docs</span>
             </div>
             <button
               onClick={onClose}
-              className="size-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center transition-colors"
+              className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-zinc-800"
             >
-              <X className="w-5 h-5 text-slate-500" />
+              <X className="w-5 h-5" style={{ color: colors[300] }} />
             </button>
           </div>
 
@@ -765,7 +725,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="flex-1 overflow-y-auto p-6">
             {loading ? (
               <div className="flex items-center justify-center h-64">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <Loader2 className="w-8 h-8 animate-spin" style={{ color: colors[300] }} />
               </div>
             ) : (
               renderContent()

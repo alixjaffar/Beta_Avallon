@@ -52,6 +52,7 @@ const HeroWave = () => {
     let animationId: number;
     let lastTime = 0;
     const targetFPS = 30;
+    const animationSpeed = 1.2; // Slightly faster motion
     const frameInterval = 1000 / targetFPS;
 
     const render = (currentTime: number) => {
@@ -61,7 +62,7 @@ const HeroWave = () => {
       if (deltaTime < frameInterval) return;
       lastTime = currentTime - (deltaTime % frameInterval);
 
-      const time = (Date.now() - startTime) * 0.001;
+      const time = (Date.now() - startTime) * 0.001 * animationSpeed;
 
       for (let y = 0; y < height; y++) {
         const u_y = (2 * y - height) / height;
