@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser } from '@/lib/auth/getUser';
 import { getSiteById, updateSite, deleteSite } from '@/data/sites';
+import { fixCarouselsInWebsiteContent } from '@/lib/html-utils';
 import { z } from 'zod';
 import { getCorsHeaders } from '@/lib/cors';
 
@@ -344,16 +345,25 @@ function fixWebsiteContent(websiteContent: any): any {
     let fixed = fixImageUrls(websiteContent);
     fixed = fixFontAwesomeLinks(fixed);
     fixed = injectMobileMenu(fixed);
+    fixed = fixCarouselsInWebsiteContent({ 'index.html': fixed })['index.html'] ?? fixed;
     return fixed;
   }
   
   if (typeof websiteContent === 'object') {
     const fixed: any = {};
+    const contentObj: Record<string, string> = {};
+    for (const [key, value] of Object.entries(websiteContent)) {
+      if (key.endsWith('.html') && typeof value === 'string') {
+        contentObj[key] = value;
+      }
+    }
+    const carouselFixed = fixCarouselsInWebsiteContent(contentObj);
     for (const [key, value] of Object.entries(websiteContent)) {
       if (key.endsWith('.html') && typeof value === 'string') {
         let html = fixImageUrls(value);
         html = fixFontAwesomeLinks(html);
         html = injectMobileMenu(html);
+        html = carouselFixed[key] ?? html;
         fixed[key] = html;
       } else if (typeof value === 'string' && (value.includes('photo-') || value.includes('font-awesome'))) {
         let content = value;
@@ -460,6 +470,11 @@ export async function PATCH(
     const body = await request.json();
     const validatedData = UpdateSiteSchema.parse(body);
 
+    // Fix carousel sections before storing
+    if (validatedData.websiteContent && typeof validatedData.websiteContent === 'object') {
+      validatedData.websiteContent = { ...validatedData.websiteContent, ...fixCarouselsInWebsiteContent(validatedData.websiteContent) };
+    }
+
     const updatedSite = await updateSite(id, user.id, validatedData);
     if (!updatedSite) {
       return NextResponse.json({ error: 'Site not found' }, { 
@@ -537,6 +552,11 @@ export async function PUT(
       receivedContentSize,
       hasWebsiteContent: !!validatedData.websiteContent
     });
+
+    // Fix carousel sections before storing (same as PATCH)
+    if (validatedData.websiteContent && typeof validatedData.websiteContent === 'object') {
+      validatedData.websiteContent = { ...validatedData.websiteContent, ...fixCarouselsInWebsiteContent(validatedData.websiteContent) };
+    }
 
     // Check if site exists first - reload to ensure latest data
     let existingSite = await getSiteById(id, user.id);

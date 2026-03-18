@@ -106,6 +106,7 @@ export async function POST(req: NextRequest) {
         years: String(years),
         type: 'domain_purchase',
       },
+      allow_promotion_codes: true,
     });
 
     logInfo('Stripe checkout session created', { 

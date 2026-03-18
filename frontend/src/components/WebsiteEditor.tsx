@@ -298,6 +298,71 @@ function injectNavigationScript(html: string): string {
   return html + navScript;
 }
 
+// Inject Swiper carousel script when team/expert/testimonial sections with arrows/dots are detected
+function injectCarouselScript(html: string): string {
+  if (!html || typeof html !== 'string') return html;
+  const lower = html.toLowerCase();
+  if (lower.includes('swiper') && lower.includes('new swiper')) return html;
+  const hasCarousel =
+    /class=["'][^"']*(?:expert|team|testimonial|member|carousel|swiper)[^"']*["']/.test(lower) ||
+    /id=["'][^"']*(?:expert|team|testimonial)[^"']*["']/.test(lower) ||
+    /meet\s+(some\s+of\s+)?our\s+(experts|team)/i.test(html) ||
+    /class=["']swiper["']/.test(lower);
+  const hasArrows =
+    /swiper-button-(prev|next)|carousel-(prev|next)|chevron|arrow|data-(prev|next)/i.test(html);
+  const hasDots =
+    /swiper-pagination|carousel-pagination|pagination|\.pagination|data-slide/i.test(html);
+  if (!hasCarousel || (!hasArrows && !hasDots)) return html;
+  if (lower.includes('swiper-bundle.min.js') && lower.includes('data-avallon-carousel-init')) return html;
+
+  const swiperCss =
+    '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">';
+  const swiperScript =
+    '<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>';
+  const carouselInit = `
+<script data-avallon-carousel-init="true">
+(function() {
+  function init() {
+    if (typeof Swiper === 'undefined') return;
+    var opts = { slidesPerView: 1, spaceBetween: 24, loop: true, breakpoints: { 768: { slidesPerView: 2 }, 1024: { slidesPerView: 3 } } };
+    document.querySelectorAll('.swiper').forEach(function(el) {
+      if (el.dataset.avallonInited === 'true') return;
+      try {
+        var pag = el.querySelector('.swiper-pagination');
+        var prev = el.querySelector('.swiper-button-prev');
+        var next = el.querySelector('.swiper-button-next');
+        new Swiper(el, Object.assign({}, opts, { pagination: pag ? { el: pag, clickable: true } : false, navigation: (prev && next) ? { nextEl: next, prevEl: prev } : false }));
+        el.dataset.avallonInited = 'true';
+      } catch (e) {}
+    });
+    document.querySelectorAll('.avallon-carousel-container').forEach(function(c) {
+      if (c.dataset.avallonInited === 'true') return;
+      var w = c.querySelector('.avallon-carousel-wrapper');
+      if (w) { try { new Swiper(c, opts); c.dataset.avallonInited = 'true'; } catch (e) {} }
+    });
+  }
+  document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', init) : init();
+})();
+</script>`;
+
+  let out = html;
+  if (!out.includes('swiper-bundle.min.css')) {
+    if (out.includes('</head>')) out = out.replace('</head>', swiperCss + '\n</head>');
+    else if (out.includes('<head>')) out = out.replace('<head>', '<head>\n' + swiperCss);
+  }
+  if (!out.includes('swiper-bundle.min.js')) {
+    if (out.includes('</body>')) out = out.replace('</body>', swiperScript + '\n</body>');
+    else if (out.includes('</html>')) out = out.replace('</html>', swiperScript + '\n</html>');
+    else out = out + swiperScript;
+  }
+  if (!out.includes('data-avallon-carousel-init')) {
+    if (out.includes('</body>')) out = out.replace('</body>', carouselInit + '\n</body>');
+    else if (out.includes('</html>')) out = out.replace('</html>', carouselInit + '\n</html>');
+    else out = out + carouselInit;
+  }
+  return out;
+}
+
 // Visual editor injection script
 function getVisualEditorScript(): string {
   return `
@@ -1997,30 +2062,21 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
           });
           
           if (siteData.websiteContent) {
-            // Check if we have a local backup that might be newer (within 24 hours)
-            const backupIsNewer = localBackup && localBackup.timestamp > (Date.now() - 24 * 60 * 60 * 1000);
-            
-            if (backupIsNewer && localBackup) {
-              // Use local backup - it's likely unsaved changes from a previous session
-              const backupPageCount = Object.keys(localBackup.content).filter(k => k.endsWith('.html')).length;
-              console.log('[Load] Using local backup (newer than server)', { 
-                backupPageCount, 
-                serverPageCount,
-                backupTimestamp: new Date(localBackup.timestamp).toISOString()
-              });
+            // Prefer server data - it's the authoritative source. Only use backup when server failed or returned nothing.
+            console.log('[Load] Using server data (authoritative source)', { serverPageCount, serverContentSize });
+            setCurrentWebsiteContent(siteData.websiteContent);
+          } else {
+            // Server returned no content - use backup if available (e.g. failed previous save)
+            console.warn('[Load] Server returned NO websiteContent!');
+            if (localBackup) {
+              console.log('[Load] Using local backup (server had no content)', { backupPageCount: Object.keys(localBackup.content).filter(k => k.endsWith('.html')).length });
               setCurrentWebsiteContent(localBackup.content);
               setHasUnsavedChanges(true);
               toast({
                 title: "Recovered Unsaved Changes",
-                description: "Found unsaved changes from your previous session. Click Save to keep them.",
+                description: "Server had no content. Your local backup is restored. Click Save to keep it.",
               });
-            } else {
-              // ALWAYS use server data - it's the authoritative source of truth
-              console.log('[Load] Using server data (authoritative source)', { serverPageCount, serverContentSize });
-              setCurrentWebsiteContent(siteData.websiteContent);
             }
-          } else {
-            console.warn('[Load] Server returned NO websiteContent!');
           }
           if (siteData.messages) {
             setMessages(siteData.messages.map((msg: any) => ({
@@ -2074,6 +2130,17 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       }
     };
   }, [site.id, currentWebsiteContent]);
+
+  // Warn before closing/refreshing with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   // Clean visual editor artifacts from HTML
   const cleanVisualEditorHtml = (html: string): string => {
@@ -2150,6 +2217,7 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       htmlContent = fixImageUrls(htmlContent);
       htmlContent = injectEditorOverrideCSS(htmlContent); // Force nav to be visible
       htmlContent = injectNavigationScript(htmlContent);
+      htmlContent = injectCarouselScript(htmlContent);
       
       // Inject visual editor script when in visual mode
       if (mode === 'visual') {
@@ -2675,7 +2743,8 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
           const verifyResponse = await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`);
           if (verifyResponse.ok) {
             const verifyData = await verifyResponse.json();
-            const verifiedContent = verifyData.websiteContent || verifyData.data?.websiteContent;
+            const verifiedSite = verifyData?.data ?? verifyData?.site ?? verifyData;
+            const verifiedContent = verifiedSite?.websiteContent;
             const localPageCount = Object.keys(updatedContent).filter(k => k.endsWith('.html')).length;
             const serverPageCount = verifiedContent ? Object.keys(verifiedContent).filter((k: string) => k.endsWith('.html')).length : 0;
             console.log('[Save] Verification:', { localPageCount, serverPageCount, match: localPageCount === serverPageCount });

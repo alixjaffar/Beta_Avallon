@@ -84,6 +84,7 @@ export async function POST(req: NextRequest) {
         ...metadata,
         source: 'ai-generated-website',
       },
+      allow_promotion_codes: true,
     });
 
     logInfo('Stripe checkout session created', { 

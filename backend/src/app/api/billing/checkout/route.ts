@@ -143,6 +143,7 @@ export async function POST(req: NextRequest) {
         userId: user.id,
         userEmail: user.email || '',
       },
+      allow_promotion_codes: true,
     });
 
     trackEvent("billing.checkout.created", {
