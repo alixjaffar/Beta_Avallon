@@ -3,6 +3,7 @@
 // UPDATED: 2025-01-07 - Using Vertex AI with Gemini 3.1 Pro Preview (global endpoint)
 // UPDATED: 2026-01-15 - Using ONLY Vertex AI SDK with Gemini 3.1 Pro Preview
 // UPDATED: 2026-03-17 - Migrated to Gemini 3.1 Pro Preview (gemini-3-pro-preview deprecated March 26, 2026)
+// UPDATED: 2026-03-18 - Switched default Vertex model to Gemini 3 Flash Preview (configurable via AVALLON_VERTEX_MODEL)
 // UPDATED: 2026-03-18 - Added fallback to standard Gemini API when Vertex AI auth fails
 // UPDATED: 2026-01-15 - Integrated SiteMirror scraper for advanced website cloning
 // Based on: https://github.com/pakelcomedy/SiteMirror/
@@ -269,7 +270,7 @@ export class GeminiWebsiteGenerator {
     }
     
       this.googleAuth = new GoogleAuth(authOptions);
-      logInfo('✅ Google Auth initialized for Gemini 3.1 Pro Preview', {
+      logInfo('✅ Google Auth initialized for Vertex Gemini', {
         projectId: this.projectId,
         method: authOptions.credentials ? 'env-var' : 'file',
       });
@@ -285,14 +286,14 @@ export class GeminiWebsiteGenerator {
       // This allows the app to start even if credentials are missing
     }
     
-    // Initialize Vertex AI SDK for Gemini 3.1 Pro Preview
+    // Initialize Vertex AI SDK for Gemini models
     // Vertex AI SDK will use the same credentials via GoogleAuth
     try {
       this.vertexAI = new VertexAI({
         project: this.projectId,
         location: this.region,
       });
-      logInfo('✅ Vertex AI SDK initialized for Gemini 3.1 Pro Preview', {
+      logInfo('✅ Vertex AI SDK initialized for Vertex Gemini', {
         projectId: this.projectId,
         region: this.region,
       });
@@ -314,7 +315,7 @@ export class GeminiWebsiteGenerator {
       hasGeminiApiKey: !!this.geminiApiKey,
       projectId: this.projectId,
       region: this.region,
-      model: 'gemini-3.1-pro-preview',
+      model: process.env.AVALLON_VERTEX_MODEL || 'gemini-3-flash-preview',
       hasJsonEnv: !!process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON,
       hasFileEnv: !!process.env.GOOGLE_APPLICATION_CREDENTIALS,
       jsonEnvLength: process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON?.length || 0,
@@ -477,8 +478,8 @@ export class GeminiWebsiteGenerator {
       promptLength: prompt.length 
     });
     
-    // Using ONLY Vertex AI SDK with Gemini 3.1 Pro Preview (global endpoint)
-    const model = 'gemini-3.1-pro-preview';
+    // Using Vertex AI SDK with configurable Gemini model (global endpoint)
+    const model = process.env.AVALLON_VERTEX_MODEL || 'gemini-3-flash-preview';
     
     if (!this.vertexAI && !this.googleAuth) {
       throw new Error('Vertex AI SDK not initialized. Please ensure GOOGLE_APPLICATION_CREDENTIALS_JSON (or GOOGLE_APPLICATION_CREDENTIALS) and GOOGLE_CLOUD_PROJECT_ID are set.');
@@ -486,7 +487,7 @@ export class GeminiWebsiteGenerator {
     
       try {
         // Log which model we're attempting
-      logInfo('🚀 Attempting Gemini 3.1 Pro Preview API call', { 
+      logInfo('🚀 Attempting Vertex Gemini API call', { 
           model, 
           isMultiPage,
         projectId: this.projectId,
@@ -495,10 +496,10 @@ export class GeminiWebsiteGenerator {
         
       let content: string = '';
         
-      // Try global endpoint first for Gemini 3.1 Pro Preview
+      // Try global endpoint first for the configured Gemini model
       if (this.googleAuth) {
         try {
-          logInfo('Using global endpoint for Gemini 3.1 Pro Preview', { model });
+          logInfo('Using global endpoint for Vertex Gemini model', { model });
           
           // Validate that we have credentials before trying to get token
           if (!this.googleAuth) {
@@ -581,12 +582,12 @@ export class GeminiWebsiteGenerator {
           );
           
           if (!response.data.candidates || response.data.candidates.length === 0) {
-            throw new Error('Gemini 3.1 Pro Preview returned no candidates');
+            throw new Error(`Vertex Gemini model (${model}) returned no candidates`);
           }
           
           const candidate = response.data.candidates[0];
           if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
-            throw new Error('Gemini 3.1 Pro Preview candidate has no content parts');
+            throw new Error(`Vertex Gemini model (${model}) candidate has no content parts`);
           }
           
           content = candidate.content.parts[0].text || '';
@@ -610,7 +611,7 @@ export class GeminiWebsiteGenerator {
       
       // If global endpoint failed or not available, use Vertex AI SDK
       if (this.vertexAI && !content) {
-        logInfo('Using Vertex AI SDK for Gemini 3.1 Pro Preview', { model, projectId: this.projectId, region: this.region });
+        logInfo('Using Vertex AI SDK for Vertex Gemini model', { model, projectId: this.projectId, region: this.region });
         
           const generativeModel = this.vertexAI.getGenerativeModel({
             model: model,
@@ -655,7 +656,7 @@ export class GeminiWebsiteGenerator {
       }
       
       if (!content) {
-        throw new Error('No content generated from Gemini 3.1 Pro Preview');
+        throw new Error(`No content generated from Vertex Gemini model (${model})`);
         }
         
         if (!content) {
@@ -672,7 +673,7 @@ export class GeminiWebsiteGenerator {
         });
         
         // Log success with model version for verification
-      logInfo('🎯 SUCCESS: Using Gemini 3.1 Pro Preview', { model, contentLength: content.length });
+      logInfo('🎯 SUCCESS: Using Vertex Gemini model', { model, contentLength: content.length });
         
         return this.parseGeneratedCode(content, currentCode);
       } catch (error: any) {
@@ -684,8 +685,8 @@ export class GeminiWebsiteGenerator {
           JSON.stringify(errorData) ||
           '';
         
-      logError('❌ Vertex AI Gemini 3.1 Pro Preview failed', error, {
-        model: 'gemini-3.1-pro-preview',
+      logError('❌ Vertex AI Gemini model failed', error, {
+        model,
         projectId: this.projectId,
         region: this.region,
         status: errorStatus,
@@ -723,10 +724,10 @@ export class GeminiWebsiteGenerator {
         throw new Error(`Vertex AI quota exceeded. ${errorMessage}. Please check your Google Cloud billing/quota.`);
     }
       if (errorMessage.includes('NOT_FOUND') || errorMessage.includes('404')) {
-        throw new Error(`Gemini 3.1 Pro Preview model not found. Please ensure the model is available in your project ${this.projectId} and region ${this.region}. Error: ${errorMessage}`);
+        throw new Error(`Vertex Gemini model (${model}) not found. Please ensure the model is available in your project ${this.projectId} and region ${this.region}. Error: ${errorMessage}`);
       }
       
-      throw new Error(`Gemini 3.1 Pro Preview failed: ${errorMessage}`);
+      throw new Error(`Vertex Gemini model (${model}) failed: ${errorMessage}`);
     }
   }
 
