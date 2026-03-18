@@ -330,14 +330,14 @@ function getVisualEditorScript(): string {
   function createOverlay() {
     overlay = document.createElement('div');
     overlay.id = 'avallon-selection-overlay';
-    overlay.style.cssText = 'position:absolute;pointer-events:none;border:2px solid #6366f1;background:rgba(99,102,241,0.1);z-index:99999;transition:all 0.1s ease;display:none;';
+    overlay.style.cssText = 'position:absolute;pointer-events:none;border:2px solid #a1a1aa;background:rgba(161,161,170,0.1);z-index:99999;transition:all 0.1s ease;display:none;';
     document.body.appendChild(overlay);
     
     // Create drag handle (shows at top of selection)
     const dragHandle = document.createElement('div');
     dragHandle.id = 'avallon-drag-handle';
     dragHandle.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>';
-    dragHandle.style.cssText = 'position:absolute;width:28px;height:28px;background:#6366f1;border-radius:4px;z-index:100003;display:none;cursor:grab;pointer-events:auto;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+    dragHandle.style.cssText = 'position:absolute;width:28px;height:28px;background:#a1a1aa;border-radius:4px;z-index:100003;display:none;cursor:grab;pointer-events:auto;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
     dragHandle.addEventListener('mousedown', startDrag);
     document.body.appendChild(dragHandle);
     window.dragHandleEl = dragHandle;
@@ -345,7 +345,7 @@ function getVisualEditorScript(): string {
     // Create drop indicator line
     dropIndicator = document.createElement('div');
     dropIndicator.id = 'avallon-drop-indicator';
-    dropIndicator.style.cssText = 'position:absolute;background:#6366f1;z-index:100001;display:none;pointer-events:none;border-radius:2px;';
+    dropIndicator.style.cssText = 'position:absolute;background:#a1a1aa;z-index:100001;display:none;pointer-events:none;border-radius:2px;';
     document.body.appendChild(dropIndicator);
     
     // Create resize handles
@@ -354,7 +354,7 @@ function getVisualEditorScript(): string {
       const handle = document.createElement('div');
       handle.className = 'avallon-handle avallon-handle-' + pos;
       handle.dataset.position = pos;
-      handle.style.cssText = 'position:absolute;width:10px;height:10px;background:#6366f1;border:2px solid white;border-radius:2px;z-index:100000;cursor:' + getCursor(pos) + ';display:none;box-shadow:0 2px 4px rgba(0,0,0,0.2);';
+      handle.style.cssText = 'position:absolute;width:10px;height:10px;background:#a1a1aa;border:2px solid white;border-radius:2px;z-index:100000;cursor:' + getCursor(pos) + ';display:none;box-shadow:0 2px 4px rgba(0,0,0,0.2);';
       handle.addEventListener('mousedown', startResize);
       document.body.appendChild(handle);
       handles.push(handle);
@@ -487,7 +487,7 @@ function getVisualEditorScript(): string {
     }).join(' ') + ' Z';
     path.setAttribute('d', pathD);
     path.setAttribute('fill', 'rgba(99, 102, 241, 0.1)');
-    path.setAttribute('stroke', '#6366f1');
+    path.setAttribute('stroke', '#a1a1aa');
     path.setAttribute('stroke-width', '2');
     path.setAttribute('stroke-dasharray', '4');
     svg.appendChild(path);
@@ -537,7 +537,7 @@ function getVisualEditorScript(): string {
       const midEl = document.createElement('div');
       midEl.className = 'avallon-shape-midpoint';
       midEl.dataset.afterIndex = i;
-      midEl.style.cssText = 'position:absolute;width:8px;height:8px;background:white;border:2px solid #6366f1;border-radius:50%;cursor:pointer;pointer-events:auto;transform:translate(-50%,-50%);opacity:0.7;left:' + midX + 'px;top:' + midY + 'px;';
+      midEl.style.cssText = 'position:absolute;width:8px;height:8px;background:white;border:2px solid #a1a1aa;border-radius:50%;cursor:pointer;pointer-events:auto;transform:translate(-50%,-50%);opacity:0.7;left:' + midX + 'px;top:' + midY + 'px;';
       midEl.title = 'Click to add point';
       
       midEl.addEventListener('click', function(e) {
@@ -799,7 +799,7 @@ function getVisualEditorScript(): string {
     // Create coordinates tooltip
     coordsTooltip = document.createElement('div');
     coordsTooltip.id = 'avallon-coords-tooltip';
-    coordsTooltip.style.cssText = 'position:fixed;background:#1e1e2e;color:#fff;padding:4px 8px;border-radius:4px;font-size:11px;font-family:monospace;z-index:100004;pointer-events:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+    coordsTooltip.style.cssText = 'position:fixed;background:#18181b;color:#fff;padding:4px 8px;border-radius:4px;font-size:11px;font-family:monospace;z-index:100004;pointer-events:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
     document.body.appendChild(coordsTooltip);
     
     // Create container highlight for free position mode (default)
@@ -940,9 +940,9 @@ function getVisualEditorScript(): string {
             // Show drop indicator
             const absRect = getAbsoluteRect(target);
             if (dropPosition === 'before') {
-              dropIndicator.style.cssText = 'position:absolute;background:#6366f1;z-index:100001;display:block;pointer-events:none;border-radius:2px;left:' + absRect.left + 'px;top:' + (absRect.top - 2) + 'px;width:' + absRect.width + 'px;height:4px;';
+              dropIndicator.style.cssText = 'position:absolute;background:#a1a1aa;z-index:100001;display:block;pointer-events:none;border-radius:2px;left:' + absRect.left + 'px;top:' + (absRect.top - 2) + 'px;width:' + absRect.width + 'px;height:4px;';
             } else {
-              dropIndicator.style.cssText = 'position:absolute;background:#6366f1;z-index:100001;display:block;pointer-events:none;border-radius:2px;left:' + absRect.left + 'px;top:' + (absRect.bottom - 2) + 'px;width:' + absRect.width + 'px;height:4px;';
+              dropIndicator.style.cssText = 'position:absolute;background:#a1a1aa;z-index:100001;display:block;pointer-events:none;border-radius:2px;left:' + absRect.left + 'px;top:' + (absRect.bottom - 2) + 'px;width:' + absRect.width + 'px;height:4px;';
             }
           } else {
             dropTarget = null;
@@ -1214,12 +1214,12 @@ function getVisualEditorScript(): string {
         case 'button':
           newElement = document.createElement('button');
           newElement.textContent = content || 'Click Me';
-          newElement.style.cssText = 'background:#6366f1;color:white;padding:12px 24px;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;position:absolute;left:50px;top:50px;';
+          newElement.style.cssText = 'background:#a1a1aa;color:white;padding:12px 24px;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;position:absolute;left:50px;top:50px;';
           break;
         case 'container':
           newElement = document.createElement('div');
-          newElement.style.cssText = 'width:300px;height:200px;background:rgba(99,102,241,0.1);border:2px dashed #6366f1;border-radius:8px;position:absolute;left:50px;top:50px;display:flex;align-items:center;justify-content:center;';
-          newElement.innerHTML = '<span style="color:#6366f1;font-size:14px;">Container - drag elements here</span>';
+          newElement.style.cssText = 'width:300px;height:200px;background:rgba(161,161,170,0.1);border:2px dashed #a1a1aa;border-radius:8px;position:absolute;left:50px;top:50px;display:flex;align-items:center;justify-content:center;';
+          newElement.innerHTML = '<span style="color:#a1a1aa;font-size:14px;">Container - drag elements here</span>';
           break;
         case 'card':
           newElement = document.createElement('div');
@@ -1230,7 +1230,7 @@ function getVisualEditorScript(): string {
           newElement = document.createElement('span');
           newElement.className = 'material-symbols-outlined';
           newElement.textContent = content || 'star';
-          newElement.style.cssText = 'font-size:48px;color:#6366f1;position:absolute;left:50px;top:50px;';
+          newElement.style.cssText = 'font-size:48px;color:#a1a1aa;position:absolute;left:50px;top:50px;';
           break;
         case 'divider':
           newElement = document.createElement('hr');
@@ -1525,7 +1525,7 @@ function getVisualEditorScript(): string {
     if (!hoverOverlay) {
       hoverOverlay = document.createElement('div');
       hoverOverlay.id = 'avallon-hover-overlay';
-      hoverOverlay.style.cssText = 'position:absolute;pointer-events:none;border:1px dashed #6366f1;background:rgba(99,102,241,0.05);z-index:99998;transition:all 0.1s ease;';
+      hoverOverlay.style.cssText = 'position:absolute;pointer-events:none;border:1px dashed #a1a1aa;background:rgba(161,161,170,0.05);z-index:99998;transition:all 0.1s ease;';
       document.body.appendChild(hoverOverlay);
     }
     
@@ -3785,7 +3785,7 @@ Generated by Avallon - ${new Date().toISOString()}
   return (
     <div className={`font-display overflow-hidden h-screen flex flex-col antialiased ${isLight ? 'bg-gray-50 text-slate-900' : 'bg-background-dark text-white'}`}>
       {/* Top Navigation Bar - Mobile Responsive */}
-      <header className={`flex flex-col sm:flex-row items-start sm:items-center justify-between border-b px-3 sm:px-6 py-2 sm:py-3 min-h-16 shrink-0 z-20 ${isLight ? 'bg-white border-slate-200' : 'bg-[#111218] border-panel-border'}`}>
+      <header className={`flex flex-col sm:flex-row items-start sm:items-center justify-between border-b px-3 sm:px-6 py-2 sm:py-3 min-h-16 shrink-0 z-20 ${isLight ? 'bg-white border-slate-200' : 'bg-[#09090b] border-panel-border'}`}>
         {/* Logo + Mode Toggle */}
         <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-between sm:justify-start mb-2 sm:mb-0">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -3795,14 +3795,14 @@ Generated by Avallon - ${new Date().toISOString()}
           >
             <span className="material-symbols-outlined text-[20px]">arrow_back</span>
           </button>
-            <div className="size-7 sm:size-8 rounded-lg bg-gradient-to-br from-primary to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-primary/20 flex-shrink-0">
+            <div className="size-7 sm:size-8 rounded-lg bg-gradient-to-br from-zinc-600 to-zinc-800 flex items-center justify-center text-white shadow-lg shadow-zinc-800/30 flex-shrink-0">
               <span className="material-symbols-outlined text-[18px] sm:text-[20px]">auto_awesome</span>
           </div>
             <h1 className="text-base sm:text-lg font-bold tracking-tight truncate min-w-0">{site.name}</h1>
         </div>
         
           {/* Mode Toggle - Mobile */}
-          <div className={`sm:hidden rounded-lg p-0.5 flex shadow-lg flex-shrink-0 ${isLight ? 'bg-slate-100 border border-slate-200' : 'bg-[#1a1f2e] border border-[#3a3f52]'}`}>
+          <div className={`sm:hidden rounded-lg p-0.5 flex shadow-lg flex-shrink-0 ${isLight ? 'bg-slate-100 border border-slate-200' : 'bg-[#0f0f10] border border-[#52525b]'}`}>
             <button
               onClick={() => { setMode('ai'); setSelectedElement(null); }}
               className={`px-2 py-1.5 text-xs font-medium rounded transition-all flex items-center gap-1 ${
@@ -3828,7 +3828,7 @@ Generated by Avallon - ${new Date().toISOString()}
         
         {/* Mode Toggle + Page Selector - Desktop */}
         <div className="hidden sm:flex items-center gap-4">
-          <div className={`rounded-lg p-1 flex shadow-lg ${isLight ? 'bg-slate-100 border border-slate-200' : 'bg-[#1a1f2e] border border-[#3a3f52]'}`}>
+          <div className={`rounded-lg p-1 flex shadow-lg ${isLight ? 'bg-slate-100 border border-slate-200' : 'bg-[#0f0f10] border border-[#52525b]'}`}>
             <button
               onClick={() => { setMode('ai'); setSelectedElement(null); }}
               className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${
@@ -3918,8 +3918,8 @@ Generated by Avallon - ${new Date().toISOString()}
             onClick={() => setShowCode(!showCode)}
             className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
               showCode 
-                ? 'bg-purple-600 text-white' 
-                : isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-panel-border hover:bg-[#323645] text-white border border-transparent hover:border-gray-600'
+                ? 'bg-zinc-600 text-white' 
+                : isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-panel-border hover:bg-[#3f3f46] text-white border border-transparent hover:border-gray-600'
             }`}
             title="View Code"
           >
@@ -3930,7 +3930,7 @@ Generated by Avallon - ${new Date().toISOString()}
           {/* Import Website Button */}
           <button 
             onClick={() => setShowImportModal(true)}
-            className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-panel-border hover:bg-[#323645] text-white border border-transparent hover:border-gray-600'}`}
+            className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-panel-border hover:bg-[#3f3f46] text-white border border-transparent hover:border-gray-600'}`}
             title="Import"
           >
             <span className="material-symbols-outlined text-[16px] sm:text-[18px]">upload_file</span>
@@ -3951,7 +3951,7 @@ Generated by Avallon - ${new Date().toISOString()}
           
           <button 
             onClick={() => previewUrl && window.open(previewUrl, '_blank')}
-            className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-panel-border hover:bg-[#323645] text-white border border-transparent hover:border-gray-600'}`}
+            className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-panel-border hover:bg-[#3f3f46] text-white border border-transparent hover:border-gray-600'}`}
             title="Preview"
           >
             <span className="material-symbols-outlined text-[16px] sm:text-[18px]">visibility</span>
@@ -3973,7 +3973,7 @@ Generated by Avallon - ${new Date().toISOString()}
           <button 
             onClick={() => setShowDomainModal(true)}
             disabled={!localVercelProjectId && !site.vercelProjectId}
-            className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-purple-600 hover:bg-purple-500 text-white'}`}
+            className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-zinc-600 hover:bg-zinc-500 text-white'}`}
             title={(localVercelProjectId || site.vercelProjectId) ? "Add custom domain" : "Publish first to add a domain"}
           >
             <span className="material-symbols-outlined text-[16px] sm:text-[18px]">language</span>
@@ -4004,10 +4004,10 @@ Generated by Avallon - ${new Date().toISOString()}
       {/* Code View Modal */}
       {showCode && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="bg-[#1a1f2e] rounded-xl w-full max-w-4xl max-h-[80vh] flex flex-col border border-panel-border shadow-2xl">
+          <div className="bg-[#0f0f10] rounded-xl w-full max-w-4xl max-h-[80vh] flex flex-col border border-panel-border shadow-2xl">
             <div className="flex items-center justify-between px-6 py-4 border-b border-panel-border">
               <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-purple-400">code</span>
+                <span className="material-symbols-outlined text-zinc-400">code</span>
                 <h2 className="text-lg font-bold text-white">View Code</h2>
                 <select
                   value={effectiveCurrentPage}
@@ -4027,7 +4027,7 @@ Generated by Avallon - ${new Date().toISOString()}
               </button>
             </div>
             <div className="flex-1 overflow-auto p-4">
-              <pre className="text-sm text-gray-300 font-mono whitespace-pre-wrap break-words bg-[#0d1117] p-4 rounded-lg border border-panel-border">
+              <pre className="text-sm text-gray-300 font-mono whitespace-pre-wrap break-words bg-[#09090b] p-4 rounded-lg border border-panel-border">
                 {currentWebsiteContent[effectiveCurrentPage] || 'No content available'}
               </pre>
             </div>
@@ -4056,7 +4056,7 @@ Generated by Avallon - ${new Date().toISOString()}
       {/* Main Layout - Mobile Responsive */}
       <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         {/* Left Panel: AI Chat or Visual Properties - Hidden on mobile, toggleable */}
-        <aside className={`${mode === 'ai' ? 'flex' : 'hidden md:flex'} flex-col w-full md:w-[35%] lg:w-[30%] md:min-w-[320px] md:max-w-[450px] border-r relative z-10 ${isLight ? 'bg-white border-slate-200' : 'bg-[#111218] border-panel-border'}`}>
+        <aside className={`${mode === 'ai' ? 'flex' : 'hidden md:flex'} flex-col w-full md:w-[35%] lg:w-[30%] md:min-w-[320px] md:max-w-[450px] border-r relative z-10 ${isLight ? 'bg-white border-slate-200' : 'bg-[#09090b] border-panel-border'}`}>
           {mode === 'ai' ? (
             <>
               {/* AI Mode: Chat Interface */}
@@ -4144,7 +4144,7 @@ Generated by Avallon - ${new Date().toISOString()}
               </div>
               
               {/* Input Area */}
-              <div className={`p-4 border-t ${isLight ? 'bg-white border-slate-200' : 'bg-[#111218] border-panel-border'}`}>
+              <div className={`p-4 border-t ${isLight ? 'bg-white border-slate-200' : 'bg-[#09090b] border-panel-border'}`}>
                 {/* Uploaded Images Preview */}
                 {uploadedImages.length > 0 && (
                   <div className="flex gap-2 overflow-x-auto pb-3 mb-2">
@@ -4938,7 +4938,7 @@ Generated by Avallon - ${new Date().toISOString()}
                                   <div className="w-full border-t border-panel-border"></div>
                                 </div>
                                 <div className="relative flex justify-center text-xs">
-                                  <span className="bg-[#111218] px-2 text-gray-500">or upload</span>
+                                  <span className="bg-[#09090b] px-2 text-gray-500">or upload</span>
                                 </div>
                               </div>
                               
@@ -5454,10 +5454,10 @@ Generated by Avallon - ${new Date().toISOString()}
       {/* Add New Page Modal */}
       {showAddPageModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className={`w-full max-w-md rounded-2xl shadow-2xl ${isLight ? 'bg-white' : 'bg-[#1a1f2e] border border-panel-border'}`}>
+          <div className={`w-full max-w-md rounded-2xl shadow-2xl ${isLight ? 'bg-white' : 'bg-[#0f0f10] border border-panel-border'}`}>
             <div className={`flex items-center justify-between px-6 py-4 border-b ${isLight ? 'border-slate-200' : 'border-panel-border'}`}>
               <div className="flex items-center gap-3">
-                <div className="size-10 rounded-lg bg-gradient-to-br from-primary to-indigo-600 flex items-center justify-center">
+                <div className="size-10 rounded-lg bg-gradient-to-br from-zinc-600 to-zinc-800 flex items-center justify-center">
                   <span className="material-symbols-outlined text-white text-[20px]">add_circle</span>
                 </div>
                 <div>
@@ -5539,10 +5539,10 @@ Generated by Avallon - ${new Date().toISOString()}
       {/* Custom Domain Modal - Mobile Responsive */}
       {showDomainModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm">
-          <div className={`w-full max-w-lg max-h-[90vh] sm:max-h-[85vh] rounded-xl sm:rounded-2xl shadow-2xl overflow-y-auto ${isLight ? 'bg-white' : 'bg-[#1a1f2e] border border-panel-border'}`}>
-            <div className={`flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b sticky top-0 ${isLight ? 'bg-white border-slate-200' : 'bg-[#1a1f2e] border-panel-border'}`}>
+          <div className={`w-full max-w-lg max-h-[90vh] sm:max-h-[85vh] rounded-xl sm:rounded-2xl shadow-2xl overflow-y-auto ${isLight ? 'bg-white' : 'bg-[#0f0f10] border border-panel-border'}`}>
+            <div className={`flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b sticky top-0 ${isLight ? 'bg-white border-slate-200' : 'bg-[#0f0f10] border-panel-border'}`}>
               <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-purple-400">language</span>
+                <span className="material-symbols-outlined text-zinc-400">language</span>
                 <h2 className={`text-lg font-bold ${isLight ? 'text-slate-800' : 'text-white'}`}>Custom Domain</h2>
               </div>
               <button 
@@ -5580,7 +5580,7 @@ Generated by Avallon - ${new Date().toISOString()}
                   <button
                     onClick={handleAddDomain}
                     disabled={domainLoading || !customDomain.trim()}
-                    className="px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-h-[44px]"
+                    className="px-4 py-2.5 bg-zinc-600 hover:bg-zinc-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-h-[44px]"
                   >
                     {domainLoading ? (
                       <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
