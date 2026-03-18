@@ -695,7 +695,7 @@ export class GeminiWebsiteGenerator {
         if (isAuthError) {
           logInfo('🔄 Vertex AI auth failed, trying standard Gemini API fallback...', { hasApiKey: true });
           try {
-            const fallbackResult = await this.generateWithStandardGeminiApi(prompt, isModification, maxOutputTokens, timeout);
+            const fallbackResult = await this.generateWithStandardGeminiApi(prompt, !!isModification, maxOutputTokens, timeout);
             return this.parseGeneratedCode(fallbackResult, currentCode);
           } catch (fallbackError: any) {
             logError('❌ Standard Gemini API fallback also failed', fallbackError);
