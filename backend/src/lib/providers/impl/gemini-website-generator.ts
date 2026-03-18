@@ -3,6 +3,7 @@
 // UPDATED: 2025-01-07 - Using Vertex AI with Gemini 3.1 Pro Preview (global endpoint)
 // UPDATED: 2026-01-15 - Using ONLY Vertex AI SDK with Gemini 3.1 Pro Preview
 // UPDATED: 2026-03-17 - Migrated to Gemini 3.1 Pro Preview (gemini-3-pro-preview deprecated March 26, 2026)
+// UPDATED: 2026-03-18 - Added fallback to standard Gemini API when Vertex AI auth fails
 // UPDATED: 2026-01-15 - Integrated SiteMirror scraper for advanced website cloning
 // Based on: https://github.com/pakelcomedy/SiteMirror/
 import axios from 'axios';
@@ -111,6 +112,7 @@ export class GeminiWebsiteGenerator {
   private googleAuth: GoogleAuth | null = null;
   private projectId: string;
   private region: string;
+  private geminiApiKey: string | null = null;
 
   constructor() {
     // Google Cloud Project configuration
@@ -301,10 +303,15 @@ export class GeminiWebsiteGenerator {
       });
     }
     
+    // Initialize standard Gemini API key as fallback
+    const apiKey = process.env.GEMINI_API_KEY || '';
+    this.geminiApiKey = apiKey.replace(/^["']|["']$/g, '').trim() || null;
+    
     // Debug: Log config
     logInfo('GeminiWebsiteGenerator initialized', {
       hasGoogleAuth: !!this.googleAuth,
       hasVertexAI: !!this.vertexAI,
+      hasGeminiApiKey: !!this.geminiApiKey,
       projectId: this.projectId,
       region: this.region,
       model: 'gemini-3.1-pro-preview',
@@ -671,12 +678,31 @@ export class GeminiWebsiteGenerator {
       } catch (error: any) {
         const errorMessage = error.message || error.response?.data?.error?.message || '';
         
-      logError('❌ Gemini 3.1 Pro Preview failed', error, {
+      logError('❌ Vertex AI Gemini 3.1 Pro Preview failed', error, {
         model: 'gemini-3.1-pro-preview',
         projectId: this.projectId,
         region: this.region,
         lastMessage: errorMessage
       });
+      
+      // Try fallback to standard Gemini API if we have an API key
+      if (this.geminiApiKey) {
+        const isAuthError = errorMessage.includes('PERMISSION_DENIED') || 
+                           errorMessage.includes('UNAUTHENTICATED') || 
+                           errorMessage.includes('401') || 
+                           errorMessage.includes('403');
+        
+        if (isAuthError) {
+          logInfo('🔄 Vertex AI auth failed, trying standard Gemini API fallback...', { hasApiKey: true });
+          try {
+            const fallbackResult = await this.generateWithStandardGeminiApi(prompt, isModification, maxOutputTokens, timeout);
+            return this.parseGeneratedCode(fallbackResult, currentCode);
+          } catch (fallbackError: any) {
+            logError('❌ Standard Gemini API fallback also failed', fallbackError);
+            throw new Error(`Both Vertex AI and standard Gemini API failed. Vertex AI error: ${errorMessage}. Fallback error: ${fallbackError?.message || 'Unknown'}`);
+          }
+        }
+      }
       
       // Provide helpful error messages
       if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('UNAUTHENTICATED') || errorMessage.includes('401') || errorMessage.includes('403')) {
@@ -694,6 +720,91 @@ export class GeminiWebsiteGenerator {
       
       throw new Error(`Gemini 3.1 Pro Preview failed: ${errorMessage}`);
     }
+  }
+
+  /**
+   * Fallback method using the standard Gemini API (generativelanguage.googleapis.com)
+   * Used when Vertex AI authentication fails
+   */
+  private async generateWithStandardGeminiApi(
+    prompt: string,
+    isModification: boolean,
+    maxOutputTokens: number,
+    timeout: number
+  ): Promise<string> {
+    if (!this.geminiApiKey) {
+      throw new Error('GEMINI_API_KEY not configured for fallback');
+    }
+
+    // Try models in order: gemini-2.0-flash-exp (fast), then gemini-1.5-pro
+    const models = ['gemini-2.0-flash-exp', 'gemini-1.5-pro'];
+    let lastError: any = null;
+    
+    for (const model of models) {
+      try {
+        logInfo('🚀 Calling standard Gemini API', { model });
+        
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`;
+        
+        const response = await axios.post(
+          url,
+          {
+            contents: [
+              {
+                parts: [{ text: prompt }]
+              }
+            ],
+            generationConfig: {
+              temperature: isModification ? 0.0 : 0.5,
+              topP: isModification ? 0.5 : 0.95,
+              topK: isModification ? 1 : 32,
+              maxOutputTokens: Math.min(maxOutputTokens, 8192), // Standard API has lower limits
+            },
+            safetySettings: [
+              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' }
+            ]
+          },
+          {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: timeout
+          }
+        );
+        
+        if (!response.data.candidates || response.data.candidates.length === 0) {
+          throw new Error(`${model} returned no candidates`);
+        }
+        
+        const content = response.data.candidates[0]?.content?.parts?.[0]?.text || '';
+        
+        if (!content) {
+          throw new Error(`${model} returned empty content`);
+        }
+        
+        // Extract token usage if available
+        if (response.data.usageMetadata) {
+          const usage = response.data.usageMetadata;
+          this.lastTokenUsage = {
+            input: usage.promptTokenCount || 0,
+            output: usage.candidatesTokenCount || 0,
+            total: usage.totalTokenCount || 0,
+          };
+          logInfo('Token usage from standard Gemini API', this.lastTokenUsage);
+        }
+        
+        logInfo('✅ Standard Gemini API fallback succeeded', { model, contentLength: content.length });
+        return content;
+        
+      } catch (modelError: any) {
+        lastError = modelError;
+        logError(`Standard Gemini API failed with ${model}`, modelError);
+        // Continue to next model
+      }
+    }
+    
+    throw lastError || new Error('All standard Gemini API models failed');
   }
 
   /**
