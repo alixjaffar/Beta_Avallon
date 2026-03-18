@@ -736,8 +736,9 @@ export class GeminiWebsiteGenerator {
       throw new Error('GEMINI_API_KEY not configured for fallback');
     }
 
-    // Try models in order: gemini-2.0-flash-exp (fast), then gemini-1.5-pro
-    const models = ['gemini-2.0-flash-exp', 'gemini-1.5-pro'];
+    // Try models in order (standard Gemini API, Generative Language v1beta).
+    // Keep this list conservative to avoid 404s due to model name changes.
+    const models = ['gemini-2.0-flash-001', 'gemini-1.5-pro'];
     let lastError: any = null;
     
     for (const model of models) {
