@@ -18,7 +18,14 @@ export async function POST(req: NextRequest) {
   
   try {
     const user = await getUser();
-    const body = await req.json();
+    // Require real auth - mock user means x-user-email/session was not sent
+    if (user.id === 'mock_user_id' || !user.email || user.email === 'test@example.com') {
+      return NextResponse.json(
+        { error: "Authentication required. Please ensure you are logged in and refresh the page." },
+        { status: 401, headers: corsHeaders }
+      );
+    }
+    const body = await req.json().catch(() => ({}));
     const { sessionId, plan } = body;
 
     if (!sessionId && !plan) {

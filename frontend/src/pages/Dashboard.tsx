@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { apiClient, Site } from "@/lib/api";
@@ -44,6 +44,7 @@ const Dashboard = () => {
   const [credits, setCredits] = useState<number | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const upgradeProcessedRef = useRef(false);
 
   const baseUrl = process.env.NODE_ENV === 'production' 
     ? 'https://beta-avallon.onrender.com' 
@@ -289,6 +290,54 @@ const Dashboard = () => {
       return () => document.removeEventListener('click', handleClickOutside);
     }
   }, [menuOpenId, showProfileMenu]);
+
+  // Handle upgrade success redirect from Stripe checkout
+  useEffect(() => {
+    if (loading || !user) return;
+    const params = new URLSearchParams(location.search);
+    const upgrade = params.get('upgrade');
+    const sessionId = params.get('session_id');
+    const plan = params.get('plan');
+    if (upgrade !== 'success' || (!sessionId && !plan)) return;
+    if (upgradeProcessedRef.current) return;
+    upgradeProcessedRef.current = true;
+
+    const activatePlan = async () => {
+      try {
+        const response = await fetchWithAuth(`${baseUrl}/api/billing/activate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: sessionId || undefined, plan: plan || 'starter' }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          toast({
+            title: "Upgrade Successful!",
+            description: data.message || `You're now on the ${plan || 'starter'} plan with ${data.credits ?? ''} credits.`,
+          });
+          await loadCredits();
+        } else {
+          const err = await response.json().catch(() => ({}));
+          toast({
+            title: "Activation Failed",
+            description: err.error || "Could not activate your plan. Please contact support.",
+            variant: "destructive",
+          });
+          upgradeProcessedRef.current = false; // Allow retry
+        }
+      } catch (error: any) {
+        toast({
+          title: "Activation Failed",
+          description: error?.message || "Could not activate your plan. Please try again.",
+          variant: "destructive",
+        });
+        upgradeProcessedRef.current = false; // Allow retry
+      } finally {
+        window.history.replaceState({}, document.title, '/dashboard');
+      }
+    };
+    activatePlan();
+  }, [loading, user, location.search, baseUrl]);
 
   if (loading) {
     return (
