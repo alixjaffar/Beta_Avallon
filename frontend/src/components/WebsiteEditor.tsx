@@ -1309,28 +1309,30 @@ function getVisualEditorScript(): string {
           newElement = document.createElement('div');
           newElement.className = 'swiper';
           newElement.style.cssText = 'width:100%;max-width:600px;position:relative;margin:20px auto;overflow:hidden;';
-          newElement.innerHTML = `
-            <div class="swiper-wrapper" style="display:flex;transition:transform 0.3s ease;">
-              <div class="swiper-slide" style="min-width:100%;padding:24px;box-sizing:border-box;background:rgba(241,245,249,0.9);border-radius:12px;text-align:center;">
-                <div style="width:80px;height:80px;margin:0 auto 16px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>
-                <h3 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111;">Slide 1</h3>
-                <p style="margin:0;font-size:14px;color:#666;">Click to edit this slide.</p>
-              </div>
-              <div class="swiper-slide" style="min-width:100%;padding:24px;box-sizing:border-box;background:rgba(241,245,249,0.9);border-radius:12px;text-align:center;">
-                <div style="width:80px;height:80px;margin:0 auto 16px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>
-                <h3 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111;">Slide 2</h3>
-                <p style="margin:0;font-size:14px;color:#666;">Add your content here.</p>
-              </div>
-              <div class="swiper-slide" style="min-width:100%;padding:24px;box-sizing:border-box;background:rgba(241,245,249,0.9);border-radius:12px;text-align:center;">
-                <div style="width:80px;height:80px;margin:0 auto 16px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>
-                <h3 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111;">Slide 3</h3>
-                <p style="margin:0;font-size:14px;color:#666;">Fully editable.</p>
-              </div>
-            </div>
-            <div class="swiper-button-prev" style="position:absolute;left:0;top:50%;transform:translateY(-50%);width:44px;height:44px;background:#333;color:white;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10;">‹</div>
-            <div class="swiper-button-next" style="position:absolute;right:0;top:50%;transform:translateY(-50%);width:44px;height:44px;background:#333;color:white;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10;">›</div>
-            <div class="swiper-pagination" style="position:absolute;bottom:8px;left:0;right:0;display:flex;justify-content:center;gap:8px;z-index:10;"></div>
-          `;
+          // IMPORTANT: avoid nested backticks here; this code lives inside a big template string
+          // that gets injected into the iframe, so unescaped backticks can break the build.
+          newElement.innerHTML = [
+            '<div class="swiper-wrapper" style="display:flex;transition:transform 0.3s ease;">',
+              '<div class="swiper-slide" style="min-width:100%;padding:24px;box-sizing:border-box;background:rgba(241,245,249,0.9);border-radius:12px;text-align:center;">',
+                '<div style="width:80px;height:80px;margin:0 auto 16px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>',
+                '<h3 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111;">Slide 1</h3>',
+                '<p style="margin:0;font-size:14px;color:#666;">Click to edit this slide.</p>',
+              '</div>',
+              '<div class="swiper-slide" style="min-width:100%;padding:24px;box-sizing:border-box;background:rgba(241,245,249,0.9);border-radius:12px;text-align:center;">',
+                '<div style="width:80px;height:80px;margin:0 auto 16px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>',
+                '<h3 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111;">Slide 2</h3>',
+                '<p style="margin:0;font-size:14px;color:#666;">Add your content here.</p>',
+              '</div>',
+              '<div class="swiper-slide" style="min-width:100%;padding:24px;box-sizing:border-box;background:rgba(241,245,249,0.9);border-radius:12px;text-align:center;">',
+                '<div style="width:80px;height:80px;margin:0 auto 16px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>',
+                '<h3 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111;">Slide 3</h3>',
+                '<p style="margin:0;font-size:14px;color:#666;">Fully editable.</p>',
+              '</div>',
+            '</div>',
+            '<div class="swiper-button-prev" style="position:absolute;left:0;top:50%;transform:translateY(-50%);width:44px;height:44px;background:#333;color:white;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10;">&lsaquo;</div>',
+            '<div class="swiper-button-next" style="position:absolute;right:0;top:50%;transform:translateY(-50%);width:44px;height:44px;background:#333;color:white;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10;">&rsaquo;</div>',
+            '<div class="swiper-pagination" style="position:absolute;bottom:8px;left:0;right:0;display:flex;justify-content:center;gap:8px;z-index:10;"></div>',
+          ].join('');
           break;
         default:
           newElement = document.createElement('div');
