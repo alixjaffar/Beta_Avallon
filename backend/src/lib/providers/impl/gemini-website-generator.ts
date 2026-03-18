@@ -676,12 +676,20 @@ export class GeminiWebsiteGenerator {
         
         return this.parseGeneratedCode(content, currentCode);
       } catch (error: any) {
-        const errorMessage = error.message || error.response?.data?.error?.message || '';
+        const errorStatus = error?.response?.status;
+        const errorData = error?.response?.data;
+        const errorMessage =
+          error?.message ||
+          errorData?.error?.message ||
+          JSON.stringify(errorData) ||
+          '';
         
       logError('❌ Vertex AI Gemini 3.1 Pro Preview failed', error, {
         model: 'gemini-3.1-pro-preview',
         projectId: this.projectId,
         region: this.region,
+        status: errorStatus,
+        errorData,
         lastMessage: errorMessage
       });
       
