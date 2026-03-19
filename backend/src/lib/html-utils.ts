@@ -12,11 +12,16 @@ const SWIPER_SCRIPT =
 const CAROUSEL_INIT_SCRIPT = `
 <script data-avallon-carousel-init="true">
 (function() {
-  function initCarousels() {
+  function mountSwipers() {
     if (typeof Swiper === 'undefined') return;
     var opts = { slidesPerView: 1, spaceBetween: 24, loop: false, rewind: true, speed: 650, grabCursor: true, watchOverflow: true, effect: 'slide', breakpoints: { 768: { slidesPerView: 2 }, 1024: { slidesPerView: 2 } } };
-    document.querySelectorAll('.swiper').forEach(function(container) {
+    document.querySelectorAll('.swiper, .swiper-container').forEach(function(container) {
       if (container.dataset.avallonInited === 'true') return;
+      var wrap = container.querySelector('.swiper-wrapper');
+      if (!wrap || !wrap.querySelector('.swiper-slide')) return;
+      try {
+        if (container.swiper && container.swiper.destroy) { container.swiper.destroy(true, true); }
+      } catch (e) {}
       try {
         var pag = container.querySelector('.swiper-pagination');
         var prev = container.querySelector('.swiper-button-prev');
@@ -45,22 +50,38 @@ const CAROUSEL_INIT_SCRIPT = `
       }
     });
   }
+  function initCarousels() { mountSwipers(); }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initCarousels);
   } else {
     initCarousels();
   }
+  window.addEventListener('load', function() { mountSwipers(); });
 })();
 </script>`;
 
 /**
  * Detect if HTML has carousel-like sections (team, expert, testimonial) with arrows/dots but no working init.
  */
+function stripInlineSwiperInitScripts(html: string): string {
+  return html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, (block) => {
+    return /\bnew\s+Swiper\s*\(/i.test(block) ? '' : block;
+  });
+}
+
+function hasSwiperCarouselMarkup(html: string): boolean {
+  const l = html.toLowerCase();
+  return (
+    /\bswiper-wrapper\b/.test(l) ||
+    /\bswiper-slide\b/.test(l) ||
+    /class=["'][^"']*\bswiper\b[^"']*["']/.test(l) ||
+    /class=["'][^"']*\bswiper-container\b[^"']*["']/.test(l)
+  );
+}
+
 function needsCarouselFix(html: string): boolean {
   if (!html || typeof html !== 'string') return false;
   const lower = html.toLowerCase();
-  const hasSwiper = lower.includes('swiper') && lower.includes('new swiper');
-  if (hasSwiper) return false;
 
   const hasCarouselSection =
     /class=["'][^"']*(?:expert|team|testimonial|member|carousel|swiper)[^"']*["']/.test(lower) ||
@@ -82,12 +103,13 @@ function needsCarouselFix(html: string): boolean {
  * Uses markup patterns that work with our init script.
  */
 function injectCarouselIntoHtml(html: string): string {
-  if (!html || !needsCarouselFix(html)) return html;
+  if (!html || typeof html !== 'string') return html;
 
-  const lower = html.toLowerCase();
-  if (lower.includes('swiper-bundle.min.js') && lower.includes('new swiper')) return html;
+  let out = stripInlineSwiperInitScripts(html);
+  const lower = out.toLowerCase();
+  if (!hasSwiperCarouselMarkup(out) && !needsCarouselFix(out)) return out;
 
-  let out = html;
+  if (lower.includes('swiper-bundle.min.js') && lower.includes('data-avallon-carousel-init')) return out;
 
   if (!out.includes('swiper-bundle.min.css')) {
     if (out.includes('</head>')) {

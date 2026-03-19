@@ -298,22 +298,42 @@ function injectNavigationScript(html: string): string {
   return html + navScript;
 }
 
+// AI templates often ship `new Swiper('.mySwiper', { pagination: { el: '.swiper-pagination' }})` which
+// breaks every carousel after the first (global selectors). Strip those inits and use our per-root init.
+function stripInlineSwiperInitScripts(html: string): string {
+  return html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, (block) => {
+    return /\bnew\s+Swiper\s*\(/i.test(block) ? '' : block;
+  });
+}
+
+function hasSwiperCarouselMarkup(html: string): boolean {
+  const l = html.toLowerCase();
+  return (
+    /\bswiper-wrapper\b/.test(l) ||
+    /\bswiper-slide\b/.test(l) ||
+    /class=["'][^"']*\bswiper\b[^"']*["']/.test(l) ||
+    /class=["'][^"']*\bswiper-container\b[^"']*["']/.test(l)
+  );
+}
+
 // Inject Swiper carousel script when team/expert/testimonial sections with arrows/dots are detected
 function injectCarouselScript(html: string): string {
   if (!html || typeof html !== 'string') return html;
-  const lower = html.toLowerCase();
-  if (lower.includes('swiper') && lower.includes('new swiper')) return html;
+  let out = stripInlineSwiperInitScripts(html);
+  const lower = out.toLowerCase();
   const hasCarousel =
     /class=["'][^"']*(?:expert|team|testimonial|member|carousel|swiper)[^"']*["']/.test(lower) ||
     /id=["'][^"']*(?:expert|team|testimonial)[^"']*["']/.test(lower) ||
-    /meet\s+(some\s+of\s+)?our\s+(experts|team)/i.test(html) ||
+    /meet\s+(some\s+of\s+)?our\s+(experts|team)/i.test(out) ||
     /class=["']swiper["']/.test(lower);
   const hasArrows =
-    /swiper-button-(prev|next)|carousel-(prev|next)|chevron|arrow|data-(prev|next)/i.test(html);
+    /swiper-button-(prev|next)|carousel-(prev|next)|chevron|arrow|data-(prev|next)/i.test(out);
   const hasDots =
-    /swiper-pagination|carousel-pagination|pagination|\.pagination|data-slide/i.test(html);
-  if (!hasCarousel || (!hasArrows && !hasDots)) return html;
-  if (lower.includes('swiper-bundle.min.js') && lower.includes('data-avallon-carousel-init')) return html;
+    /swiper-pagination|carousel-pagination|pagination|\.pagination|data-slide/i.test(out);
+  const shouldInject =
+    hasSwiperCarouselMarkup(out) || (hasCarousel && (hasArrows || hasDots));
+  if (!shouldInject) return out;
+  if (lower.includes('swiper-bundle.min.js') && lower.includes('data-avallon-carousel-init')) return out;
 
   const swiperCss =
     '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">';
@@ -322,19 +342,23 @@ function injectCarouselScript(html: string): string {
   const carouselInit = `
 <script data-avallon-carousel-init="true">
 (function() {
-  function init() {
+  function mountSwipers() {
     if (typeof Swiper === 'undefined') return;
-    // Animation config (Swiper controls the transition)
     var opts = { slidesPerView: 1, spaceBetween: 24, loop: false, rewind: true, speed: 650, grabCursor: true, watchOverflow: true, effect: 'slide', breakpoints: { 768: { slidesPerView: 2 }, 1024: { slidesPerView: 2 } } };
-    document.querySelectorAll('.swiper').forEach(function(el) {
+    document.querySelectorAll('.swiper, .swiper-container').forEach(function(el) {
       if (el.dataset.avallonInited === 'true') return;
+      var wrap = el.querySelector('.swiper-wrapper');
+      if (!wrap || !wrap.querySelector('.swiper-slide')) return;
+      try {
+        if (el.swiper && el.swiper.destroy) { el.swiper.destroy(true, true); }
+      } catch (e) {}
       try {
         var pag = el.querySelector('.swiper-pagination');
         var prev = el.querySelector('.swiper-button-prev');
         var next = el.querySelector('.swiper-button-next');
         new Swiper(el, Object.assign({}, opts, { pagination: pag ? { el: pag, clickable: true } : false, navigation: (prev && next) ? { nextEl: next, prevEl: prev } : false }));
         el.dataset.avallonInited = 'true';
-      } catch (e) {}
+      } catch (e) { console.warn('Avallon swiper:', e); }
     });
     document.querySelectorAll('.avallon-carousel-container').forEach(function(c) {
       if (c.dataset.avallonInited === 'true') return;
@@ -342,11 +366,16 @@ function injectCarouselScript(html: string): string {
       if (w) { try { new Swiper(c, opts); c.dataset.avallonInited = 'true'; } catch (e) {} }
     });
   }
-  document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', init) : init();
+  function init() { mountSwipers(); }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+  window.addEventListener('load', function() { mountSwipers(); });
 })();
 </script>`;
 
-  let out = html;
   if (!out.includes('swiper-bundle.min.css')) {
     if (out.includes('</head>')) out = out.replace('</head>', swiperCss + '\n</head>');
     else if (out.includes('<head>')) out = out.replace('<head>', '<head>\n' + swiperCss);
@@ -1670,12 +1699,14 @@ function getVisualEditorScript(): string {
   // Let carousel / form controls receive real clicks (capture handler below would otherwise
   // stopPropagation before the event reaches Swiper's prev/next/pagination).
   function allowEditorClickThrough(t) {
-    if (!t || typeof t.closest !== 'function') return false;
-    if (t.closest('.swiper-button-prev, .swiper-button-next, .swiper-pagination, .swiper-scrollbar')) return true;
-    var tag = (t.tagName || '').toUpperCase();
+    var el = t && t.nodeType === 3 ? t.parentElement : t;
+    if (!el || typeof el.closest !== 'function') return false;
+    if (el.closest('.swiper-pagination') || el.closest('.swiper-scrollbar')) return true;
+    if (el.closest('[class*="swiper-button"]')) return true;
+    var tag = (el.tagName || '').toUpperCase();
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'OPTION') return true;
-    if (t.isContentEditable) return true;
-    if (t.closest('[contenteditable="true"]')) return true;
+    if (el.isContentEditable) return true;
+    if (el.closest('[contenteditable="true"]')) return true;
     return false;
   }
   
