@@ -14,7 +14,7 @@ const CAROUSEL_INIT_SCRIPT = `
 (function() {
   function initCarousels() {
     if (typeof Swiper === 'undefined') return;
-    var opts = { slidesPerView: 1, spaceBetween: 24, loop: true, speed: 600, grabCursor: true, breakpoints: { 768: { slidesPerView: 2 }, 1024: { slidesPerView: 3 } } };
+    var opts = { slidesPerView: 1, spaceBetween: 24, loop: false, rewind: true, speed: 650, grabCursor: true, watchOverflow: true, effect: 'slide', breakpoints: { 768: { slidesPerView: 2 }, 1024: { slidesPerView: 2 } } };
     document.querySelectorAll('.swiper').forEach(function(container) {
       if (container.dataset.avallonInited === 'true') return;
       try {

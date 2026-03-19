@@ -325,7 +325,7 @@ function injectCarouselScript(html: string): string {
   function init() {
     if (typeof Swiper === 'undefined') return;
     // Animation config (Swiper controls the transition)
-    var opts = { slidesPerView: 1, spaceBetween: 24, loop: true, speed: 600, grabCursor: true, breakpoints: { 768: { slidesPerView: 2 }, 1024: { slidesPerView: 3 } } };
+    var opts = { slidesPerView: 1, spaceBetween: 24, loop: false, rewind: true, speed: 650, grabCursor: true, watchOverflow: true, effect: 'slide', breakpoints: { 768: { slidesPerView: 2 }, 1024: { slidesPerView: 2 } } };
     document.querySelectorAll('.swiper').forEach(function(el) {
       if (el.dataset.avallonInited === 'true') return;
       try {
@@ -1309,7 +1309,7 @@ function getVisualEditorScript(): string {
         case 'slider':
           newElement = document.createElement('div');
           newElement.className = 'swiper';
-          newElement.style.cssText = 'width:100%;max-width:600px;position:relative;margin:20px auto;overflow:hidden;';
+          newElement.style.cssText = 'width:100%;max-width:600px;position:relative;margin:20px auto;overflow:hidden;z-index:100002;isolation:isolate;';
           // IMPORTANT: avoid nested backticks here; this code lives inside a big template string
           // that gets injected into the iframe, so unescaped backticks can break the build.
           newElement.innerHTML = [
@@ -1330,9 +1330,9 @@ function getVisualEditorScript(): string {
                 '<p style="margin:0;font-size:14px;color:#666;">Person 3 description. Click text to edit.</p>',
               '</div>',
             '</div>',
-            '<button type="button" class="swiper-button-prev" style="position:absolute;left:0;top:50%;transform:translateY(-50%);width:44px;height:44px;background:#333;color:white;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10;">‹</button>',
-            '<button type="button" class="swiper-button-next" style="position:absolute;right:0;top:50%;transform:translateY(-50%);width:44px;height:44px;background:#333;color:white;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10;">›</button>',
-            '<div class="swiper-pagination" style="position:absolute;bottom:8px;left:0;right:0;display:flex;justify-content:center;gap:8px;z-index:10;"></div>',
+            '<button type="button" class="swiper-button-prev" style="position:absolute;left:0;top:50%;transform:translateY(-50%);width:44px;height:44px;background:#333;color:white;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:100005;">‹</button>',
+            '<button type="button" class="swiper-button-next" style="position:absolute;right:0;top:50%;transform:translateY(-50%);width:44px;height:44px;background:#333;color:white;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:100005;">›</button>',
+            '<div class="swiper-pagination" style="position:absolute;bottom:8px;left:0;right:0;display:flex;justify-content:center;gap:8px;z-index:100005;"></div>',
           ].join('');
           break;
         default:
@@ -1415,11 +1415,12 @@ function getVisualEditorScript(): string {
     
     // Add another slide to a Swiper slider
     if (e.data.type === 'addSwiperSlide') {
-      // Find the element by xpath if passed, otherwise use selectedElement
-      let template = selectedElement;
-      if (e.data.xpath && !template) {
-        template = getElementByXPath(e.data.xpath);
+      // Prefer xpath from parent (reliable when selection is the .swiper root or a slide)
+      let template = null;
+      if (e.data.xpath) {
+        try { template = getElementByXPath(e.data.xpath); } catch (err) {}
       }
+      if (!template) template = selectedElement;
 
       if (!template) {
         window.parent.postMessage({ type: 'error', data: { message: 'Could not find slider. Please re-select the slider.' } }, '*');
@@ -1460,7 +1461,7 @@ function getVisualEditorScript(): string {
           swiper.swiper.update();
           // Slide to the newly added slide if possible
           if (typeof swiper.swiper.slideTo === 'function') {
-            swiper.swiper.slideTo(nextIndex - 1, 0);
+            swiper.swiper.slideTo(nextIndex - 1, 600);
           }
         }
       } catch (e) {}
@@ -1666,8 +1667,21 @@ function getVisualEditorScript(): string {
     }
   });
   
+  // Let carousel / form controls receive real clicks (capture handler below would otherwise
+  // stopPropagation before the event reaches Swiper's prev/next/pagination).
+  function allowEditorClickThrough(t) {
+    if (!t || typeof t.closest !== 'function') return false;
+    if (t.closest('.swiper-button-prev, .swiper-button-next, .swiper-pagination, .swiper-scrollbar')) return true;
+    var tag = (t.tagName || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'OPTION') return true;
+    if (t.isContentEditable) return true;
+    if (t.closest('[contenteditable="true"]')) return true;
+    return false;
+  }
+  
   // Click handler
   document.addEventListener('click', function(e) {
+    if (allowEditorClickThrough(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
     selectElement(e.target);
@@ -1813,6 +1827,9 @@ function getVisualEditorScript(): string {
 <style>
   * { cursor: default !important; }
   a, button { pointer-events: auto !important; }
+  /* Stack swiper above selection resize handles (z-index ~100000) so arrows/dots stay clickable */
+  .swiper { position: relative; z-index: 100002; isolation: isolate; }
+  .swiper-button-prev, .swiper-button-next, .swiper-pagination { z-index: 100005 !important; }
 </style>`;
 }
 
