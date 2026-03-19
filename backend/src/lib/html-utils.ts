@@ -14,11 +14,17 @@ const CAROUSEL_INIT_SCRIPT = `
 (function() {
   function initCarousels() {
     if (typeof Swiper === 'undefined') return;
-    var opts = { slidesPerView: 1, spaceBetween: 24, loop: true, breakpoints: { 768: { slidesPerView: 2 }, 1024: { slidesPerView: 3 } } };
+    var opts = { slidesPerView: 1, spaceBetween: 24, loop: true, speed: 600, grabCursor: true, breakpoints: { 768: { slidesPerView: 2 }, 1024: { slidesPerView: 3 } } };
     document.querySelectorAll('.swiper').forEach(function(container) {
       if (container.dataset.avallonInited === 'true') return;
       try {
-        new Swiper(container, opts);
+        var pag = container.querySelector('.swiper-pagination');
+        var prev = container.querySelector('.swiper-button-prev');
+        var next = container.querySelector('.swiper-button-next');
+        new Swiper(container, Object.assign({}, opts, {
+          pagination: pag ? { el: pag, clickable: true } : false,
+          navigation: (prev && next) ? { nextEl: next, prevEl: prev } : false,
+        }));
         container.dataset.avallonInited = 'true';
       } catch (e) { console.warn('Avallon swiper init:', e); }
     });

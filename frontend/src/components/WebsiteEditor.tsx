@@ -324,7 +324,8 @@ function injectCarouselScript(html: string): string {
 (function() {
   function init() {
     if (typeof Swiper === 'undefined') return;
-    var opts = { slidesPerView: 1, spaceBetween: 24, loop: true, breakpoints: { 768: { slidesPerView: 2 }, 1024: { slidesPerView: 3 } } };
+    // Animation config (Swiper controls the transition)
+    var opts = { slidesPerView: 1, spaceBetween: 24, loop: true, speed: 600, grabCursor: true, breakpoints: { 768: { slidesPerView: 2 }, 1024: { slidesPerView: 3 } } };
     document.querySelectorAll('.swiper').forEach(function(el) {
       if (el.dataset.avallonInited === 'true') return;
       try {
@@ -1312,25 +1313,25 @@ function getVisualEditorScript(): string {
           // IMPORTANT: avoid nested backticks here; this code lives inside a big template string
           // that gets injected into the iframe, so unescaped backticks can break the build.
           newElement.innerHTML = [
-            '<div class="swiper-wrapper" style="display:flex;transition:transform 0.3s ease;">',
+            '<div class="swiper-wrapper" style="display:flex;">',
               '<div class="swiper-slide" style="min-width:100%;padding:24px;box-sizing:border-box;background:rgba(241,245,249,0.9);border-radius:12px;text-align:center;">',
                 '<div style="width:80px;height:80px;margin:0 auto 16px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>',
-                '<h3 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111;">Slide 1</h3>',
-                '<p style="margin:0;font-size:14px;color:#666;">Click to edit this slide.</p>',
+                '<h3 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111;">Person 1 Name</h3>',
+                '<p style="margin:0;font-size:14px;color:#666;">Person 1 description. Click text to edit.</p>',
               '</div>',
               '<div class="swiper-slide" style="min-width:100%;padding:24px;box-sizing:border-box;background:rgba(241,245,249,0.9);border-radius:12px;text-align:center;">',
                 '<div style="width:80px;height:80px;margin:0 auto 16px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>',
-                '<h3 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111;">Slide 2</h3>',
-                '<p style="margin:0;font-size:14px;color:#666;">Add your content here.</p>',
+                '<h3 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111;">Person 2 Name</h3>',
+                '<p style="margin:0;font-size:14px;color:#666;">Person 2 description. Click text to edit.</p>',
               '</div>',
               '<div class="swiper-slide" style="min-width:100%;padding:24px;box-sizing:border-box;background:rgba(241,245,249,0.9);border-radius:12px;text-align:center;">',
                 '<div style="width:80px;height:80px;margin:0 auto 16px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>',
-                '<h3 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111;">Slide 3</h3>',
-                '<p style="margin:0;font-size:14px;color:#666;">Fully editable.</p>',
+                '<h3 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111;">Person 3 Name</h3>',
+                '<p style="margin:0;font-size:14px;color:#666;">Person 3 description. Click text to edit.</p>',
               '</div>',
             '</div>',
-            '<div class="swiper-button-prev" style="position:absolute;left:0;top:50%;transform:translateY(-50%);width:44px;height:44px;background:#333;color:white;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10;">&lsaquo;</div>',
-            '<div class="swiper-button-next" style="position:absolute;right:0;top:50%;transform:translateY(-50%);width:44px;height:44px;background:#333;color:white;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10;">&rsaquo;</div>',
+            '<button type="button" class="swiper-button-prev" style="position:absolute;left:0;top:50%;transform:translateY(-50%);width:44px;height:44px;background:#333;color:white;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10;">‹</button>',
+            '<button type="button" class="swiper-button-next" style="position:absolute;right:0;top:50%;transform:translateY(-50%);width:44px;height:44px;background:#333;color:white;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10;">›</button>',
             '<div class="swiper-pagination" style="position:absolute;bottom:8px;left:0;right:0;display:flex;justify-content:center;gap:8px;z-index:10;"></div>',
           ].join('');
           break;
@@ -1410,6 +1411,69 @@ function getVisualEditorScript(): string {
       }, 100);
       
       window.parent.postMessage({ type: 'elementDuplicated', data: { xpath: getXPath(clone), isNew: true } }, '*');
+    }
+    
+    // Add another slide to a Swiper slider
+    if (e.data.type === 'addSwiperSlide') {
+      // Find the element by xpath if passed, otherwise use selectedElement
+      let template = selectedElement;
+      if (e.data.xpath && !template) {
+        template = getElementByXPath(e.data.xpath);
+      }
+
+      if (!template) {
+        window.parent.postMessage({ type: 'error', data: { message: 'Could not find slider. Please re-select the slider.' } }, '*');
+        return;
+      }
+
+      const swiper = template.closest && template.closest('.swiper');
+      if (!swiper) {
+        window.parent.postMessage({ type: 'error', data: { message: 'Selected element is not inside a swiper slider.' } }, '*');
+        return;
+      }
+
+      const wrapper = swiper.querySelector('.swiper-wrapper');
+      if (!wrapper) {
+        window.parent.postMessage({ type: 'error', data: { message: 'Swiper wrapper not found.' } }, '*');
+        return;
+      }
+
+      const slides = wrapper.querySelectorAll('.swiper-slide');
+      const nextIndex = slides.length + 1;
+
+      const newSlide = document.createElement('div');
+      newSlide.className = 'swiper-slide';
+      newSlide.style.cssText = 'min-width:100%;padding:24px;box-sizing:border-box;background:rgba(241,245,249,0.9);border-radius:12px;text-align:center;';
+
+      // Avoid nested backticks: build HTML using an array join
+      newSlide.innerHTML = [
+        '<div style="width:80px;height:80px;margin:0 auto 16px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>',
+        '<h3 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111;">Person ' + nextIndex + ' Name</h3>',
+        '<p style="margin:0;font-size:14px;color:#666;">Person ' + nextIndex + ' description. Click text to edit.</p>',
+      ].join('');
+
+      wrapper.appendChild(newSlide);
+
+      // If Swiper is already initialized on this element, update it to include the new slide
+      try {
+        if (swiper.swiper && typeof swiper.swiper.update === 'function') {
+          swiper.swiper.update();
+          // Slide to the newly added slide if possible
+          if (typeof swiper.swiper.slideTo === 'function') {
+            swiper.swiper.slideTo(nextIndex - 1, 0);
+          }
+        }
+      } catch (e) {}
+
+      setTimeout(function() {
+        selectElement(newSlide);
+        newSlide.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
+
+      window.parent.postMessage({
+        type: 'elementAdded',
+        data: { xpath: getXPath(newSlide), message: 'New slide added' }
+      }, '*');
     }
     
     // Add similar element (smarter duplicate for cards/items)
@@ -2575,6 +2639,17 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     toast({
       title: "Duplicated!",
       description: "Element duplicated. Edit the 'New' text to customize.",
+    });
+  };
+
+  // Add a new Swiper slide to an existing slider
+  const addSwiperSlide = () => {
+    if (!iframeRef.current?.contentWindow || !selectedElement) return;
+    iframeRef.current.contentWindow.postMessage({ type: 'addSwiperSlide', xpath: selectedElement.xpath }, '*');
+    setHasUnsavedChanges(true);
+    toast({
+      title: "Slide Added",
+      description: "A new slide was added. Click the new title/description to edit.",
     });
   };
   
@@ -4364,6 +4439,18 @@ Generated by Avallon - ${new Date().toISOString()}
                       <span className="material-symbols-outlined text-[18px]">add_circle</span>
                       Add Another Like This
                     </button>
+
+                    {/* Slider specific: add another slide */}
+                    {(selectedElement?.className?.includes('swiper') || selectedElement?.className?.includes('swiper-slide')) && (
+                      <button
+                        onClick={addSwiperSlide}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium transition-colors shadow-lg shadow-indigo-500/20"
+                        title="Add a new slide to this slider"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">add_circle</span>
+                        Add Another Slide
+                      </button>
+                    )}
                     
                     <div className="flex gap-2">
                     <button
