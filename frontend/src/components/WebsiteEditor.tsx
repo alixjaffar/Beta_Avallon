@@ -337,6 +337,9 @@ function injectCarouselScript(html: string): string {
 
   const swiperCss =
     '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">';
+  // AI/templates often set min-width:100% on slides; that breaks slidesPerView>1 (half-slide / stuck tween).
+  const swiperSlideFix =
+    '<style data-avallon-swiper-fix="1">.swiper .swiper-slide,.swiper-container .swiper-slide{min-width:0!important;box-sizing:border-box}</style>';
   const swiperScript =
     '<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>';
   const carouselInit = `
@@ -344,7 +347,8 @@ function injectCarouselScript(html: string): string {
 (function() {
   function mountSwipers() {
     if (typeof Swiper === 'undefined') return;
-    var opts = { slidesPerView: 1, spaceBetween: 24, loop: false, rewind: true, speed: 650, grabCursor: true, watchOverflow: true, effect: 'slide', breakpoints: { 768: { slidesPerView: 2 }, 1024: { slidesPerView: 2 } } };
+    // One slide per person so pagination shows one dot each (e.g. 3 people → 3 dots).
+    var opts = { slidesPerView: 1, spaceBetween: 24, loop: false, rewind: true, speed: 650, grabCursor: true, watchOverflow: true, effect: 'slide' };
     document.querySelectorAll('.swiper, .swiper-container').forEach(function(el) {
       if (el.dataset.avallonInited === 'true') return;
       var wrap = el.querySelector('.swiper-wrapper');
@@ -356,7 +360,7 @@ function injectCarouselScript(html: string): string {
         var pag = el.querySelector('.swiper-pagination');
         var prev = el.querySelector('.swiper-button-prev');
         var next = el.querySelector('.swiper-button-next');
-        new Swiper(el, Object.assign({}, opts, { pagination: pag ? { el: pag, clickable: true } : false, navigation: (prev && next) ? { nextEl: next, prevEl: prev } : false }));
+        new Swiper(el, Object.assign({}, opts, { pagination: pag ? { el: pag, clickable: true, dynamicBullets: false } : false, navigation: (prev && next) ? { nextEl: next, prevEl: prev } : false }));
         el.dataset.avallonInited = 'true';
       } catch (e) { console.warn('Avallon swiper:', e); }
     });
@@ -379,6 +383,12 @@ function injectCarouselScript(html: string): string {
   if (!out.includes('swiper-bundle.min.css')) {
     if (out.includes('</head>')) out = out.replace('</head>', swiperCss + '\n</head>');
     else if (out.includes('<head>')) out = out.replace('<head>', '<head>\n' + swiperCss);
+  }
+  if (!out.includes('data-avallon-swiper-fix')) {
+    if (out.includes('</head>')) out = out.replace('</head>', swiperSlideFix + '\n</head>');
+    else if (out.includes('<head>')) out = out.replace('<head>', '<head>\n' + swiperSlideFix);
+    else if (out.includes('</body>')) out = out.replace('</body>', swiperSlideFix + '\n</body>');
+    else out = swiperSlideFix + out;
   }
   if (!out.includes('swiper-bundle.min.js')) {
     if (out.includes('</body>')) out = out.replace('</body>', swiperScript + '\n</body>');
@@ -1338,25 +1348,32 @@ function getVisualEditorScript(): string {
         case 'slider':
           newElement = document.createElement('div');
           newElement.className = 'swiper';
-          newElement.style.cssText = 'width:100%;max-width:600px;position:relative;margin:20px auto;overflow:hidden;z-index:100002;isolation:isolate;';
+          newElement.style.cssText = 'width:100%;max-width:960px;position:relative;margin:20px auto;overflow:hidden;z-index:100002;isolation:isolate;';
           // IMPORTANT: avoid nested backticks here; this code lives inside a big template string
           // that gets injected into the iframe, so unescaped backticks can break the build.
+          // One swiper-slide = one "card" with three profile columns (photo, name, description each).
+          // Do not set min-width:100% on .swiper-slide — breaks Swiper if slidesPerView > 1.
           newElement.innerHTML = [
-            '<div class="swiper-wrapper" style="display:flex;">',
-              '<div class="swiper-slide" style="min-width:100%;padding:24px;box-sizing:border-box;background:rgba(241,245,249,0.9);border-radius:12px;text-align:center;">',
-                '<div style="width:80px;height:80px;margin:0 auto 16px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>',
-                '<h3 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111;">Person 1 Name</h3>',
-                '<p style="margin:0;font-size:14px;color:#666;">Person 1 description. Click text to edit.</p>',
-              '</div>',
-              '<div class="swiper-slide" style="min-width:100%;padding:24px;box-sizing:border-box;background:rgba(241,245,249,0.9);border-radius:12px;text-align:center;">',
-                '<div style="width:80px;height:80px;margin:0 auto 16px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>',
-                '<h3 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111;">Person 2 Name</h3>',
-                '<p style="margin:0;font-size:14px;color:#666;">Person 2 description. Click text to edit.</p>',
-              '</div>',
-              '<div class="swiper-slide" style="min-width:100%;padding:24px;box-sizing:border-box;background:rgba(241,245,249,0.9);border-radius:12px;text-align:center;">',
-                '<div style="width:80px;height:80px;margin:0 auto 16px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>',
-                '<h3 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111;">Person 3 Name</h3>',
-                '<p style="margin:0;font-size:14px;color:#666;">Person 3 description. Click text to edit.</p>',
+            '<div class="swiper-wrapper">',
+              '<div class="swiper-slide" style="padding:24px 20px;box-sizing:border-box;background:rgba(241,245,249,0.95);border-radius:16px;border:1px solid rgba(0,0,0,0.06);">',
+                '<p style="margin:0 0 18px;text-align:center;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#71717a;">Three people in this card · add slides for more rows</p>',
+                '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:24px;align-items:start;">',
+                  '<div style="padding:8px 4px;box-sizing:border-box;text-align:center;min-width:0;">',
+                    '<div style="width:76px;height:76px;margin:0 auto 12px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>',
+                    '<h3 style="margin:0 0 8px;font-size:17px;font-weight:600;color:#111;">Person 1 — name</h3>',
+                    '<p style="margin:0;font-size:13px;line-height:1.5;color:#52525b;">Title and description for person 1. Click to edit.</p>',
+                  '</div>',
+                  '<div style="padding:8px 4px;box-sizing:border-box;text-align:center;min-width:0;">',
+                    '<div style="width:76px;height:76px;margin:0 auto 12px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>',
+                    '<h3 style="margin:0 0 8px;font-size:17px;font-weight:600;color:#111;">Person 2 — name</h3>',
+                    '<p style="margin:0;font-size:13px;line-height:1.5;color:#52525b;">Title and description for person 2. Click to edit.</p>',
+                  '</div>',
+                  '<div style="padding:8px 4px;box-sizing:border-box;text-align:center;min-width:0;">',
+                    '<div style="width:76px;height:76px;margin:0 auto 12px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>',
+                    '<h3 style="margin:0 0 8px;font-size:17px;font-weight:600;color:#111;">Person 3 — name</h3>',
+                    '<p style="margin:0;font-size:13px;line-height:1.5;color:#52525b;">Title and description for person 3. Click to edit.</p>',
+                  '</div>',
+                '</div>',
               '</div>',
             '</div>',
             '<button type="button" class="swiper-button-prev" style="position:absolute;left:0;top:50%;transform:translateY(-50%);width:44px;height:44px;background:#333;color:white;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:100005;">‹</button>',
@@ -1456,7 +1473,7 @@ function getVisualEditorScript(): string {
         return;
       }
 
-      const swiper = template.closest && template.closest('.swiper');
+      const swiper = template.closest && template.closest('.swiper, .swiper-container');
       if (!swiper) {
         window.parent.postMessage({ type: 'error', data: { message: 'Selected element is not inside a swiper slider.' } }, '*');
         return;
@@ -1469,18 +1486,35 @@ function getVisualEditorScript(): string {
       }
 
       const slides = wrapper.querySelectorAll('.swiper-slide');
-      const nextIndex = slides.length + 1;
+      var slideCount = slides.length;
+      var startNum = slideCount * 3 + 1;
 
       const newSlide = document.createElement('div');
       newSlide.className = 'swiper-slide';
-      newSlide.style.cssText = 'min-width:100%;padding:24px;box-sizing:border-box;background:rgba(241,245,249,0.9);border-radius:12px;text-align:center;';
+      newSlide.style.cssText =
+        'padding:24px 20px;box-sizing:border-box;background:rgba(241,245,249,0.95);border-radius:16px;border:1px solid rgba(0,0,0,0.06);';
 
-      // Avoid nested backticks: build HTML using an array join
-      newSlide.innerHTML = [
-        '<div style="width:80px;height:80px;margin:0 auto 16px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>',
-        '<h3 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111;">Person ' + nextIndex + ' Name</h3>',
-        '<p style="margin:0;font-size:14px;color:#666;">Person ' + nextIndex + ' description. Click text to edit.</p>',
-      ].join('');
+      function profileCol(n) {
+        return (
+          '<div style="padding:8px 4px;box-sizing:border-box;text-align:center;min-width:0;">' +
+          '<div style="width:76px;height:76px;margin:0 auto 12px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>' +
+          '<h3 style="margin:0 0 8px;font-size:17px;font-weight:600;color:#111;">Person ' +
+          n +
+          ' — name</h3>' +
+          '<p style="margin:0;font-size:13px;line-height:1.5;color:#52525b;">Title and description for person ' +
+          n +
+          '. Click to edit.</p>' +
+          '</div>'
+        );
+      }
+
+      newSlide.innerHTML =
+        '<p style="margin:0 0 18px;text-align:center;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#71717a;">Three people in this card</p>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:24px;align-items:start;">' +
+        profileCol(startNum) +
+        profileCol(startNum + 1) +
+        profileCol(startNum + 2) +
+        '</div>';
 
       wrapper.appendChild(newSlide);
 
@@ -1490,7 +1524,7 @@ function getVisualEditorScript(): string {
           swiper.swiper.update();
           // Slide to the newly added slide if possible
           if (typeof swiper.swiper.slideTo === 'function') {
-            swiper.swiper.slideTo(nextIndex - 1, 600);
+            swiper.swiper.slideTo(slideCount, 600);
           }
         }
       } catch (e) {}
@@ -1859,8 +1893,9 @@ function getVisualEditorScript(): string {
   * { cursor: default !important; }
   a, button { pointer-events: auto !important; }
   /* Stack swiper above selection resize handles (z-index ~100000) so arrows/dots stay clickable */
-  .swiper { position: relative; z-index: 100002; isolation: isolate; }
+  .swiper, .swiper-container { position: relative; z-index: 100002; isolation: isolate; }
   .swiper-button-prev, .swiper-button-next, .swiper-pagination { z-index: 100005 !important; }
+  .swiper .swiper-slide, .swiper-container .swiper-slide { min-width: 0 !important; box-sizing: border-box; }
 </style>`;
 }
 
@@ -2696,8 +2731,8 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     iframeRef.current.contentWindow.postMessage({ type: 'addSwiperSlide', xpath: selectedElement.xpath }, '*');
     setHasUnsavedChanges(true);
     toast({
-      title: "Slide Added",
-      description: "A new slide was added. Click the new title/description to edit.",
+      title: "Card added",
+      description: "New slide with three profile slots. Edit names and descriptions in the preview.",
     });
   };
   
@@ -4489,14 +4524,16 @@ Generated by Avallon - ${new Date().toISOString()}
                     </button>
 
                     {/* Slider specific: add another slide */}
-                    {(selectedElement?.className?.includes('swiper') || selectedElement?.className?.includes('swiper-slide')) && (
+                    {(selectedElement?.className?.includes('swiper') ||
+                      selectedElement?.className?.includes('swiper-container') ||
+                      selectedElement?.className?.includes('swiper-slide')) && (
                       <button
                         onClick={addSwiperSlide}
                         className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium transition-colors shadow-lg shadow-indigo-500/20"
-                        title="Add a new slide to this slider"
+                        title="Adds another card with three profile slots (Person 4–6, etc.)"
                       >
                         <span className="material-symbols-outlined text-[18px]">add_circle</span>
-                        Add Another Slide
+                        Add card (3 profiles)
                       </button>
                     )}
                     

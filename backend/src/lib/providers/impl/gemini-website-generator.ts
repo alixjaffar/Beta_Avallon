@@ -1232,31 +1232,38 @@ ${currentCodeContext}
 🎭 INTERACTIVE COMPONENTS TOOLKIT:
 
 **📸 CAROUSEL/SLIDER (use Swiper.js):**
+- **Team / people (3 in a row):** use **one \`.swiper-slide\` = one card** with **three profile columns** inside (CSS grid or flex). Each column = photo + name + description. Extra rows of 3 = **additional slides** (pagination = number of cards, not people).
+- **Do not** set \`min-width:100%\` on \`.swiper-slide\` if \`slidesPerView\` > 1.
 \`\`\`html
 <!-- Add to <head> -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">
 <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
 
-<!-- HTML Structure -->
+<!-- One slide = one card with 3 people side by side -->
 <div class="swiper mySwiper">
   <div class="swiper-wrapper">
-    <div class="swiper-slide">Slide 1</div>
-    <div class="swiper-slide">Slide 2</div>
+    <div class="swiper-slide">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1.5rem;">
+        <div><h3>Person 1</h3><p>Description 1</p></div>
+        <div><h3>Person 2</h3><p>Description 2</p></div>
+        <div><h3>Person 3</h3><p>Description 3</p></div>
+      </div>
+    </div>
   </div>
   <div class="swiper-pagination"></div>
   <div class="swiper-button-next"></div>
   <div class="swiper-button-prev"></div>
 </div>
 
-<!-- Initialize -->
+<!-- Initialize (Avallon may replace inline init with a safe multi-instance setup) -->
 <script>
 new Swiper('.mySwiper', {
   slidesPerView: 1,
-  spaceBetween: 30,
-  loop: true,
-  pagination: { el: '.swiper-pagination', clickable: true },
-  navigation: { nextEl: '.swiper-button-next', prevEl: '.swiper-button-prev' },
-  breakpoints: { 768: { slidesPerView: 2 }, 1024: { slidesPerView: 3 } }
+  spaceBetween: 24,
+  loop: false,
+  rewind: true,
+  pagination: { el: '.swiper-pagination', clickable: true, dynamicBullets: false },
+  navigation: { nextEl: '.swiper-button-next', prevEl: '.swiper-button-prev' }
 });
 </script>
 \`\`\`

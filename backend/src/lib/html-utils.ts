@@ -6,6 +6,9 @@
 
 const SWIPER_CSS =
   '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">';
+/** Overrides common AI mistake: min-width:100% on slides breaks slidesPerView > 1 */
+const SWIPER_SLIDE_FIX =
+  '<style data-avallon-swiper-fix="1">.swiper .swiper-slide,.swiper-container .swiper-slide{min-width:0!important;box-sizing:border-box}</style>';
 const SWIPER_SCRIPT =
   '<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>';
 
@@ -14,7 +17,7 @@ const CAROUSEL_INIT_SCRIPT = `
 (function() {
   function mountSwipers() {
     if (typeof Swiper === 'undefined') return;
-    var opts = { slidesPerView: 1, spaceBetween: 24, loop: false, rewind: true, speed: 650, grabCursor: true, watchOverflow: true, effect: 'slide', breakpoints: { 768: { slidesPerView: 2 }, 1024: { slidesPerView: 2 } } };
+    var opts = { slidesPerView: 1, spaceBetween: 24, loop: false, rewind: true, speed: 650, grabCursor: true, watchOverflow: true, effect: 'slide' };
     document.querySelectorAll('.swiper, .swiper-container').forEach(function(container) {
       if (container.dataset.avallonInited === 'true') return;
       var wrap = container.querySelector('.swiper-wrapper');
@@ -27,7 +30,7 @@ const CAROUSEL_INIT_SCRIPT = `
         var prev = container.querySelector('.swiper-button-prev');
         var next = container.querySelector('.swiper-button-next');
         new Swiper(container, Object.assign({}, opts, {
-          pagination: pag ? { el: pag, clickable: true } : false,
+          pagination: pag ? { el: pag, clickable: true, dynamicBullets: false } : false,
           navigation: (prev && next) ? { nextEl: next, prevEl: prev } : false,
         }));
         container.dataset.avallonInited = 'true';
@@ -116,6 +119,18 @@ function injectCarouselIntoHtml(html: string): string {
       out = out.replace('</head>', SWIPER_CSS + '\n</head>');
     } else if (out.includes('<head>')) {
       out = out.replace('<head>', '<head>\n' + SWIPER_CSS);
+    }
+  }
+
+  if (!out.includes('data-avallon-swiper-fix')) {
+    if (out.includes('</head>')) {
+      out = out.replace('</head>', SWIPER_SLIDE_FIX + '\n</head>');
+    } else if (out.includes('<head>')) {
+      out = out.replace('<head>', '<head>\n' + SWIPER_SLIDE_FIX);
+    } else if (out.includes('</body>')) {
+      out = out.replace('</body>', SWIPER_SLIDE_FIX + '\n</body>');
+    } else {
+      out = SWIPER_SLIDE_FIX + out;
     }
   }
 
