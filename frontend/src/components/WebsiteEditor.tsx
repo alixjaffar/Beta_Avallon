@@ -5,6 +5,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { ThemeToggleButton } from './ThemeToggleButton';
 import { ImportWebsiteModal } from './ImportWebsiteModal';
 import { quickImport, isHTML } from '@/lib/htmlImporter';
+import { sanitizeWordpressImportedHtml, hasJsdelivrSwiperScript } from '@/lib/wordpressHtmlSanitize';
 
 interface WebsiteEditorProps {
   site: {
@@ -312,14 +313,17 @@ function hasSwiperCarouselMarkup(html: string): boolean {
     /\bswiper-wrapper\b/.test(l) ||
     /\bswiper-slide\b/.test(l) ||
     /class=["'][^"']*\bswiper\b[^"']*["']/.test(l) ||
-    /class=["'][^"']*\bswiper-container\b[^"']*["']/.test(l)
+    /class=["'][^"']*\bswiper-container\b[^"']*["']/.test(l) ||
+    /\bwp-block-[^"'\s]*carousel\b/.test(l) ||
+    /\bcb-carousel\b/.test(l)
   );
 }
 
 // Inject Swiper carousel script when team/expert/testimonial sections with arrows/dots are detected
 function injectCarouselScript(html: string): string {
   if (!html || typeof html !== 'string') return html;
-  let out = stripInlineSwiperInitScripts(html);
+  let out = sanitizeWordpressImportedHtml(html);
+  out = stripInlineSwiperInitScripts(out);
   const lower = out.toLowerCase();
   const hasCarousel =
     /class=["'][^"']*(?:expert|team|testimonial|member|carousel|swiper)[^"']*["']/.test(lower) ||
@@ -333,7 +337,7 @@ function injectCarouselScript(html: string): string {
   const shouldInject =
     hasSwiperCarouselMarkup(out) || (hasCarousel && (hasArrows || hasDots));
   if (!shouldInject) return out;
-  if (lower.includes('swiper-bundle.min.js') && lower.includes('data-avallon-carousel-init')) return out;
+  if (hasJsdelivrSwiperScript(out) && out.includes('data-avallon-carousel-init')) return out;
 
   const swiperCss =
     '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">';
@@ -349,7 +353,7 @@ function injectCarouselScript(html: string): string {
     if (typeof Swiper === 'undefined') return;
     // One slide per person so pagination shows one dot each (e.g. 3 people → 3 dots).
     var opts = { slidesPerView: 1, spaceBetween: 24, loop: false, rewind: true, speed: 650, grabCursor: true, watchOverflow: true, effect: 'slide' };
-    document.querySelectorAll('.swiper, .swiper-container').forEach(function(el) {
+    document.querySelectorAll('.swiper, .swiper-container, [class*="wp-block-cb-carousel"], [class*="cb-carousel"]').forEach(function(el) {
       if (el.dataset.avallonInited === 'true') return;
       var wrap = el.querySelector('.swiper-wrapper');
       if (!wrap || !wrap.querySelector('.swiper-slide')) return;
@@ -390,7 +394,7 @@ function injectCarouselScript(html: string): string {
     else if (out.includes('</body>')) out = out.replace('</body>', swiperSlideFix + '\n</body>');
     else out = swiperSlideFix + out;
   }
-  if (!out.includes('swiper-bundle.min.js')) {
+  if (!hasJsdelivrSwiperScript(out)) {
     if (out.includes('</body>')) out = out.replace('</body>', swiperScript + '\n</body>');
     else if (out.includes('</html>')) out = out.replace('</html>', swiperScript + '\n</html>');
     else out = out + swiperScript;
@@ -1895,7 +1899,7 @@ function getVisualEditorScript(): string {
   /* Stack swiper above selection resize handles (z-index ~100000) so arrows/dots stay clickable */
   .swiper, .swiper-container { position: relative; z-index: 100002; isolation: isolate; }
   .swiper-button-prev, .swiper-button-next, .swiper-pagination { z-index: 100005 !important; }
-  .swiper .swiper-slide, .swiper-container .swiper-slide { min-width: 0 !important; box-sizing: border-box; }
+  .swiper .swiper-slide, .swiper-container .swiper-slide, [class*="cb-carousel"] .swiper-slide { min-width: 0 !important; box-sizing: border-box; }
 </style>`;
 }
 

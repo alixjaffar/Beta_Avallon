@@ -4,6 +4,7 @@ import { namecheapRequest, isMockMode } from "@/lib/namecheap";
 import { logInfo, logError } from "@/lib/log";
 import { prisma } from "@/lib/db";
 import { PLAN_CREDITS, addCredits } from "@/lib/billing/credits";
+import { getUserIdFromEmail } from "@/lib/auth/userId";
 import Stripe from "stripe";
 
 const corsHeaders = {
@@ -144,11 +145,23 @@ export async function POST(req: NextRequest) {
  */
 async function handleSubscriptionCheckout(session: Stripe.Checkout.Session) {
   try {
-    const userId = session.client_reference_id || session.metadata?.userId;
+    let userId = session.client_reference_id || session.metadata?.userId || undefined;
     const customerId = session.customer as string;
     const subscriptionId = session.subscription as string;
     const plan = session.metadata?.plan || 'pro';
-    
+
+    // Checkout created without auth headers used to store mock_user_id — recover real user from email
+    if (!userId || userId === 'mock_user_id') {
+      const email =
+        session.metadata?.userEmail ||
+        session.customer_email ||
+        (session.customer_details && (session.customer_details as { email?: string }).email);
+      if (email) {
+        userId = getUserIdFromEmail(email);
+        logInfo('Resolved user from email (mock or missing client_reference_id)', { sessionId: session.id, email });
+      }
+    }
+
     if (!userId) {
       logError('No user ID in checkout session', new Error('Missing userId'), { sessionId: session.id });
       return;
@@ -359,7 +372,16 @@ async function handleSubscriptionCancellation(subscription: Stripe.Subscription)
 async function handleInvoicePayment(invoice: Stripe.Invoice) {
   try {
     const subscriptionId = invoice.subscription as string;
-    
+
+    // First invoice after checkout is already credited in checkout.session.completed — avoid double grant
+    if (invoice.billing_reason === 'subscription_create') {
+      logInfo('Skipping renewal credits: subscription_create (credits from checkout.session.completed)', {
+        invoiceId: invoice.id,
+        subscriptionId,
+      });
+      return;
+    }
+
     logInfo('Processing invoice payment', { invoiceId: invoice.id, subscriptionId });
 
     const dbSubscription = await prisma.subscription.findUnique({

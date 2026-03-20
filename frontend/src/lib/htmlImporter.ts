@@ -12,6 +12,8 @@
  * - Detects and preserves CSS frameworks
  */
 
+import { sanitizeWordpressImportedHtml } from './wordpressHtmlSanitize';
+
 // Common CDN patterns to preserve (don't inline these, just fix URLs)
 const CDN_PATTERNS = [
   'cdnjs.cloudflare.com',
@@ -186,6 +188,9 @@ export async function importHTML(
     if (sourceUrl) {
       html = addBaseTag(html, sourceUrl);
     }
+
+    // WordPress: Swiper/wp-includes URLs often 403 off-site — use jsDelivr + wp stub
+    html = sanitizeWordpressImportedHtml(html);
 
     result.html = html;
 

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Check, Sparkles, Zap, Rocket, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 interface PricingPlansProps {
   currentPlan?: string;
@@ -101,11 +102,10 @@ export function PricingPlans({ currentPlan = 'free', userEmail }: PricingPlansPr
         ? 'https://beta-avallon.onrender.com' 
         : 'http://localhost:3000';
       
-      const response = await fetch(`${baseUrl}/api/billing/checkout`, {
+      // Must use fetchWithAuth so the API receives x-user-email / Firebase token — otherwise checkout
+      // is created with mock_user_id and credits never apply to the real account.
+      const response = await fetchWithAuth(`${baseUrl}/api/billing/checkout`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           plan,
           interval,

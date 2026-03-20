@@ -4,11 +4,13 @@
  * but lack working JavaScript.
  */
 
+import { sanitizeWordpressImportedHtml, hasJsdelivrSwiperScript } from './html-wordpress-import';
+
 const SWIPER_CSS =
   '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">';
 /** Overrides common AI mistake: min-width:100% on slides breaks slidesPerView > 1 */
 const SWIPER_SLIDE_FIX =
-  '<style data-avallon-swiper-fix="1">.swiper .swiper-slide,.swiper-container .swiper-slide{min-width:0!important;box-sizing:border-box}</style>';
+  '<style data-avallon-swiper-fix="1">.swiper .swiper-slide,.swiper-container .swiper-slide,[class*="cb-carousel"] .swiper-slide{min-width:0!important;box-sizing:border-box}</style>';
 const SWIPER_SCRIPT =
   '<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>';
 
@@ -18,7 +20,7 @@ const CAROUSEL_INIT_SCRIPT = `
   function mountSwipers() {
     if (typeof Swiper === 'undefined') return;
     var opts = { slidesPerView: 1, spaceBetween: 24, loop: false, rewind: true, speed: 650, grabCursor: true, watchOverflow: true, effect: 'slide' };
-    document.querySelectorAll('.swiper, .swiper-container').forEach(function(container) {
+    document.querySelectorAll('.swiper, .swiper-container, [class*="wp-block-cb-carousel"], [class*="cb-carousel"]').forEach(function(container) {
       if (container.dataset.avallonInited === 'true') return;
       var wrap = container.querySelector('.swiper-wrapper');
       if (!wrap || !wrap.querySelector('.swiper-slide')) return;
@@ -78,7 +80,9 @@ function hasSwiperCarouselMarkup(html: string): boolean {
     /\bswiper-wrapper\b/.test(l) ||
     /\bswiper-slide\b/.test(l) ||
     /class=["'][^"']*\bswiper\b[^"']*["']/.test(l) ||
-    /class=["'][^"']*\bswiper-container\b[^"']*["']/.test(l)
+    /class=["'][^"']*\bswiper-container\b[^"']*["']/.test(l) ||
+    /\bwp-block-[^"'\s]*carousel\b/.test(l) ||
+    /\bcb-carousel\b/.test(l)
   );
 }
 
@@ -108,11 +112,12 @@ function needsCarouselFix(html: string): boolean {
 function injectCarouselIntoHtml(html: string): string {
   if (!html || typeof html !== 'string') return html;
 
-  let out = stripInlineSwiperInitScripts(html);
+  let out = sanitizeWordpressImportedHtml(html);
+  out = stripInlineSwiperInitScripts(out);
   const lower = out.toLowerCase();
   if (!hasSwiperCarouselMarkup(out) && !needsCarouselFix(out)) return out;
 
-  if (lower.includes('swiper-bundle.min.js') && lower.includes('data-avallon-carousel-init')) return out;
+  if (hasJsdelivrSwiperScript(out) && out.includes('data-avallon-carousel-init')) return out;
 
   if (!out.includes('swiper-bundle.min.css')) {
     if (out.includes('</head>')) {
@@ -134,7 +139,7 @@ function injectCarouselIntoHtml(html: string): string {
     }
   }
 
-  if (!out.includes('swiper-bundle.min.js')) {
+  if (!hasJsdelivrSwiperScript(out)) {
     if (out.includes('</body>')) {
       out = out.replace('</body>', SWIPER_SCRIPT + '\n</body>');
     } else if (out.includes('</html>')) {
