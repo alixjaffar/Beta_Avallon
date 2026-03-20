@@ -1640,6 +1640,7 @@ function getVisualEditorScript(): string {
     }
     
     if (e.data.type === 'getHTML') {
+      var pageForSave = e.data.page || '';
       // Remove our injected elements before sending HTML
       const overlayEl = document.getElementById('avallon-selection-overlay');
       const handleEls = document.querySelectorAll('.avallon-handle');
@@ -1649,7 +1650,7 @@ function getVisualEditorScript(): string {
       handleEls.forEach(h => h.remove());
       
       const html = '<!DOCTYPE html>' + document.documentElement.outerHTML;
-      window.parent.postMessage({ type: 'htmlContent', data: { html: html } }, '*');
+      window.parent.postMessage({ type: 'htmlContent', data: { html: html, page: pageForSave } }, '*');
       
       // Recreate overlay
       createOverlay();
@@ -1996,10 +1997,17 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
   const fileInputRef = useRef<HTMLInputElement>(null);
   const saveInProgressRef = useRef<boolean>(false);
   const pendingSaveRef = useRef<Record<string, string> | null>(null);
+  /** Latest persist function (defined later); assigned each render after declaration. */
+  const persistChangesToBackendRef = useRef<((content: Record<string, string>) => Promise<void>) | null>(null);
+  /** Always merge visual saves with latest content — avoids stale closures dropping other pages' HTML. */
+  const websiteContentRef = useRef<Record<string, string>>(site.websiteContent || {});
+  useEffect(() => {
+    websiteContentRef.current = currentWebsiteContent;
+  }, [currentWebsiteContent]);
   
   // Get available pages
   const availablePages = Object.keys(currentWebsiteContent).filter(
-    key => key.endsWith('.html') && currentWebsiteContent[key]?.includes('<!DOCTYPE')
+    key => key.endsWith('.html') && typeof currentWebsiteContent[key] === 'string' && currentWebsiteContent[key].trim().length > 0
   ).sort((a, b) => {
     if (a === 'index.html') return -1;
     if (b === 'index.html') return 1;
@@ -2007,6 +2015,10 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
   });
   
   const effectiveCurrentPage = availablePages.includes(currentPage) ? currentPage : 'index.html';
+  const effectiveCurrentPageRef = useRef(effectiveCurrentPage);
+  useEffect(() => {
+    effectiveCurrentPageRef.current = effectiveCurrentPage;
+  }, [effectiveCurrentPage]);
 
   // Suggestion chips
   const suggestions = [
@@ -2125,7 +2137,7 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'navigate' && event.data.page) {
         const page = event.data.page;
-        if (currentWebsiteContent[page]) {
+        if (websiteContentRef.current[page]) {
           setCurrentPage(page);
         }
       }
@@ -2207,20 +2219,20 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       }
       
       if (event.data?.type === 'htmlContent') {
-        // Update the current page content with the modified HTML
+        // Bind saved HTML to the page that was active when Save was clicked (not current tab if user switched)
+        const pageKey =
+          (typeof event.data.data?.page === 'string' && event.data.data.page.trim()) ||
+          effectiveCurrentPageRef.current;
         const cleanedHtml = cleanVisualEditorHtml(event.data.data.html);
         const updatedContent = {
-          ...currentWebsiteContent,
-          [effectiveCurrentPage]: cleanedHtml
+          ...websiteContentRef.current,
+          [pageKey]: cleanedHtml,
         };
-        // Push to history for undo/redo
+        websiteContentRef.current = updatedContent;
         pushToHistory(updatedContent);
         setCurrentWebsiteContent(updatedContent);
-        // Mark as having unsaved changes - persistChangesToBackend will clear this on success
         setHasUnsavedChanges(true);
-        
-        // Persist to backend immediately (this will set hasUnsavedChanges(false) on success)
-        persistChangesToBackend(updatedContent);
+        void persistChangesToBackendRef.current?.(updatedContent);
       }
       
       // Handle image element selection - show image replacer
@@ -2231,7 +2243,7 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [currentWebsiteContent, mode, effectiveCurrentPage]);
+  }, [mode, effectiveCurrentPage, pushToHistory]);
 
   // Load site data and check preview
   useEffect(() => {
@@ -2894,8 +2906,8 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
   const saveVisualChanges = async () => {
     if (!iframeRef.current?.contentWindow) return;
     
-    // Request the current HTML from the iframe
-    iframeRef.current.contentWindow.postMessage({ type: 'getHTML' }, '*');
+    // Request the current HTML from the iframe; include page key so async response applies to the right file
+    iframeRef.current.contentWindow.postMessage({ type: 'getHTML', page: effectiveCurrentPage }, '*');
     
     // The actual save will happen in the message handler when we receive 'htmlContent'
     // But let's also trigger an immediate save to the backend
@@ -3038,6 +3050,8 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       }
     }
   };
+
+  persistChangesToBackendRef.current = persistChangesToBackend;
 
   // Auto-save website content to backend
   const autoSaveContent = async (content: Record<string, string>) => {
