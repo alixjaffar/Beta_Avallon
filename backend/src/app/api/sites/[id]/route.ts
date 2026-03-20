@@ -54,9 +54,11 @@ function fixImageUrls(html: string): string {
     return `${quote1}https://images.unsplash.com/${cleanPhotoId}?w=800&h=600&fit=crop${quote2}`;
   });
   
-  // Replace any remaining broken image references with a working placeholder
+  // Replace clearly broken src values only — do not clobber relative uploads (wp-content/.../file.png)
   const brokenImagePattern = /src=["'](?!https?:\/\/|data:|\.\/|\/|#)([^"']+)["']/g;
   html = html.replace(brokenImagePattern, (match, brokenUrl) => {
+    if (/\.(jpg|jpeg|png|gif|webp|svg|ico|avif)(\?|#|$)/i.test(brokenUrl)) return match;
+    if (/^(wp-content|uploads|media)\//i.test(brokenUrl)) return match;
     if (brokenUrl.match(/^photo-\d+-\d+/)) {
       const cleanPhotoId = brokenUrl.split('?')[0].split('&')[0];
       return `src="https://images.unsplash.com/${cleanPhotoId}?w=800&h=600&fit=crop"`;

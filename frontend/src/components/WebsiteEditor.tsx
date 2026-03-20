@@ -107,19 +107,18 @@ function fixImageUrls(html: string): string {
     return `url("https://images.unsplash.com/photo-${photoId}?w=800&h=600&fit=crop")`;
   });
   
-  // Fix any remaining src that doesn't start with http/https/data/./
+  // Do not replace relative uploads / real file paths (WordPress imports)
   const brokenImagePattern = /src=["'](?!https?:\/\/|data:|\.\/|\/|#)([^"']+)["']/g;
   html = html.replace(brokenImagePattern, (match, brokenUrl) => {
-    // If it looks like a photo ID (photo-XXX or numeric-XXX), use Unsplash
+    if (/\.(jpg|jpeg|png|gif|webp|svg|ico|avif)(\?|#|$)/i.test(brokenUrl)) return match;
+    if (/^(wp-content|uploads|media)\//i.test(brokenUrl)) return match;
     if (brokenUrl.match(/^photo-\d+-[a-zA-Z0-9]+/)) {
       const cleanPhotoId = brokenUrl.split('?')[0].split('&')[0];
       return `src="https://images.unsplash.com/${cleanPhotoId}?w=800&h=600&fit=crop"`;
     }
-    // If it looks like a numeric Unsplash ID
     if (brokenUrl.match(/^\d{10,}-[a-zA-Z0-9]+/)) {
       return `src="https://images.unsplash.com/photo-${brokenUrl}?w=800&h=600&fit=crop"`;
     }
-    // Otherwise use a placeholder service
     return `src="https://picsum.photos/800/600"`;
   });
   
@@ -1662,28 +1661,29 @@ function getVisualEditorScript(): string {
       const tagName = selectedElement.tagName.toLowerCase();
       const url = e.data.url;
       
-      // Handle IMG tags
+      // Handle IMG tags — WordPress often sets srcset/data-src; leaving old values makes the browser
+      // keep showing the old image and outerHTML can serialize the wrong URL on Save.
       if (tagName === 'img') {
-        selectedElement.src = url;
-        selectedElement.setAttribute('src', url);
-        // Also update srcset if it exists
-        if (selectedElement.srcset) {
-          selectedElement.srcset = url;
-        }
+        var imgEl = selectedElement;
+        ['srcset', 'sizes', 'data-src', 'data-srcset', 'data-lazy-src', 'data-large_image', 'data-orig-file', 'data-large-file', 'data-medium-file', 'data-full-url'].forEach(function (a) {
+          imgEl.removeAttribute(a);
+        });
+        imgEl.removeAttribute('srcset');
+        imgEl.setAttribute('src', url);
+        imgEl.src = url;
       }
       // Handle picture elements
       else if (tagName === 'picture') {
         const img = selectedElement.querySelector('img');
         if (img) {
-          img.src = url;
+          ['srcset', 'sizes', 'data-src', 'data-srcset', 'data-lazy-src', 'data-large_image'].forEach(function (a) {
+            img.removeAttribute(a);
+          });
           img.setAttribute('src', url);
+          img.src = url;
         }
-        // Update source elements too
-        const sources = selectedElement.querySelectorAll('source');
-        sources.forEach(source => {
-          if (source.srcset) {
-            source.srcset = url;
-          }
+        selectedElement.querySelectorAll('source').forEach(function (source) {
+          source.remove();
         });
       }
       // Handle elements with background-image (div, section, etc.)
