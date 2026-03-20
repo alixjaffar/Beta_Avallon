@@ -44,6 +44,32 @@ function proxyUrl(absolute: string, apiBase: string): string {
   return `${base}${PROXY_PATH}?url=${encodeURIComponent(absolute)}`;
 }
 
+/**
+ * Only pass real image/media URLs through the image proxy. The previous implementation rewrote
+ * every `src=` including <script src="...view.js"> — the proxy returns image/* and the browser
+ * refuses to run JS ("image/gif is not a script MIME type").
+ */
+function shouldProxyAsImage(absUrl: string): boolean {
+  const raw = absUrl.trim();
+  if (!raw || !/^https?:\/\//i.test(raw)) return false;
+  let path = raw;
+  try {
+    const u = new URL(raw);
+    path = u.pathname + u.search;
+  } catch {
+    /* keep raw */
+  }
+  const lower = path.toLowerCase();
+  if (/\.(js|mjs|cjs|css|json|html|htm|map)(\?|#|$)/i.test(lower)) return false;
+  if (/\.(woff2?|ttf|eot|otf)(\?|#|$)/i.test(lower)) return false;
+  if (/\.(mp4|webm|ogg|mp3|wav)(\?|#|$)/i.test(lower)) return false;
+  if (/\.(jpg|jpeg|png|gif|webp|svg|ico|avif|bmp)(\?|#|$)/i.test(lower)) return true;
+  if (/\/wp-content\/uploads\//i.test(raw)) return true;
+  if (/picsum\.photos/i.test(raw)) return true;
+  if (/images\.unsplash\.com\/photo-/i.test(raw)) return true;
+  return false;
+}
+
 function resolveToAbsolute(href: string, baseHref: string | null): string | null {
   const raw = href.trim();
   if (isSkippableUrl(raw)) return null;
@@ -67,7 +93,7 @@ function rewriteSrcsetValue(srcset: string, baseHref: string | null, apiBase: st
       const urlPart = tokens[0];
       const desc = tokens.length > 1 ? tokens.slice(1).join(' ') : '';
       const abs = resolveToAbsolute(urlPart, baseHref);
-      if (!abs || !/^https?:\/\//i.test(abs)) return part;
+      if (!abs || !shouldProxyAsImage(abs)) return part;
       const proxied = proxyUrl(abs, apiBase);
       return desc ? `${proxied} ${desc}` : proxied;
     })
@@ -79,7 +105,7 @@ function rewriteUrlsInCssFragment(css: string, baseHref: string | null, apiBase:
     const u = String(url).trim();
     if (u.startsWith('#') || u.startsWith('data:') || u.includes('/api/proxy/image?')) return match;
     const abs = resolveToAbsolute(u, baseHref);
-    if (!abs || !/^https?:\/\//i.test(abs)) return match;
+    if (!abs || !shouldProxyAsImage(abs)) return match;
     return `url("${proxyUrl(abs, apiBase)}")`;
   });
 }
@@ -111,7 +137,7 @@ export function rewriteExternalImagesToProxy(html: string, apiBase: string): str
         return `${name}=${quote}${rewriteSrcsetValue(val, baseHref, apiBase)}${quote}`;
       }
       const abs = resolveToAbsolute(val, baseHref);
-      if (!abs || !/^https?:\/\//i.test(abs)) return match;
+      if (!abs || !shouldProxyAsImage(abs)) return match;
       return `${name}=${quote}${proxyUrl(abs, apiBase)}${quote}`;
     });
   }

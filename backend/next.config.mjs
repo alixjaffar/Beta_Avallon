@@ -7,7 +7,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   distDir: '.next',
   experimental: { 
-    serverActions: { bodySizeLimit: '2mb' },
+    // Large websiteContent JSON (multiple base64 images) must fit server limits
+    serverActions: { bodySizeLimit: '12mb' },
   },
   // Mark problematic packages as external to prevent bundling issues
   serverExternalPackages: [
