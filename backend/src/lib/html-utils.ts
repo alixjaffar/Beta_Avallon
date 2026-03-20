@@ -96,7 +96,8 @@ function hasSwiperCarouselMarkup(html: string): boolean {
     /class=["'][^"']*\bswiper\b[^"']*["']/.test(l) ||
     /class=["'][^"']*\bswiper-container\b[^"']*["']/.test(l) ||
     /\bwp-block-[^"'\s]*carousel\b/.test(l) ||
-    /\bcb-carousel\b/.test(l)
+    /\bcb-carousel\b/.test(l) ||
+    /class=["'][^"']*mentor[^"']*["']/.test(l)
   );
 }
 
@@ -105,9 +106,11 @@ function needsCarouselFix(html: string): boolean {
   const lower = html.toLowerCase();
 
   const hasCarouselSection =
-    /class=["'][^"']*(?:expert|team|testimonial|member|carousel|swiper)[^"']*["']/.test(lower) ||
-    /id=["'][^"']*(?:expert|team|testimonial)[^"']*["']/.test(lower) ||
-    /meet\s+(some\s+of\s+)?our\s+(experts|team)/i.test(html);
+    /class=["'][^"']*(?:expert|team|testimonial|member|carousel|swiper|mentor)[^"']*["']/.test(lower) ||
+    /id=["'][^"']*(?:expert|team|testimonial|mentor)[^"']*["']/.test(lower) ||
+    /meet\s+(some\s+of\s+)?our\s+(experts|team)/i.test(html) ||
+    /\bmentors?\b/.test(lower) ||
+    /learn\s+from\s+founders/i.test(html);
 
   const hasArrows =
     /swiper-button-(prev|next)|carousel-(prev|next)|[<>][^<]*chevron|arrow-[^"'\s]*|data-(prev|next)/i.test(html) ||
@@ -122,14 +125,16 @@ function needsCarouselFix(html: string): boolean {
 /**
  * Transform carousel-like sections into Avallon-initializable structure and inject Swiper + init.
  * Uses markup patterns that work with our init script.
+ * @param skipImageProxy — set true for Vercel deploy (keep real URLs for download step; no editor proxy)
  */
-function injectCarouselIntoHtml(html: string): string {
+function injectCarouselIntoHtml(html: string, options?: { skipImageProxy?: boolean }): string {
   if (!html || typeof html !== 'string') return html;
 
   let out = sanitizeWordpressImportedHtml(html);
-  out = rewriteExternalImagesToProxy(out, getDefaultApiBaseForProxy());
+  if (!options?.skipImageProxy) {
+    out = rewriteExternalImagesToProxy(out, getDefaultApiBaseForProxy());
+  }
   out = stripInlineSwiperInitScripts(out);
-  const lower = out.toLowerCase();
   if (!hasSwiperCarouselMarkup(out) && !needsCarouselFix(out)) return out;
 
   if (hasJsdelivrSwiperScript(out) && out.includes('data-avallon-carousel-init')) return out;
@@ -176,6 +181,13 @@ function injectCarouselIntoHtml(html: string): string {
   }
 
   return out;
+}
+
+/**
+ * Same as injectCarouselIntoHtml but does not rewrite images to /api/proxy — used when publishing to Vercel.
+ */
+export function injectCarouselIntoHtmlForDeploy(html: string): string {
+  return injectCarouselIntoHtml(html, { skipImageProxy: true });
 }
 
 /**

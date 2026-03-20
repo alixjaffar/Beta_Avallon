@@ -3,7 +3,7 @@
 // CHANGELOG: 2026-01-22 - Added image downloading and navigation link fixing
 // CHANGELOG: 2026-03-12 - Added bulletproof mobile menu injection (v2)
 // CHANGELOG: 2026-03-12 - Accept websiteContent directly from frontend to avoid stale data
-const DEPLOY_VERSION = "2026-03-20-proxy-unwrap-responsive-v4";
+const DEPLOY_VERSION = "2026-03-20-carousel-no-width-strip-v5";
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 import { z } from "zod";
@@ -12,6 +12,7 @@ import { getSiteById, updateSite } from "@/data/sites";
 import { GitHubClient } from "@/lib/clients/github";
 import { VercelProvider } from "@/lib/providers/impl/vercel";
 import { getCorsHeaders } from "@/lib/cors";
+import { injectCarouselIntoHtmlForDeploy } from "@/lib/html-utils";
 
 // Route segment config to allow larger request bodies (for base64 images)
 export const maxDuration = 120; // 2 minutes timeout
@@ -55,48 +56,8 @@ function cleanEditorScripts(html: string): string {
   // Clean empty script tags
   html = html.replace(/<script>\s*<\/script>/gi, '');
   
-  // =====================================================
-  // FIX: Remove hardcoded viewport widths that break mobile display
-  // These are calculated based on editor viewport and break on other screen sizes
-  // =====================================================
-  
-  // Remove hardcoded width from WordPress sections (alignfull, has-background)
-  html = html.replace(
-    /(<div[^>]*class="[^"]*(?:alignfull|has-background|wp-block-group)[^"]*"[^>]*style="[^"]*)(width:\s*\d{3,}(?:\.\d+)?px;?\s*)/gi,
-    '$1'
-  );
-  
-  // Remove hardcoded heights from these sections
-  html = html.replace(
-    /(<div[^>]*class="[^"]*(?:alignfull|has-background|wp-block-group)[^"]*"[^>]*style="[^"]*)(height:\s*\d{3,}(?:\.\d+)?px;?\s*)/gi,
-    '$1'
-  );
-  
-  // BROADER FIX: Remove large fixed widths (>500px) from section, main, div elements
-  // These are likely layout widths that should be responsive
-  html = html.replace(
-    /(<(?:section|main|div|article|header|footer)[^>]*style="[^"]*)(width:\s*[5-9]\d{2}(?:\.\d+)?px;?\s*)/gi,
-    '$1'
-  );
-  html = html.replace(
-    /(<(?:section|main|div|article|header|footer)[^>]*style="[^"]*)(width:\s*\d{4,}(?:\.\d+)?px;?\s*)/gi,
-    '$1'
-  );
-  
-  // Remove min-width larger than 500px from layout containers
-  html = html.replace(
-    /(<(?:section|main|div|article|header|footer)[^>]*style="[^"]*)(min-width:\s*[5-9]\d{2}(?:\.\d+)?px;?\s*)/gi,
-    '$1'
-  );
-  html = html.replace(
-    /(<(?:section|main|div|article|header|footer)[^>]*style="[^"]*)(min-width:\s*\d{4,}(?:\.\d+)?px;?\s*)/gi,
-    '$1'
-  );
-  
-  // Clean up any resulting empty style attributes or double semicolons
-  html = html.replace(/style="\s*;+\s*"/gi, '');
-  html = html.replace(/style="([^"]*);\s*;+/gi, 'style="$1;');
-  html = html.replace(/style=";\s*/gi, 'style="');
+  // NOTE: We no longer strip inline width/min-width from divs/sections here — that broke migrated
+  // layouts (mentor grids, absolute cards, WP block geometry) on Vercel. Overflow is handled in CSS only.
   
   return html;
 }
@@ -128,86 +89,14 @@ function unwrapAvallonProxyImageUrls(html: string): string {
  * - Ensures viewport meta tag exists
  * - Adds global CSS to prevent overflow and ensure images/media scale properly
  *
- * NOTE (migrated WP / complex layouts): v3 used !important on img height, all [style*=width],
- * and forced grid/flex on mobile — that broke heroes, masks, carousels, mentor grids.
- * v4 is softer: max-width only where safe, no blanket height:auto on images.
+ * v5: Viewport + optional box-sizing only. Previous global rules (img max-width, section max-width,
+ * overflow-x on body, heading clamps) still broke migrated mentor/hero sections on Vercel.
  */
 function injectResponsiveStyles(files: Record<string, string>): Record<string, string> {
   const fixedFiles: Record<string, string> = {};
   
-  const responsiveCSS = `
-<!-- AVALLON RESPONSIVE FIXES - ${DEPLOY_VERSION} -->
-<style data-avallon-responsive="true">
-/* ========== GLOBAL OVERFLOW CONTROL ========== */
-html, body {
-  max-width: 100%;
-  overflow-x: hidden;
-}
-
-/* ========== RESPONSIVE MEDIA (soft — do not force height:auto; breaks object-fit / hero / masks) ========== */
-img, video, iframe, embed, object {
-  max-width: 100%;
-}
-svg {
-  max-width: 100%;
-  height: auto;
-}
-
-/* ========== COMMON LAYOUT CONTAINERS ========== */
-.container, .wrapper, .content, main, article, section, .section,
-.row, .col, .column,
-.wp-block-group, .wp-block-columns, .wp-block-column,
-.elementor-container, .elementor-row, .elementor-column {
-  max-width: 100%;
-  box-sizing: border-box;
-}
-
-/* ========== HERO AND FULL-WIDTH SECTIONS ========== */
-.hero, .banner, .header-image, .full-width, .alignfull,
-[class*="hero"], [class*="banner"], [class*="full-width"] {
-  max-width: 100vw;
-  box-sizing: border-box;
-}
-
-/* ========== RESPONSIVE TABLES ========== */
-@media (max-width: 767px) {
-  table {
-    max-width: 100%;
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-}
-
-/* ========== MOBILE-SPECIFIC FIXES ========== */
-@media (max-width: 767px) {
-  h1, h2, h3, h4, h5, h6, p, span, a, li, td, th {
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-  }
-
-  h1 {
-    font-size: clamp(1.75rem, 5vw, 3rem);
-  }
-  h2 {
-    font-size: clamp(1.5rem, 4vw, 2.5rem);
-  }
-
-  button, input, select, textarea, .btn, [class*="button"] {
-    max-width: 100%;
-    box-sizing: border-box;
-  }
-
-  pre, code {
-    max-width: 100%;
-    overflow-x: auto;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-  }
-}
-</style>
-<!-- END AVALLON RESPONSIVE FIXES -->
-`;
+  /* No global CSS — only viewport meta below (v5). Previous style injection broke migrated layouts. */
+  const responsiveCSS = `\n<!-- avallon-deploy ${DEPLOY_VERSION} -->\n`;
 
   for (const [filename, content] of Object.entries(files)) {
     if (!filename.endsWith('.html') || typeof content !== 'string') {
@@ -929,7 +818,9 @@ export async function POST(req: NextRequest) {
       const cleanedFiles: Record<string, string> = {};
       for (const [filename, content] of Object.entries(rawFiles)) {
         if (filename.endsWith('.html') && typeof content === 'string') {
-          cleanedFiles[filename] = unwrapAvallonProxyImageUrls(cleanEditorScripts(content));
+          cleanedFiles[filename] = injectCarouselIntoHtmlForDeploy(
+            unwrapAvallonProxyImageUrls(cleanEditorScripts(content))
+          );
         } else if (typeof content === 'string') {
           cleanedFiles[filename] = content;
         }
