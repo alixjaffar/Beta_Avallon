@@ -3,7 +3,7 @@
 // CHANGELOG: 2026-01-22 - Added image downloading and navigation link fixing
 // CHANGELOG: 2026-03-12 - Added bulletproof mobile menu injection (v2)
 // CHANGELOG: 2026-03-12 - Accept websiteContent directly from frontend to avoid stale data
-const DEPLOY_VERSION = "2026-03-12-direct-content-v3";
+const DEPLOY_VERSION = "2026-03-20-proxy-unwrap-responsive-v4";
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 import { z } from "zod";
@@ -102,9 +102,35 @@ function cleanEditorScripts(html: string): string {
 }
 
 /**
+ * Editor preview rewrites external images to Avallon's /api/proxy/image?url=...
+ * Those URLs (a) are not downloaded by the image scraper (no .jpg in path) and
+ * (b) point at the API host — wrong origin on Vercel, often 401/CORS.
+ * Decode the real https URL so downloadAndEmbedImages + browsers fetch real assets.
+ */
+function unwrapAvallonProxyImageUrls(html: string): string {
+  if (!html || typeof html !== 'string') return html;
+  return html.replace(
+    /https?:\/\/[^"'\\s>)]*\/api\/proxy\/image\?url=([^&"'\\s]+)/gi,
+    (_full, encoded: string) => {
+      try {
+        const decoded = decodeURIComponent(encoded);
+        if (/^https?:\/\//i.test(decoded)) return decoded;
+      } catch {
+        /* ignore */
+      }
+      return _full;
+    }
+  );
+}
+
+/**
  * Inject responsive styles to ensure proper mobile display
  * - Ensures viewport meta tag exists
  * - Adds global CSS to prevent overflow and ensure images/media scale properly
+ *
+ * NOTE (migrated WP / complex layouts): v3 used !important on img height, all [style*=width],
+ * and forced grid/flex on mobile — that broke heroes, masks, carousels, mentor grids.
+ * v4 is softer: max-width only where safe, no blanket height:auto on images.
  */
 function injectResponsiveStyles(files: Record<string, string>): Record<string, string> {
   const fixedFiles: Record<string, string> = {};
@@ -114,91 +140,69 @@ function injectResponsiveStyles(files: Record<string, string>): Record<string, s
 <style data-avallon-responsive="true">
 /* ========== GLOBAL OVERFLOW CONTROL ========== */
 html, body {
-  max-width: 100% !important;
-  overflow-x: hidden !important;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
-/* ========== RESPONSIVE MEDIA ========== */
-img, video, iframe, embed, object, svg {
-  max-width: 100% !important;
-  height: auto !important;
+/* ========== RESPONSIVE MEDIA (soft — do not force height:auto; breaks object-fit / hero / masks) ========== */
+img, video, iframe, embed, object {
+  max-width: 100%;
 }
-
-/* ========== PREVENT FIXED-WIDTH CONTAINERS FROM OVERFLOWING ========== */
-[style*="width:"] {
-  max-width: 100% !important;
-  box-sizing: border-box !important;
-}
-
-/* ========== RESPONSIVE TABLES ========== */
-table {
-  max-width: 100% !important;
-  display: block !important;
-  overflow-x: auto !important;
-  -webkit-overflow-scrolling: touch !important;
+svg {
+  max-width: 100%;
+  height: auto;
 }
 
 /* ========== COMMON LAYOUT CONTAINERS ========== */
 .container, .wrapper, .content, main, article, section, .section,
-.row, .col, .column, .grid, .flex,
+.row, .col, .column,
 .wp-block-group, .wp-block-columns, .wp-block-column,
 .elementor-container, .elementor-row, .elementor-column {
-  max-width: 100% !important;
-  box-sizing: border-box !important;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* ========== HERO AND FULL-WIDTH SECTIONS ========== */
 .hero, .banner, .header-image, .full-width, .alignfull,
 [class*="hero"], [class*="banner"], [class*="full-width"] {
-  max-width: 100vw !important;
-  overflow-x: hidden !important;
+  max-width: 100vw;
+  box-sizing: border-box;
 }
 
-/* ========== PREVENT HORIZONTAL SCROLL FROM POSITIONED ELEMENTS ========== */
-.absolute, .fixed, [style*="position: absolute"], [style*="position:absolute"],
-[style*="position: fixed"], [style*="position:fixed"] {
-  max-width: 100vw !important;
+/* ========== RESPONSIVE TABLES ========== */
+@media (max-width: 767px) {
+  table {
+    max-width: 100%;
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 /* ========== MOBILE-SPECIFIC FIXES ========== */
 @media (max-width: 767px) {
-  /* Ensure text doesn't overflow */
   h1, h2, h3, h4, h5, h6, p, span, a, li, td, th {
-    word-wrap: break-word !important;
-    overflow-wrap: break-word !important;
-    hyphens: auto !important;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
   }
-  
-  /* Scale down large headings on mobile */
+
   h1 {
-    font-size: clamp(1.75rem, 5vw, 3rem) !important;
+    font-size: clamp(1.75rem, 5vw, 3rem);
   }
   h2 {
-    font-size: clamp(1.5rem, 4vw, 2.5rem) !important;
+    font-size: clamp(1.5rem, 4vw, 2.5rem);
   }
-  
-  /* Ensure buttons and inputs fit */
+
   button, input, select, textarea, .btn, [class*="button"] {
-    max-width: 100% !important;
-    box-sizing: border-box !important;
+    max-width: 100%;
+    box-sizing: border-box;
   }
-  
-  /* Prevent pre/code from causing overflow */
+
   pre, code {
-    max-width: 100% !important;
-    overflow-x: auto !important;
-    white-space: pre-wrap !important;
-    word-wrap: break-word !important;
-  }
-  
-  /* Fix flexbox containers that might overflow */
-  .flex, .d-flex, [style*="display: flex"], [style*="display:flex"] {
-    flex-wrap: wrap !important;
-  }
-  
-  /* Ensure grid items don't overflow */
-  .grid, [style*="display: grid"], [style*="display:grid"] {
-    grid-template-columns: 1fr !important;
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
   }
 }
 </style>
@@ -279,10 +283,23 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
   const bgImagePattern = /background(?:-image)?:\s*url\(["']?(https?:\/\/[^"'\s)]+)["']?\)/gi;
   const unsplashPattern = /(?:src=["']|url\(["']?)(https?:\/\/images\.unsplash\.com\/[^"'\s)]+)/gi;
   
+  const proxyParamPattern = /https?:\/\/[^"'\\s>)]*\/api\/proxy\/image\?url=([^&"'\\s]+)/gi;
+
   for (const content of Object.values(files)) {
     if (typeof content !== 'string') continue;
     
     let match;
+    
+    // Avallon editor proxy: decode inner URL so we can download the real file
+    const proxyPat = new RegExp(proxyParamPattern.source, 'gi');
+    while ((match = proxyPat.exec(content)) !== null) {
+      try {
+        const inner = decodeURIComponent(match[1].replace(/["')]+$/, ''));
+        if (/^https?:\/\//i.test(inner)) imageUrls.add(inner.split('#')[0]);
+      } catch {
+        /* ignore */
+      }
+    }
     
     // Find images with extensions
     const pattern1 = new RegExp(imageUrlPattern.source, 'gi');
@@ -908,15 +925,16 @@ export async function POST(req: NextRequest) {
       logInfo('Processing files for deployment', { fileCount: Object.keys(rawFiles).length });
       
       // Step 0: CRITICAL - Clean editor-injected scripts that break navigation
+      // Step 0.05: Unwrap /api/proxy/image?url=... back to real asset URLs (editor preview only)
       const cleanedFiles: Record<string, string> = {};
       for (const [filename, content] of Object.entries(rawFiles)) {
         if (filename.endsWith('.html') && typeof content === 'string') {
-          cleanedFiles[filename] = cleanEditorScripts(content);
+          cleanedFiles[filename] = unwrapAvallonProxyImageUrls(cleanEditorScripts(content));
         } else if (typeof content === 'string') {
           cleanedFiles[filename] = content;
         }
       }
-      logInfo('Cleaned editor scripts from HTML files');
+      logInfo('Cleaned editor scripts + unwrapped proxy image URLs for deploy');
       
       // Step 0.25: Inject responsive styles for proper mobile display
       const responsiveFiles = injectResponsiveStyles(cleanedFiles);
