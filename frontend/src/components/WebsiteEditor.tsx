@@ -1925,7 +1925,7 @@ function getVisualEditorScript(): string {
   window.parent.postMessage({ type: 'visualEditorReady' }, '*');
 })();
 </script>
-<style>
+<style data-avallon-visual-editor="1">
   * { cursor: default !important; }
   a, button { pointer-events: auto !important; }
   /* Stack swiper above selection resize handles (z-index ~100000) so arrows/dots stay clickable */
@@ -2390,6 +2390,15 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     
     // Remove inline styles that contain pointer-events: none and cursor: default on body
     html = html.replace(/<style>\s*\*\s*\{\s*cursor:\s*default[^}]*\}[\s\S]*?<\/style>/gi, '');
+    // Visual editor appends <style> AFTER </script> — script regex above does not remove it; strip by tag
+    html = html.replace(/<style[^>]*\bdata-avallon-visual-editor=["']1["'][^>]*>[\s\S]*?<\/style>/gi, '');
+    
+    // Saved DOM includes data-avallon-inited from last preview — next load must re-run Swiper init or carousel stays broken (no clicks/scroll)
+    html = html.replace(/\s+data-avallon-inited="true"/gi, '');
+    html = html.replace(/\s+data-avallon-inited='true'/gi, '');
+    
+    // Avoid stacking duplicate preview-only CSS on every save/reload
+    html = html.replace(/<style[^>]*\bdata-avallon-editor-override=["'][^"']*["'][^>]*>[\s\S]*?<\/style>/gi, '');
     
     // Remove avallon overlay divs
     html = html.replace(/<div[^>]*id="avallon-selection-overlay"[^>]*>[\s\S]*?<\/div>/gi, '');
