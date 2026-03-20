@@ -4,7 +4,12 @@
  * but lack working JavaScript.
  */
 
-import { sanitizeWordpressImportedHtml, hasJsdelivrSwiperScript } from './html-wordpress-import';
+import {
+  sanitizeWordpressImportedHtml,
+  hasJsdelivrSwiperScript,
+  rewriteExternalImagesToProxy,
+  getDefaultApiBaseForProxy,
+} from './html-wordpress-import';
 
 const SWIPER_CSS =
   '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">';
@@ -17,25 +22,29 @@ const SWIPER_SCRIPT =
 const CAROUSEL_INIT_SCRIPT = `
 <script data-avallon-carousel-init="true">
 (function() {
+  function wpCarouselScope(swiperRoot) {
+    return swiperRoot.closest('[class*="cb-carousel"], [class*="wp-block-cb-carousel"], [class*="wp-block-cb"]') || swiperRoot.parentElement || document.body;
+  }
   function mountSwipers() {
     if (typeof Swiper === 'undefined') return;
-    var opts = { slidesPerView: 1, spaceBetween: 24, loop: false, rewind: true, speed: 650, grabCursor: true, watchOverflow: true, effect: 'slide' };
-    document.querySelectorAll('.swiper, .swiper-container, [class*="wp-block-cb-carousel"], [class*="cb-carousel"]').forEach(function(container) {
-      if (container.dataset.avallonInited === 'true') return;
-      var wrap = container.querySelector('.swiper-wrapper');
-      if (!wrap || !wrap.querySelector('.swiper-slide')) return;
+    var opts = { slidesPerView: 1, spaceBetween: 24, loop: false, rewind: true, speed: 650, grabCursor: true, watchOverflow: true, effect: 'slide', observer: true, observeParents: true, resizeObserver: true, keyboard: { enabled: true } };
+    document.querySelectorAll('.swiper-wrapper').forEach(function(wrap) {
+      var root = wrap.parentElement;
+      if (!root || root.dataset.avallonInited === 'true') return;
+      if (!wrap.querySelector('.swiper-slide')) return;
+      var scope = wpCarouselScope(root);
       try {
-        if (container.swiper && container.swiper.destroy) { container.swiper.destroy(true, true); }
+        if (root.swiper && root.swiper.destroy) { root.swiper.destroy(true, true); }
       } catch (e) {}
       try {
-        var pag = container.querySelector('.swiper-pagination');
-        var prev = container.querySelector('.swiper-button-prev');
-        var next = container.querySelector('.swiper-button-next');
-        new Swiper(container, Object.assign({}, opts, {
+        var pag = scope.querySelector('.swiper-pagination, .cb-pagination, [class*="cb-pagination"]');
+        var prev = scope.querySelector('.swiper-button-prev, .cb-button-prev, [class*="cb-button-prev"]');
+        var next = scope.querySelector('.swiper-button-next, .cb-button-next, [class*="cb-button-next"]');
+        new Swiper(root, Object.assign({}, opts, {
           pagination: pag ? { el: pag, clickable: true, dynamicBullets: false } : false,
           navigation: (prev && next) ? { nextEl: next, prevEl: prev } : false,
         }));
-        container.dataset.avallonInited = 'true';
+        root.dataset.avallonInited = 'true';
       } catch (e) { console.warn('Avallon swiper init:', e); }
     });
     document.querySelectorAll('.avallon-carousel-container').forEach(function(container) {
@@ -55,13 +64,18 @@ const CAROUSEL_INIT_SCRIPT = `
       }
     });
   }
-  function initCarousels() { mountSwipers(); }
+  function initCarousels() {
+    mountSwipers();
+    requestAnimationFrame(mountSwipers);
+    setTimeout(mountSwipers, 0);
+    setTimeout(mountSwipers, 400);
+  }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initCarousels);
   } else {
     initCarousels();
   }
-  window.addEventListener('load', function() { mountSwipers(); });
+  window.addEventListener('load', function() { mountSwipers(); setTimeout(mountSwipers, 200); });
 })();
 </script>`;
 
@@ -113,6 +127,7 @@ function injectCarouselIntoHtml(html: string): string {
   if (!html || typeof html !== 'string') return html;
 
   let out = sanitizeWordpressImportedHtml(html);
+  out = rewriteExternalImagesToProxy(out, getDefaultApiBaseForProxy());
   out = stripInlineSwiperInitScripts(out);
   const lower = out.toLowerCase();
   if (!hasSwiperCarouselMarkup(out) && !needsCarouselFix(out)) return out;

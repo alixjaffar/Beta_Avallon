@@ -12,7 +12,7 @@
  * - Detects and preserves CSS frameworks
  */
 
-import { sanitizeWordpressImportedHtml } from './wordpressHtmlSanitize';
+import { sanitizeWordpressImportedHtml, rewriteExternalImagesToProxy } from './wordpressHtmlSanitize';
 
 // Common CDN patterns to preserve (don't inline these, just fix URLs)
 const CDN_PATTERNS = [
@@ -191,6 +191,8 @@ export async function importHTML(
 
     // WordPress: Swiper/wp-includes URLs often 403 off-site — use jsDelivr + wp stub
     html = sanitizeWordpressImportedHtml(html);
+    const proxyApiBase = import.meta.env.PROD ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000';
+    html = rewriteExternalImagesToProxy(html, proxyApiBase);
 
     result.html = html;
 

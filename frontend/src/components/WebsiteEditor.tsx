@@ -5,7 +5,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { ThemeToggleButton } from './ThemeToggleButton';
 import { ImportWebsiteModal } from './ImportWebsiteModal';
 import { quickImport, isHTML } from '@/lib/htmlImporter';
-import { sanitizeWordpressImportedHtml, hasJsdelivrSwiperScript } from '@/lib/wordpressHtmlSanitize';
+import { sanitizeWordpressImportedHtml, hasJsdelivrSwiperScript, rewriteExternalImagesToProxy } from '@/lib/wordpressHtmlSanitize';
 
 interface WebsiteEditorProps {
   site: {
@@ -343,29 +343,37 @@ function injectCarouselScript(html: string): string {
     '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">';
   // AI/templates often set min-width:100% on slides; that breaks slidesPerView>1 (half-slide / stuck tween).
   const swiperSlideFix =
-    '<style data-avallon-swiper-fix="1">.swiper .swiper-slide,.swiper-container .swiper-slide{min-width:0!important;box-sizing:border-box}</style>';
+    '<style data-avallon-swiper-fix="1">.swiper .swiper-slide,.swiper-container .swiper-slide,[class*="cb-carousel"] .swiper-slide,[class*="wp-block-cb-carousel"] .swiper-slide{min-width:0!important;box-sizing:border-box}</style>';
   const swiperScript =
     '<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>';
   const carouselInit = `
 <script data-avallon-carousel-init="true">
 (function() {
+  function wpCarouselScope(swiperRoot) {
+    return swiperRoot.closest('[class*="cb-carousel"], [class*="wp-block-cb-carousel"], [class*="wp-block-cb"]') || swiperRoot.parentElement || document.body;
+  }
   function mountSwipers() {
     if (typeof Swiper === 'undefined') return;
-    // One slide per person so pagination shows one dot each (e.g. 3 people → 3 dots).
-    var opts = { slidesPerView: 1, spaceBetween: 24, loop: false, rewind: true, speed: 650, grabCursor: true, watchOverflow: true, effect: 'slide' };
-    document.querySelectorAll('.swiper, .swiper-container, [class*="wp-block-cb-carousel"], [class*="cb-carousel"]').forEach(function(el) {
-      if (el.dataset.avallonInited === 'true') return;
-      var wrap = el.querySelector('.swiper-wrapper');
-      if (!wrap || !wrap.querySelector('.swiper-slide')) return;
+    var opts = { slidesPerView: 1, spaceBetween: 24, loop: false, rewind: true, speed: 650, grabCursor: true, watchOverflow: true, effect: 'slide', observer: true, observeParents: true, resizeObserver: true, keyboard: { enabled: true } };
+    // WP blocks often put .swiper-button-* / .cb-button-* OUTSIDE the .swiper that wraps .swiper-wrapper.
+    // Always init the parent of .swiper-wrapper and resolve nav/pagination from the block ancestor.
+    document.querySelectorAll('.swiper-wrapper').forEach(function(wrap) {
+      var root = wrap.parentElement;
+      if (!root || root.dataset.avallonInited === 'true') return;
+      if (!wrap.querySelector('.swiper-slide')) return;
+      var scope = wpCarouselScope(root);
       try {
-        if (el.swiper && el.swiper.destroy) { el.swiper.destroy(true, true); }
+        if (root.swiper && root.swiper.destroy) { root.swiper.destroy(true, true); }
       } catch (e) {}
       try {
-        var pag = el.querySelector('.swiper-pagination');
-        var prev = el.querySelector('.swiper-button-prev');
-        var next = el.querySelector('.swiper-button-next');
-        new Swiper(el, Object.assign({}, opts, { pagination: pag ? { el: pag, clickable: true, dynamicBullets: false } : false, navigation: (prev && next) ? { nextEl: next, prevEl: prev } : false }));
-        el.dataset.avallonInited = 'true';
+        var pag = scope.querySelector('.swiper-pagination, .cb-pagination, [class*="cb-pagination"]');
+        var prev = scope.querySelector('.swiper-button-prev, .cb-button-prev, [class*="cb-button-prev"]');
+        var next = scope.querySelector('.swiper-button-next, .cb-button-next, [class*="cb-button-next"]');
+        new Swiper(root, Object.assign({}, opts, {
+          pagination: pag ? { el: pag, clickable: true, dynamicBullets: false } : false,
+          navigation: (prev && next) ? { nextEl: next, prevEl: prev } : false
+        }));
+        root.dataset.avallonInited = 'true';
       } catch (e) { console.warn('Avallon swiper:', e); }
     });
     document.querySelectorAll('.avallon-carousel-container').forEach(function(c) {
@@ -374,13 +382,18 @@ function injectCarouselScript(html: string): string {
       if (w) { try { new Swiper(c, opts); c.dataset.avallonInited = 'true'; } catch (e) {} }
     });
   }
-  function init() { mountSwipers(); }
+  function init() {
+    mountSwipers();
+    requestAnimationFrame(mountSwipers);
+    setTimeout(mountSwipers, 0);
+    setTimeout(mountSwipers, 400);
+  }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
   }
-  window.addEventListener('load', function() { mountSwipers(); });
+  window.addEventListener('load', function() { mountSwipers(); setTimeout(mountSwipers, 200); });
 })();
 </script>`;
 
@@ -1740,7 +1753,7 @@ function getVisualEditorScript(): string {
     var el = t && t.nodeType === 3 ? t.parentElement : t;
     if (!el || typeof el.closest !== 'function') return false;
     if (el.closest('.swiper-pagination') || el.closest('.swiper-scrollbar')) return true;
-    if (el.closest('[class*="swiper-button"]')) return true;
+    if (el.closest('[class*="swiper-button"]') || el.closest('[class*="cb-button"]') || el.closest('[class*="cb-pagination"]')) return true;
     var tag = (el.tagName || '').toUpperCase();
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'OPTION') return true;
     if (el.isContentEditable) return true;
@@ -1898,8 +1911,9 @@ function getVisualEditorScript(): string {
   a, button { pointer-events: auto !important; }
   /* Stack swiper above selection resize handles (z-index ~100000) so arrows/dots stay clickable */
   .swiper, .swiper-container { position: relative; z-index: 100002; isolation: isolate; }
-  .swiper-button-prev, .swiper-button-next, .swiper-pagination { z-index: 100005 !important; }
-  .swiper .swiper-slide, .swiper-container .swiper-slide, [class*="cb-carousel"] .swiper-slide { min-width: 0 !important; box-sizing: border-box; }
+  .swiper-button-prev, .swiper-button-next, .swiper-pagination,
+  .cb-button-prev, .cb-button-next, [class*="cb-pagination"] { z-index: 100005 !important; pointer-events: auto !important; }
+  .swiper .swiper-slide, .swiper-container .swiper-slide, [class*="cb-carousel"] .swiper-slide, [class*="wp-block-cb-carousel"] .swiper-slide { min-width: 0 !important; box-sizing: border-box; }
 </style>`;
 }
 
@@ -2395,6 +2409,8 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       }
       
       htmlContent = fixImageUrls(htmlContent);
+      // Route WP/media URLs through backend proxy so hotlink 403s don't break images and Swiper layout
+      htmlContent = rewriteExternalImagesToProxy(htmlContent, baseUrl);
       htmlContent = injectEditorOverrideCSS(htmlContent); // Force nav to be visible
       htmlContent = injectNavigationScript(htmlContent);
       htmlContent = injectCarouselScript(htmlContent);
