@@ -245,7 +245,7 @@ function injectNavigationScript(html: string): string {
   if (!html || typeof html !== 'string') return html;
   
   const navScript = `
-<script>
+<script data-avallon-nav="1">
 (function() {
   // Handle both click and touch events for mobile support
   function addNavHandler(link) {
@@ -354,7 +354,7 @@ function injectCarouselScript(html: string): string {
   }
   function mountSwipers() {
     if (typeof Swiper === 'undefined') return;
-    var opts = { slidesPerView: 1, spaceBetween: 24, loop: false, rewind: true, speed: 650, grabCursor: true, watchOverflow: true, effect: 'slide', observer: true, observeParents: true, resizeObserver: true, keyboard: { enabled: true } };
+    var opts = { slidesPerView: 1, spaceBetween: 16, loop: false, rewind: true, speed: 650, grabCursor: true, watchOverflow: true, effect: 'slide', observer: true, observeParents: true, resizeObserver: true, keyboard: { enabled: true }, breakpoints: { 640: { slidesPerView: 2, spaceBetween: 20 }, 1024: { slidesPerView: 3, spaceBetween: 24 } } };
     // WP blocks often put .swiper-button-* / .cb-button-* OUTSIDE the .swiper that wraps .swiper-wrapper.
     // Always init the parent of .swiper-wrapper and resolve nav/pagination from the block ancestor.
     document.querySelectorAll('.swiper-wrapper').forEach(function(wrap) {
@@ -1476,8 +1476,16 @@ function getVisualEditorScript(): string {
       window.parent.postMessage({ type: 'elementDuplicated', data: { xpath: getXPath(clone), isNew: true } }, '*');
     }
     
-    // Add another slide to a Swiper slider
+    // Add another slide to a Swiper slider (WordPress cb-carousel: swiper is often nested inside the block)
     if (e.data.type === 'addSwiperSlide') {
+      function resolveSwiperRoot(el) {
+        if (!el) return null;
+        var s = el.closest && el.closest('.swiper, .swiper-container');
+        if (s) return s;
+        var block = el.closest && el.closest('[class*="cb-carousel"], [class*="wp-block-cb-carousel"], [class*="wp-block-cb"]');
+        if (block) return block.querySelector('.swiper, .swiper-container');
+        return null;
+      }
       // Prefer xpath from parent (reliable when selection is the .swiper root or a slide)
       let template = null;
       if (e.data.xpath) {
@@ -1490,9 +1498,9 @@ function getVisualEditorScript(): string {
         return;
       }
 
-      const swiper = template.closest && template.closest('.swiper, .swiper-container');
+      const swiper = resolveSwiperRoot(template);
       if (!swiper) {
-        window.parent.postMessage({ type: 'error', data: { message: 'Selected element is not inside a swiper slider.' } }, '*');
+        window.parent.postMessage({ type: 'error', data: { message: 'Selected element is not inside a carousel. Click the carousel area (or a slide), then try again.' } }, '*');
         return;
       }
 
@@ -1502,36 +1510,45 @@ function getVisualEditorScript(): string {
         return;
       }
 
-      const slides = wrapper.querySelectorAll('.swiper-slide');
-      var slideCount = slides.length;
-      var startNum = slideCount * 3 + 1;
+      var slideEls = Array.prototype.filter.call(wrapper.children, function (c) {
+        return c.classList && c.classList.contains('swiper-slide');
+      });
+      var slideCount = slideEls.length;
 
-      const newSlide = document.createElement('div');
-      newSlide.className = 'swiper-slide';
-      newSlide.style.cssText =
-        'padding:24px 20px;box-sizing:border-box;background:rgba(241,245,249,0.95);border-radius:16px;border:1px solid rgba(0,0,0,0.06);';
-
-      function profileCol(n) {
-        return (
-          '<div style="padding:8px 4px;box-sizing:border-box;text-align:center;min-width:0;">' +
-          '<div style="width:76px;height:76px;margin:0 auto 12px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>' +
-          '<h3 style="margin:0 0 8px;font-size:17px;font-weight:600;color:#111;">Person ' +
-          n +
-          ' — name</h3>' +
-          '<p style="margin:0;font-size:13px;line-height:1.5;color:#52525b;">Title and description for person ' +
-          n +
-          '. Click to edit.</p>' +
-          '</div>'
-        );
+      var newSlide = null;
+      if (slideCount > 0) {
+        var last = slideEls[slideEls.length - 1];
+        newSlide = last.cloneNode(true);
+        newSlide.removeAttribute('id');
+        newSlide.querySelectorAll('[id]').forEach(function (n) { n.removeAttribute('id'); });
+        newSlide.style && (newSlide.style.opacity = '1');
+      } else {
+        newSlide = document.createElement('div');
+        newSlide.className = 'swiper-slide';
+        newSlide.style.cssText =
+          'padding:24px 20px;box-sizing:border-box;background:rgba(241,245,249,0.95);border-radius:16px;border:1px solid rgba(0,0,0,0.06);';
+        var startNum = slideCount * 3 + 1;
+        function profileCol(n) {
+          return (
+            '<div style="padding:8px 4px;box-sizing:border-box;text-align:center;min-width:0;">' +
+            '<div style="width:76px;height:76px;margin:0 auto 12px;border-radius:50%;background:linear-gradient(135deg,#a1a1aa,#71717a);"></div>' +
+            '<h3 style="margin:0 0 8px;font-size:17px;font-weight:600;color:#111;">Person ' +
+            n +
+            ' — name</h3>' +
+            '<p style="margin:0;font-size:13px;line-height:1.5;color:#52525b;">Title and description for person ' +
+            n +
+            '. Click to edit.</p>' +
+            '</div>'
+          );
+        }
+        newSlide.innerHTML =
+          '<p style="margin:0 0 18px;text-align:center;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#71717a;">Three people in this card</p>' +
+          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:24px;align-items:start;">' +
+          profileCol(startNum) +
+          profileCol(startNum + 1) +
+          profileCol(startNum + 2) +
+          '</div>';
       }
-
-      newSlide.innerHTML =
-        '<p style="margin:0 0 18px;text-align:center;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#71717a;">Three people in this card</p>' +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:24px;align-items:start;">' +
-        profileCol(startNum) +
-        profileCol(startNum + 1) +
-        profileCol(startNum + 2) +
-        '</div>';
 
       wrapper.appendChild(newSlide);
 
@@ -2348,12 +2365,9 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     html = html.replace(/<script>[\s\S]*?avallon-hover-overlay[\s\S]*?<\/script>/gi, '');
     html = html.replace(/<script>[\s\S]*?avallon-handle[\s\S]*?<\/script>/gi, '');
     
-    // CRITICAL: Remove the navigation script that prevents links from working!
-    // This script intercepts clicks and calls e.preventDefault()
-    html = html.replace(/<script>\s*\(function\(\)\s*\{\s*document\.querySelectorAll\('a\[href\]'\)[\s\S]*?<\/script>/gi, '');
-    // Also catch variations
-    html = html.replace(/<script>[\s\S]*?querySelectorAll\(['"]a\[href\]['"]\)[\s\S]*?preventDefault[\s\S]*?<\/script>/gi, '');
-    html = html.replace(/<script>[\s\S]*?window\.parent\.postMessage\(\{\s*type:\s*['"]navigate['"][\s\S]*?<\/script>/gi, '');
+    // Remove ONLY Avallon preview nav (tagged). Do NOT match querySelectorAll+preventDefault broadly —
+    // WordPress/theme scripts often use those and would be deleted on Save ("widgets" break).
+    html = html.replace(/<script[^>]*\bdata-avallon-nav=["']1["'][^>]*>[\s\S]*?<\/script>/gi, '');
     
     // Remove inline styles that contain pointer-events: none and cursor: default on body
     html = html.replace(/<style>\s*\*\s*\{\s*cursor:\s*default[^}]*\}[\s\S]*?<\/style>/gi, '');
@@ -2367,14 +2381,20 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     // Use negative lookahead to exclude mobile-toggle and mobile-overlay
     html = html.replace(/<[^>]+id="avallon-(?!mobile-toggle|mobile-overlay)[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, '');
     
-    // Remove data attributes we may have added (but preserve mobile menu attributes)
-    html = html.replace(/\s+data-avallon-(?!mobile)[a-z-]+="[^"]*"/gi, '');
+    // Strip only editor-only data attrs — preserve data-avallon-wp-stub, carousel-init, swiper-fix, nav, inited, etc.
+    html = html.replace(
+      /\s+data-avallon-(editor|selection|hover|outline|temp|drag|resize)(?:-[a-z0-9-]+)?="[^"]*"/gi,
+      ''
+    );
     
     // Remove inline style that was added for editing (contenteditable outline)
     html = html.replace(/\s+contenteditable="[^"]*"/gi, '');
     
     // Clean up any empty script tags
     html = html.replace(/<script>\s*<\/script>/gi, '');
+    
+    // Safari: "Data URL decoding failed" on empty/malformed data: URLs (often from partial paste)
+    html = html.replace(/src=["']data:image\/[^"'>\s]+;base64,\s*["']/gi, 'src=""');
     
     return html;
   };
@@ -4546,14 +4566,16 @@ Generated by Avallon - ${new Date().toISOString()}
                     {/* Slider specific: add another slide */}
                     {(selectedElement?.className?.includes('swiper') ||
                       selectedElement?.className?.includes('swiper-container') ||
-                      selectedElement?.className?.includes('swiper-slide')) && (
+                      selectedElement?.className?.includes('swiper-slide') ||
+                      selectedElement?.className?.includes('cb-carousel') ||
+                      selectedElement?.className?.includes('wp-block-cb')) && (
                       <button
                         onClick={addSwiperSlide}
                         className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium transition-colors shadow-lg shadow-indigo-500/20"
-                        title="Adds another card with three profile slots (Person 4–6, etc.)"
+                        title="Adds another slide (clones layout from the last slide). With wide screens, Swiper shows up to 3 slides at once like the original site."
                       >
                         <span className="material-symbols-outlined text-[18px]">add_circle</span>
-                        Add card (3 profiles)
+                        Add carousel slide
                       </button>
                     )}
                     

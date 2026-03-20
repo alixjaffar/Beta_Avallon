@@ -27,7 +27,7 @@ const CAROUSEL_INIT_SCRIPT = `
   }
   function mountSwipers() {
     if (typeof Swiper === 'undefined') return;
-    var opts = { slidesPerView: 1, spaceBetween: 24, loop: false, rewind: true, speed: 650, grabCursor: true, watchOverflow: true, effect: 'slide', observer: true, observeParents: true, resizeObserver: true, keyboard: { enabled: true } };
+    var opts = { slidesPerView: 1, spaceBetween: 16, loop: false, rewind: true, speed: 650, grabCursor: true, watchOverflow: true, effect: 'slide', observer: true, observeParents: true, resizeObserver: true, keyboard: { enabled: true }, breakpoints: { 640: { slidesPerView: 2, spaceBetween: 20 }, 1024: { slidesPerView: 3, spaceBetween: 24 } } };
     document.querySelectorAll('.swiper-wrapper').forEach(function(wrap) {
       var root = wrap.parentElement;
       if (!root || root.dataset.avallonInited === 'true') return;
