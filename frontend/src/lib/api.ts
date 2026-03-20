@@ -50,6 +50,8 @@ export interface Site {
   status: 'draft' | 'generating' | 'deployed' | 'failed';
   previewUrl?: string;
   repoUrl?: string;
+  /** Full HTML map — always fetch GET /sites/:id when opening editor; list may omit or be stale */
+  websiteContent?: Record<string, string>;
   createdAt: string;
   updatedAt: string;
 }

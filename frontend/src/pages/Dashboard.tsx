@@ -39,6 +39,8 @@ const Dashboard = () => {
   const [sites, setSites] = useState<Site[]>([]);
   const [creatingSite, setCreatingSite] = useState(false);
   const [editingSite, setEditingSite] = useState<Site | null>(null);
+  /** While fetching full site for editor — list payload can be stale after refresh */
+  const [openingEditorSiteId, setOpeningEditorSiteId] = useState<string | null>(null);
   const [deletingSiteId, setDeletingSiteId] = useState<string | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
@@ -134,8 +136,37 @@ const Dashboard = () => {
     }
   };
 
-  const handleEditWebsite = (site: Site) => {
-    setEditingSite(site);
+  const handleEditWebsite = async (site: Site) => {
+    setOpeningEditorSiteId(site.id);
+    try {
+      const response = await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        const full = data.data || data.site || data;
+        setEditingSite({
+          ...site,
+          ...full,
+          websiteContent: full.websiteContent ?? site.websiteContent,
+        });
+      } else {
+        setEditingSite(site);
+        toast({
+          title: "Couldn't load latest",
+          description: "Opening with list data. If something looks old, close and try again.",
+          variant: "destructive",
+        });
+      }
+    } catch (e) {
+      console.error("handleEditWebsite:", e);
+      setEditingSite(site);
+      toast({
+        title: "Network error",
+        description: "Opening with cached list data.",
+        variant: "destructive",
+      });
+    } finally {
+      setOpeningEditorSiteId(null);
+    }
   };
 
   const handleWebsiteUpdated = (updatedSite: Site) => {
@@ -546,11 +577,12 @@ const Dashboard = () => {
                   >
                     <button 
                       onClick={() => handleEditWebsite(site)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transform translate-y-2 group-hover:translate-y-0 transition-all duration-300"
+                      disabled={openingEditorSiteId === site.id}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 disabled:opacity-60"
                       style={{ background: colors[100], color: colors[900] }}
                     >
                       <Edit size={16} />
-                      Edit Site
+                      {openingEditorSiteId === site.id ? "Loading…" : "Edit Site"}
                     </button>
                     {site.previewUrl && (
                       <a 
@@ -606,11 +638,12 @@ const Dashboard = () => {
                         >
                           <button
                             onClick={() => handleEditWebsite(site)}
-                            className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors hover:bg-zinc-600/50"
+                            disabled={openingEditorSiteId === site.id}
+                            className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors hover:bg-zinc-600/50 disabled:opacity-50"
                             style={{ color: colors[200] }}
                           >
                             <Edit size={14} />
-                            Edit
+                            {openingEditorSiteId === site.id ? "Loading…" : "Edit"}
                           </button>
                           {site.previewUrl && (
                             <a

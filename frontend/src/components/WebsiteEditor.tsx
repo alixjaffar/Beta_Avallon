@@ -16,10 +16,19 @@ interface WebsiteEditorProps {
     previewUrl?: string;
     repoUrl?: string;
     websiteContent?: Record<string, string>;
+    /** Bumps when parent loads fresh site — re-run load effect */
+    updatedAt?: string;
     initialPrompt?: string;
   };
   onUpdate: (site: any) => void;
   onClose?: () => void;
+}
+
+function countHtmlPagesInContent(wc: Record<string, unknown> | null | undefined): number {
+  if (!wc || typeof wc !== 'object') return 0;
+  return Object.keys(wc).filter(
+    k => k.endsWith('.html') && typeof wc[k] === 'string' && String(wc[k]).trim().length > 0
+  ).length;
 }
 
 interface ChatMessage {
@@ -2315,43 +2324,79 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
             updatedAt: siteData.updatedAt
           });
           
-          if (siteData.websiteContent) {
-            // Prefer server data - it's the authoritative source. Only use backup when server failed or returned nothing.
+          const serverHtmlCount = countHtmlPagesInContent(siteData.websiteContent);
+          const propHtmlCount = countHtmlPagesInContent(site.websiteContent as Record<string, unknown> | undefined);
+          const backupHtmlCount = localBackup ? countHtmlPagesInContent(localBackup.content) : 0;
+
+          if (serverHtmlCount > 0) {
             console.log('[Load] Using server data (authoritative source)', { serverPageCount, serverContentSize });
-            setCurrentWebsiteContent(siteData.websiteContent);
+            setCurrentWebsiteContent(siteData.websiteContent as Record<string, string>);
+          } else if (backupHtmlCount > 0) {
+            console.warn('[Load] Server returned no HTML pages; using local backup');
+            setCurrentWebsiteContent(localBackup!.content);
+            setHasUnsavedChanges(true);
+            toast({
+              title: "Recovered Unsaved Changes",
+              description: "Server had no page HTML. Your local backup is restored. Click Save to keep it.",
+            });
+          } else if (propHtmlCount > 0) {
+            console.warn('[Load] Server returned no HTML pages; using content passed from dashboard');
+            setCurrentWebsiteContent(site.websiteContent as Record<string, string>);
+            toast({
+              title: "Using cached copy",
+              description: "Could not load pages from the server. Showing the last copy from the app. Try again or save when online.",
+            });
           } else {
-            // Server returned no content - use backup if available (e.g. failed previous save)
-            console.warn('[Load] Server returned NO websiteContent!');
-            if (localBackup) {
-              console.log('[Load] Using local backup (server had no content)', { backupPageCount: Object.keys(localBackup.content).filter(k => k.endsWith('.html')).length });
-              setCurrentWebsiteContent(localBackup.content);
-              setHasUnsavedChanges(true);
-              toast({
-                title: "Recovered Unsaved Changes",
-                description: "Server had no content. Your local backup is restored. Click Save to keep it.",
-              });
+            console.warn('[Load] Server returned NO websiteContent and no fallback!');
+            if (siteData.websiteContent) {
+              setCurrentWebsiteContent(siteData.websiteContent as Record<string, string>);
             }
           }
-          if (siteData.messages) {
-            setMessages(siteData.messages.map((msg: any) => ({
-              ...msg,
-              timestamp: new Date(msg.timestamp)
-            })));
+          const rawChat = siteData.messages ?? siteData.chatHistory;
+          if (Array.isArray(rawChat) && rawChat.length > 0) {
+            setMessages(
+              rawChat.map((msg: any) => ({
+                ...msg,
+                timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+              }))
+            );
           }
         } else {
           console.error('[Load] Server error:', response.status);
+          if (localBackup && countHtmlPagesInContent(localBackup.content) > 0) {
+            setCurrentWebsiteContent(localBackup.content);
+            setHasUnsavedChanges(true);
+            toast({
+              title: "Couldn't load site",
+              description: "Using your local backup. Reconnect and save to sync.",
+              variant: "destructive",
+            });
+          } else if (countHtmlPagesInContent(site.websiteContent as Record<string, unknown> | undefined) > 0) {
+            setCurrentWebsiteContent(site.websiteContent as Record<string, string>);
+            toast({
+              title: "Couldn't load latest",
+              description: "Showing the copy from the dashboard. Save again to sync with the server.",
+              variant: "destructive",
+            });
+          }
         }
       } catch (error) {
         console.error('[Load] Error loading site data:', error);
         
-        // If we can't load from server but have a backup, use it
-        if (localBackup) {
+        if (localBackup && countHtmlPagesInContent(localBackup.content) > 0) {
           console.log('Using local backup due to network error');
           setCurrentWebsiteContent(localBackup.content);
           setHasUnsavedChanges(true);
           toast({
             title: "Offline Mode",
             description: "Using locally saved content. Changes will sync when connection is restored.",
+          });
+        } else if (countHtmlPagesInContent(site.websiteContent as Record<string, unknown> | undefined) > 0) {
+          setCurrentWebsiteContent(site.websiteContent as Record<string, string>);
+          toast({
+            title: "Offline",
+            description: "Showing cached site data. Save when you're back online.",
+            variant: "destructive",
           });
         }
       }
@@ -2360,14 +2405,16 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     };
     
     loadSiteData();
-    
-    // Auto-send initial prompt if provided
-    if (site.initialPrompt) {
-      setTimeout(() => {
-        handleSendMessage(site.initialPrompt!);
-      }, 500);
-    }
-  }, [site.id]);
+  }, [site.id, site.updatedAt]);
+
+  // Auto-send initial prompt once when creating from dashboard (not when site.updatedAt refreshes)
+  useEffect(() => {
+    if (!site.initialPrompt) return;
+    const t = setTimeout(() => {
+      handleSendMessage(site.initialPrompt!);
+    }, 500);
+    return () => clearTimeout(t);
+  }, [site.id, site.initialPrompt]);
 
   // Update preview when content, page, or mode changes
   useEffect(() => {
