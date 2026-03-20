@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { fetchWithAuth } from '@/lib/fetchWithAuth';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -2008,20 +2008,44 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     websiteContentRef.current = currentWebsiteContent;
   }, [currentWebsiteContent]);
   
-  // Get available pages
-  const availablePages = Object.keys(currentWebsiteContent).filter(
-    key => key.endsWith('.html') && typeof currentWebsiteContent[key] === 'string' && currentWebsiteContent[key].trim().length > 0
-  ).sort((a, b) => {
-    if (a === 'index.html') return -1;
-    if (b === 'index.html') return 1;
-    return a.localeCompare(b);
-  });
+  // Get available pages (memoized so effects don't fire every render)
+  const availablePages = useMemo(
+    () =>
+      Object.keys(currentWebsiteContent)
+        .filter(
+          key =>
+            key.endsWith('.html') &&
+            typeof currentWebsiteContent[key] === 'string' &&
+            currentWebsiteContent[key].trim().length > 0
+        )
+        .sort((a, b) => {
+          if (a === 'index.html') return -1;
+          if (b === 'index.html') return 1;
+          return a.localeCompare(b);
+        }),
+    [currentWebsiteContent]
+  );
   
-  const effectiveCurrentPage = availablePages.includes(currentPage) ? currentPage : 'index.html';
+  // After refresh, currentPage defaults to index.html — many imports have no index.html (only team.html, etc.).
+  // Falling back to a missing index.html leaves preview empty forever.
+  const effectiveCurrentPage = availablePages.includes(currentPage)
+    ? currentPage
+    : availablePages.includes('index.html')
+      ? 'index.html'
+      : (availablePages[0] ?? 'index.html');
+
   const effectiveCurrentPageRef = useRef(effectiveCurrentPage);
   useEffect(() => {
     effectiveCurrentPageRef.current = effectiveCurrentPage;
   }, [effectiveCurrentPage]);
+
+  // Keep tab selection valid when content loads (e.g. no index.html → first real page)
+  useEffect(() => {
+    if (availablePages.length === 0) return;
+    if (!availablePages.includes(currentPage)) {
+      setCurrentPage(availablePages.includes('index.html') ? 'index.html' : availablePages[0]);
+    }
+  }, [availablePages, currentPage]);
 
   // Suggestion chips
   const suggestions = [
@@ -2331,8 +2355,8 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
           });
         }
       }
-      
-      checkPreviewReady();
+      // Preview updates via useEffect on currentWebsiteContent — do not call checkPreviewReady() here
+      // (stale closure would run before setState flushes and could leave iframe empty after refresh).
     };
     
     loadSiteData();
