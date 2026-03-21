@@ -3,7 +3,7 @@
 // CHANGELOG: 2026-01-22 - Added image downloading and navigation link fixing
 // CHANGELOG: 2026-03-12 - Added bulletproof mobile menu injection (v2)
 // CHANGELOG: 2026-03-12 - Accept websiteContent directly from frontend to avoid stale data
-const DEPLOY_VERSION = "2026-03-21-fluid-layout-v8";
+const DEPLOY_VERSION = "2026-03-21-fullbleed-bg-v9";
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 import { z } from "zod";
@@ -94,31 +94,68 @@ function unwrapAvallonProxyImageUrls(html: string): string {
  *
  * v8: Targeted fluid rules — clip horizontal overflow (white strip on edited pages), scale media,
  * WP root width, flex/grid min-width. Does NOT strip inline widths on sections (mentor layouts).
+ *
+ * v9: Full-bleed for WP .has-background / .alignfull (navy sections stopping short = constrained
+ * width + body white showing). Viewport breakout + clamp padding so all laptop sizes look consistent.
  */
 function injectResponsiveStyles(files: Record<string, string>): Record<string, string> {
   const fixedFiles: Record<string, string> = {};
   
   const responsiveCSS = `
 <style data-avallon-responsive="true" data-avallon-deploy-fluid="true">
-/* --- Avallon publish: responsive / cross-screen (13" vs 14", etc.) --- */
+/* --- Avallon v9: universal fluid layout + full-bleed backgrounds --- */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
 html {
   overflow-x: hidden;
   max-width: 100%;
+  width: 100%;
 }
 body {
   margin: 0;
   overflow-x: hidden;
   max-width: 100%;
+  width: 100%;
+  min-width: 0;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
-/* WordPress block editor root: use full viewport width */
+/* WordPress root */
 .wp-site-blocks {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+/* Classic theme wrappers */
+#page, #content, #primary, .site, .site-content, .entry-content {
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+/* Full-bleed: colored / cover sections span full viewport (fixes white gutter beside dark panels) */
+.wp-block-group.alignfull.has-background,
+.wp-block-group.has-background.alignfull,
+.wp-block-cover.alignfull,
+.wp-site-blocks > .wp-block-group.has-background,
+.entry-content > .wp-block-group.has-background,
+.wp-site-blocks > .wp-block-cover,
+.entry-content > .wp-block-cover {
+  width: 100vw;
+  max-width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  padding-left: clamp(1rem, 4vw, 3rem);
+  padding-right: clamp(1rem, 4vw, 3rem);
+  box-sizing: border-box;
+}
+/* Non-alignfull background groups still use full row width */
+.wp-block-group.has-background,
+.wp-block-cover {
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
 }
-/* Media & embeds scale with viewport (prevents sideways overflow on edited pages) */
+/* Media & embeds */
 img, video, iframe, svg {
   max-width: 100%;
   height: auto;
@@ -127,7 +164,7 @@ figure img, picture img {
   max-width: 100%;
   height: auto;
 }
-/* WP 6+ flex/grid: allow columns to shrink so rows don’t force horizontal scroll */
+/* WP flex/grid: shrink so columns don’t overflow */
 .is-layout-flex,
 .is-layout-grid,
 .wp-block-columns {
