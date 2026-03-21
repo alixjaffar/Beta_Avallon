@@ -3,7 +3,7 @@
 // CHANGELOG: 2026-01-22 - Added image downloading and navigation link fixing
 // CHANGELOG: 2026-03-12 - Added bulletproof mobile menu injection (v2)
 // CHANGELOG: 2026-03-12 - Accept websiteContent directly from frontend to avoid stale data
-const DEPLOY_VERSION = "2026-03-12-dataurl-files-v6";
+const DEPLOY_VERSION = "2026-03-21-fluid-layout-v8";
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 import { z } from "zod";
@@ -91,12 +91,51 @@ function unwrapAvallonProxyImageUrls(html: string): string {
  *
  * v5: Viewport + optional box-sizing only. Previous global rules (img max-width, section max-width,
  * overflow-x on body, heading clamps) still broke migrated mentor/hero sections on Vercel.
+ *
+ * v8: Targeted fluid rules — clip horizontal overflow (white strip on edited pages), scale media,
+ * WP root width, flex/grid min-width. Does NOT strip inline widths on sections (mentor layouts).
  */
 function injectResponsiveStyles(files: Record<string, string>): Record<string, string> {
   const fixedFiles: Record<string, string> = {};
   
-  /* No global CSS — only viewport meta below (v5). Previous style injection broke migrated layouts. */
-  const responsiveCSS = `\n<!-- avallon-deploy ${DEPLOY_VERSION} -->\n`;
+  const responsiveCSS = `
+<style data-avallon-responsive="true" data-avallon-deploy-fluid="true">
+/* --- Avallon publish: responsive / cross-screen (13" vs 14", etc.) --- */
+html {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+body {
+  margin: 0;
+  overflow-x: hidden;
+  max-width: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+/* WordPress block editor root: use full viewport width */
+.wp-site-blocks {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+/* Media & embeds scale with viewport (prevents sideways overflow on edited pages) */
+img, video, iframe, svg {
+  max-width: 100%;
+  height: auto;
+}
+figure img, picture img {
+  max-width: 100%;
+  height: auto;
+}
+/* WP 6+ flex/grid: allow columns to shrink so rows don’t force horizontal scroll */
+.is-layout-flex,
+.is-layout-grid,
+.wp-block-columns {
+  min-width: 0;
+}
+</style>
+<!-- avallon-deploy ${DEPLOY_VERSION} -->
+`;
 
   for (const [filename, content] of Object.entries(files)) {
     if (!filename.endsWith('.html') || typeof content !== 'string') {
