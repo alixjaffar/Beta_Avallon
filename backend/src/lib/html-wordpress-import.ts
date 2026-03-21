@@ -49,6 +49,8 @@ function proxyUrl(absolute: string, apiBase: string): string {
 function shouldProxyAsImage(absUrl: string): boolean {
   const raw = absUrl.trim();
   if (!raw || !/^https?:\/\//i.test(raw)) return false;
+  /** Avallon user uploads — serve directly; proxy would break */
+  if (/\/api\/sites\/[^/]+\/media\/[^/?#]+/i.test(raw)) return false;
   let path = raw;
   try {
     const u = new URL(raw);

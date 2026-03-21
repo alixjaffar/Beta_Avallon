@@ -92,6 +92,7 @@ function fixImageUrls(html: string): string {
   }
   
   function handleImageError(img) {
+    if (img.src && typeof img.src === 'string' && img.src.indexOf('data:image/') === 0) return;
     const originalSrc = img.getAttribute('data-original-src') || img.src;
     
     if (!img.getAttribute('data-original-src')) {

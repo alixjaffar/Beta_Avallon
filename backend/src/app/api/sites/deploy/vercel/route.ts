@@ -3,7 +3,7 @@
 // CHANGELOG: 2026-01-22 - Added image downloading and navigation link fixing
 // CHANGELOG: 2026-03-12 - Added bulletproof mobile menu injection (v2)
 // CHANGELOG: 2026-03-12 - Accept websiteContent directly from frontend to avoid stale data
-const DEPLOY_VERSION = "2026-03-20-carousel-no-width-strip-v5";
+const DEPLOY_VERSION = "2026-03-12-dataurl-files-v6";
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 import { z } from "zod";
@@ -149,9 +149,62 @@ function injectResponsiveStyles(files: Record<string, string>): Record<string, s
 }
 
 /**
+ * Convert inline data:image/...;base64,... into real files under images/
+ * so static deploys are well-formed (no giant HTML) and assets behave like normal files.
+ */
+function extractDataUrlImagesToFiles(files: Record<string, string>): {
+  updatedFiles: Record<string, string>;
+  dataImageFiles: Record<string, Buffer>;
+} {
+  const dataImageFiles: Record<string, Buffer> = {};
+  let imageIndex = 0;
+  const seen = new Map<string, string>();
+
+  function mimeToExt(mime: string): string {
+    const m = mime.toLowerCase();
+    if (m.includes('jpeg') || m === 'jpg') return 'jpg';
+    if (m.includes('png')) return 'png';
+    if (m.includes('gif')) return 'gif';
+    if (m.includes('webp')) return 'webp';
+    if (m.includes('svg')) return 'svg';
+    return 'png';
+  }
+
+  function replaceDataUrls(html: string): string {
+    return html.replace(/\bdata:image\/[a-zA-Z0-9+.=-]+;base64,[A-Za-z0-9+/=\s]+/g, (dataUrl) => {
+      const compact = dataUrl.replace(/\s+/g, '');
+      if (seen.has(compact)) return seen.get(compact)!;
+      const m = /^data:image\/([^;]+);base64,(.+)$/.exec(compact);
+      if (!m) return dataUrl;
+      try {
+        const buf = Buffer.from(m[2], 'base64');
+        if (buf.byteLength < 20) return dataUrl;
+        const ext = mimeToExt(m[1]);
+        const path = `images/image_${imageIndex++}.${ext}`;
+        dataImageFiles[path] = buf;
+        seen.set(compact, path);
+        return path;
+      } catch {
+        return dataUrl;
+      }
+    });
+  }
+
+  const updatedFiles: Record<string, string> = {};
+  for (const [filename, content] of Object.entries(files)) {
+    if (!filename.endsWith('.html') || typeof content !== 'string') {
+      updatedFiles[filename] = content;
+      continue;
+    }
+    updatedFiles[filename] = replaceDataUrls(content);
+  }
+  return { updatedFiles, dataImageFiles };
+}
+
+/**
  * Download external images and embed them locally in the deployment
  * This prevents broken images when the original website is deleted
- * 
+ *
  * WARNING: Large deployments (>10MB after base64) may fail due to Vercel API limits.
  * If deployment fails, images will remain as external links.
  */
@@ -159,11 +212,14 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
   updatedFiles: Record<string, string>;
   imageFiles: Record<string, Buffer>;
 }> {
-  const imageFiles: Record<string, Buffer> = {};
+  const { updatedFiles: afterDataUrls, dataImageFiles } = extractDataUrlImagesToFiles(files);
+  const workingFiles = afterDataUrls;
+
+  const imageFiles: Record<string, Buffer> = { ...dataImageFiles };
   const imageMapping: Record<string, string> = {};
-  let imageIndex = 0;
-  let totalSize = 0;
-  
+  let imageIndex = Object.keys(dataImageFiles).length;
+  let totalSize = Object.values(dataImageFiles).reduce((s, b) => s + b.byteLength, 0);
+
   // Extract all image URLs from HTML files
   const imageUrls = new Set<string>();
   
@@ -174,7 +230,7 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
   
   const proxyParamPattern = /https?:\/\/[^"'\\s>)]*\/api\/proxy\/image\?url=([^&"'\\s]+)/gi;
 
-  for (const content of Object.values(files)) {
+  for (const content of Object.values(workingFiles)) {
     if (typeof content !== 'string') continue;
     
     let match;
@@ -210,10 +266,13 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
     }
   }
   
-  logInfo('Found external images to download', { count: imageUrls.size });
-  
+  logInfo('Found external images to download', {
+    count: imageUrls.size,
+    embeddedDataUrlFiles: Object.keys(dataImageFiles).length,
+  });
+
   if (imageUrls.size === 0) {
-    return { updatedFiles: files, imageFiles: {} };
+    return { updatedFiles: workingFiles, imageFiles };
   }
   
   // Download ALL images - no size limits
@@ -281,7 +340,7 @@ async function downloadAndEmbedImages(files: Record<string, string>): Promise<{
   
   // Update HTML to use local paths
   const updatedFiles: Record<string, string> = {};
-  for (const [filename, content] of Object.entries(files)) {
+  for (const [filename, content] of Object.entries(workingFiles)) {
     if (!filename.endsWith('.html') || typeof content !== 'string') {
       updatedFiles[filename] = content;
       continue;

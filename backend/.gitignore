@@ -28,6 +28,9 @@ yarn-error.log*
 *-adminsdk-*.json
 serviceAccount*.json
 
+# User-uploaded site images (persisted on server)
+data/site-media/
+
 # User and agent data
 signups.json
 agents.json

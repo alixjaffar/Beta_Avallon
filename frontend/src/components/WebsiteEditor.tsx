@@ -1948,7 +1948,9 @@ function getVisualEditorScript(): string {
 export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, onClose }) => {
   const { toast } = useToast();
   const { theme } = useTheme();
-  const baseUrl = process.env.NODE_ENV === 'production' ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000';
+  const baseUrl =
+    import.meta.env.VITE_API_URL ||
+    (import.meta.env.PROD ? 'https://beta-avallon.onrender.com' : 'http://localhost:3000');
   
   // Determine if we're in light mode
   const isLight = theme === 'light';
@@ -1989,6 +1991,7 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [showImageReplacer, setShowImageReplacer] = useState(false);
   const [imageReplaceUrl, setImageReplaceUrl] = useState('');
+  const [isUploadingReplaceImage, setIsUploadingReplaceImage] = useState(false);
   
   // Shape edit mode state
   const [isShapeEditMode, setIsShapeEditMode] = useState(false);
@@ -2288,18 +2291,13 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
   // Load site data and check preview
   useEffect(() => {
     const loadSiteData = async () => {
-      // First check for localStorage backup (in case previous save failed)
-      let localBackup: { content: Record<string, string>; timestamp: number } | null = null;
+      // Site content is authoritative in PostgreSQL (Prisma) — remove legacy browser backup keys
       try {
-        const backupData = localStorage.getItem(`avallon_backup_${site.id}`);
-        if (backupData) {
-          localBackup = JSON.parse(backupData);
-          console.log('Found local backup from', new Date(localBackup.timestamp).toLocaleString());
-        }
-      } catch (e) {
-        console.warn('Failed to read localStorage backup:', e);
+        localStorage.removeItem(`avallon_backup_${site.id}`);
+      } catch {
+        /* ignore */
       }
-      
+
       try {
         console.log('[Load] Fetching site data...', { siteId: site.id });
         const response = await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`);
@@ -2326,19 +2324,10 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
           
           const serverHtmlCount = countHtmlPagesInContent(siteData.websiteContent);
           const propHtmlCount = countHtmlPagesInContent(site.websiteContent as Record<string, unknown> | undefined);
-          const backupHtmlCount = localBackup ? countHtmlPagesInContent(localBackup.content) : 0;
 
           if (serverHtmlCount > 0) {
             console.log('[Load] Using server data (authoritative source)', { serverPageCount, serverContentSize });
             setCurrentWebsiteContent(siteData.websiteContent as Record<string, string>);
-          } else if (backupHtmlCount > 0) {
-            console.warn('[Load] Server returned no HTML pages; using local backup');
-            setCurrentWebsiteContent(localBackup!.content);
-            setHasUnsavedChanges(true);
-            toast({
-              title: "Recovered Unsaved Changes",
-              description: "Server had no page HTML. Your local backup is restored. Click Save to keep it.",
-            });
           } else if (propHtmlCount > 0) {
             console.warn('[Load] Server returned no HTML pages; using content passed from dashboard');
             setCurrentWebsiteContent(site.websiteContent as Record<string, string>);
@@ -2363,15 +2352,7 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
           }
         } else {
           console.error('[Load] Server error:', response.status);
-          if (localBackup && countHtmlPagesInContent(localBackup.content) > 0) {
-            setCurrentWebsiteContent(localBackup.content);
-            setHasUnsavedChanges(true);
-            toast({
-              title: "Couldn't load site",
-              description: "Using your local backup. Reconnect and save to sync.",
-              variant: "destructive",
-            });
-          } else if (countHtmlPagesInContent(site.websiteContent as Record<string, unknown> | undefined) > 0) {
+          if (countHtmlPagesInContent(site.websiteContent as Record<string, unknown> | undefined) > 0) {
             setCurrentWebsiteContent(site.websiteContent as Record<string, string>);
             toast({
               title: "Couldn't load latest",
@@ -2383,15 +2364,7 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       } catch (error) {
         console.error('[Load] Error loading site data:', error);
         
-        if (localBackup && countHtmlPagesInContent(localBackup.content) > 0) {
-          console.log('Using local backup due to network error');
-          setCurrentWebsiteContent(localBackup.content);
-          setHasUnsavedChanges(true);
-          toast({
-            title: "Offline Mode",
-            description: "Using locally saved content. Changes will sync when connection is restored.",
-          });
-        } else if (countHtmlPagesInContent(site.websiteContent as Record<string, unknown> | undefined) > 0) {
+        if (countHtmlPagesInContent(site.websiteContent as Record<string, unknown> | undefined) > 0) {
           setCurrentWebsiteContent(site.websiteContent as Record<string, string>);
           toast({
             title: "Offline",
@@ -2492,8 +2465,21 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     // Clean up any empty script tags
     html = html.replace(/<script>\s*<\/script>/gi, '');
     
-    // Safari: "Data URL decoding failed" on empty/malformed data: URLs (often from partial paste)
+    // Safari/Chrome: "Data URL decoding failed" on empty/malformed data: URLs
+    // Remove completely empty data URLs
     html = html.replace(/src=["']data:image\/[^"'>\s]+;base64,\s*["']/gi, 'src=""');
+    // Remove data URLs with invalid base64 (odd lengths, wrong chars) — these cause decode failures
+    html = html.replace(/src=["'](data:image\/[^;]+;base64,[^"']+)["']/gi, (match, dataUrl) => {
+      try {
+        const base64Part = dataUrl.split(',')[1];
+        if (!base64Part || base64Part.length < 10) return 'src=""';
+        // Quick validation: base64 should only contain valid chars
+        if (!/^[A-Za-z0-9+/=\s]+$/.test(base64Part)) return 'src=""';
+        return match;
+      } catch {
+        return 'src=""';
+      }
+    });
     
     return html;
   };
@@ -2789,8 +2775,6 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
           }),
         });
         console.log('Content saved to database after publish');
-        // Clear any localStorage backup since we've successfully saved
-        localStorage.removeItem(`avallon_backup_${site.id}`);
         setHasUnsavedChanges(false);
       } catch (saveError) {
         console.error('Failed to save content after publish:', saveError);
@@ -3015,9 +2999,34 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
     }
     
     saveInProgressRef.current = true;
+
+    // ===================================================================
+    // CRITICAL: Upload any embedded data: URLs before saving
+    // This prevents storing giant base64 blobs which corrupt on JSON round-trips
+    // ===================================================================
+    let contentToSave = { ...updatedContent };
+    let dataUrlsUploaded = 0;
+    for (const [key, html] of Object.entries(contentToSave)) {
+      if (key.endsWith('.html') && typeof html === 'string') {
+        const dataUrlCount = (html.match(/\bdata:image\/[a-zA-Z0-9+.=-]+;base64,/g) || []).length;
+        if (dataUrlCount > 0) {
+          console.log(`[Save] Page ${key} has ${dataUrlCount} embedded data URLs — uploading...`);
+          const newHtml = await uploadDataUrlsInHtml(html);
+          contentToSave[key] = newHtml;
+          dataUrlsUploaded += dataUrlCount;
+        }
+      }
+    }
+    if (dataUrlsUploaded > 0) {
+      toast({
+        title: "Images uploaded",
+        description: `${dataUrlsUploaded} embedded image(s) converted to permanent URLs.`,
+      });
+    }
+    // ===================================================================
     
     const putBody = JSON.stringify({
-      websiteContent: updatedContent,
+      websiteContent: contentToSave,
       status: 'deployed',
     });
     if (putBody.length > 4_000_000) {
@@ -3029,30 +3038,10 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       });
     }
 
-    // Always backup to localStorage first (in case network fails)
-    try {
-      localStorage.setItem(`avallon_backup_${site.id}`, JSON.stringify({
-        content: updatedContent,
-        timestamp: Date.now(),
-      }));
-      console.log('[Save] Backed up to localStorage', { siteId: site.id, pageCount: Object.keys(updatedContent).filter(k => k.endsWith('.html')).length });
-    } catch (e) {
-      console.warn('[Save] Failed to backup to localStorage:', e);
-      const name = (e as DOMException)?.name || '';
-      if (name === 'QuotaExceededError' || String(e).includes('Quota')) {
-        toast({
-          title: "Local backup full",
-          description:
-            "Site is too large for browser storage. Use image URLs instead of large uploads so Save can reach the server.",
-          variant: "destructive",
-        });
-      }
-    }
-    
     try {
       console.log('[Save] Sending save request...', { 
         siteId: site.id, 
-        pageCount: Object.keys(updatedContent).filter(k => k.endsWith('.html')).length,
+        pageCount: Object.keys(contentToSave).filter(k => k.endsWith('.html')).length,
         contentSize: putBody.length 
       });
       
@@ -3075,16 +3064,14 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
           title: "Saved!",
           description: "Your changes have been saved successfully.",
         });
-        // IMPORTANT: Keep our local websiteContent - don't let backend response overwrite it
-        // The backend might return stale data due to caching or race conditions
+        // IMPORTANT: Update local state with contentToSave (data URLs → server URLs)
+        // so the editor has the permanent URLs and future saves don't re-upload
         const { websiteContent: _, ...siteWithoutContent } = updatedSite;
-        onUpdate({ ...site, ...siteWithoutContent, websiteContent: updatedContent, status: 'deployed' });
+        onUpdate({ ...site, ...siteWithoutContent, websiteContent: contentToSave, status: 'deployed' });
+        setCurrentWebsiteContent(contentToSave);
         
         // Mark changes as saved
         setHasUnsavedChanges(false);
-        
-        // Clear backup on successful save
-        localStorage.removeItem(`avallon_backup_${site.id}`);
         
         // VERIFICATION: Immediately re-fetch to confirm save persisted
         try {
@@ -3093,7 +3080,7 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
             const verifyData = await verifyResponse.json();
             const verifiedSite = verifyData?.data ?? verifyData?.site ?? verifyData;
             const verifiedContent = verifiedSite?.websiteContent;
-            const localPageCount = Object.keys(updatedContent).filter(k => k.endsWith('.html')).length;
+            const localPageCount = Object.keys(contentToSave).filter(k => k.endsWith('.html')).length;
             const serverPageCount = verifiedContent ? Object.keys(verifiedContent).filter((k: string) => k.endsWith('.html')).length : 0;
             console.log('[Save] Verification:', { localPageCount, serverPageCount, match: localPageCount === serverPageCount });
             
@@ -3101,11 +3088,9 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
               console.error('[Save] VERIFICATION FAILED - Server content missing!');
               toast({
                 title: "Warning: Save May Have Failed",
-                description: "Server returned less content than expected. Your changes are backed up locally.",
+                description: "Server returned less content than expected. Try Save again or check your database connection.",
                 variant: "destructive",
               });
-              // Re-save the backup
-              localStorage.setItem(`avallon_backup_${site.id}`, JSON.stringify({ content: updatedContent, timestamp: Date.now() }));
             }
           }
         } catch (verifyError) {
@@ -4015,8 +4000,133 @@ Generated by Avallon - ${new Date().toISOString()}
     return false;
   };
 
-  // Replace image in selected element
-  const replaceSelectedImage = (newUrl: string) => {
+  /** Convert data:image/...;base64,... URL to a Blob for upload. */
+  const dataUrlToBlob = (dataUrl: string): Blob | null => {
+    try {
+      const match = dataUrl.match(/^data:([^;,]+)?(;base64)?,(.*)$/);
+      if (!match) return null;
+      const mime = match[1] || 'application/octet-stream';
+      const isBase64 = !!match[2];
+      const data = match[3];
+      const binary = isBase64 ? atob(data) : decodeURIComponent(data);
+      const array = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
+      return new Blob([array], { type: mime });
+    } catch {
+      return null;
+    }
+  };
+
+  /** Upload a Blob to the server, returns permanent URL or null on failure. */
+  const uploadBlobToServer = async (blob: Blob, showToast = true): Promise<string | null> => {
+    try {
+      const ext = blob.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+      const file = new File([blob], `image.${ext}`, { type: blob.type });
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetchWithAuth(`${baseUrl}/api/sites/${site.id}/upload-image`, {
+        method: 'POST',
+        body: fd,
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; url?: string };
+      if (!res.ok || !data.url) {
+        if (showToast) {
+          toast({
+            title: 'Image upload failed',
+            description: data.error || `Server returned ${res.status}`,
+            variant: 'destructive',
+          });
+        }
+        return null;
+      }
+      return data.url;
+    } catch (e) {
+      if (showToast) {
+        toast({
+          title: 'Image upload failed',
+          description: e instanceof Error ? e.message : 'Network error',
+          variant: 'destructive',
+        });
+      }
+      return null;
+    }
+  };
+
+  /** Upload to server disk + public URL (persists in HTML without giant base64 JSON). */
+  const uploadSiteImage = async (file: File): Promise<string | null> => {
+    setIsUploadingReplaceImage(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetchWithAuth(`${baseUrl}/api/sites/${site.id}/upload-image`, {
+        method: 'POST',
+        body: fd,
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; url?: string };
+      if (!res.ok) {
+        toast({
+          title: 'Upload failed',
+          description: data.error || `Server returned ${res.status}`,
+          variant: 'destructive',
+        });
+        return null;
+      }
+      if (!data.url) {
+        toast({ title: 'Upload failed', description: 'No URL returned from server.', variant: 'destructive' });
+        return null;
+      }
+      return data.url;
+    } catch (e) {
+      toast({
+        title: 'Upload failed',
+        description: e instanceof Error ? e.message : 'Network error',
+        variant: 'destructive',
+      });
+      return null;
+    } finally {
+      setIsUploadingReplaceImage(false);
+    }
+  };
+
+  /**
+   * CRITICAL: Scan HTML for data: URLs, upload each to server, replace with permanent URLs.
+   * This prevents saving giant base64 blobs in the database which corrupt on JSON round-trips.
+   */
+  const uploadDataUrlsInHtml = async (html: string): Promise<string> => {
+    const dataUrlPattern = /\bdata:image\/[a-zA-Z0-9+.=-]+;base64,[A-Za-z0-9+/=]+/g;
+    const matches = html.match(dataUrlPattern);
+    if (!matches || matches.length === 0) return html;
+
+    // Dedupe
+    const uniqueDataUrls = [...new Set(matches)];
+    console.log(`[Save] Found ${uniqueDataUrls.length} embedded data URLs to upload`);
+
+    const mapping: Record<string, string> = {};
+    let uploaded = 0;
+
+    for (const dataUrl of uniqueDataUrls) {
+      const blob = dataUrlToBlob(dataUrl);
+      if (!blob) continue;
+      const serverUrl = await uploadBlobToServer(blob, false);
+      if (serverUrl) {
+        mapping[dataUrl] = serverUrl;
+        uploaded++;
+      }
+    }
+
+    console.log(`[Save] Uploaded ${uploaded}/${uniqueDataUrls.length} images`);
+
+    let result = html;
+    for (const [dataUrl, serverUrl] of Object.entries(mapping)) {
+      // Escape regex special chars in the data URL
+      const escaped = dataUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      result = result.replace(new RegExp(escaped, 'g'), serverUrl);
+    }
+    return result;
+  };
+
+  // Replace image in selected element — intercepts data: URLs and uploads them first
+  const replaceSelectedImage = async (newUrl: string) => {
     if (!iframeRef.current?.contentWindow || !selectedElement) {
       toast({
         title: "Error",
@@ -4036,24 +4146,33 @@ Generated by Avallon - ${new Date().toISOString()}
       return;
     }
 
-    // Ensure URL is absolute
     let imageUrl = newUrl.trim();
-    if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://') && !imageUrl.startsWith('data:')) {
-      // If it's a relative path, try to make it absolute
+
+    // CRITICAL: If this is a data: URL, upload it to the server first
+    // This prevents storing huge base64 blobs in the database (they corrupt on JSON round-trips)
+    if (imageUrl.startsWith('data:image/')) {
+      setIsUploadingReplaceImage(true);
+      toast({ title: "Uploading image…", description: "Converting to permanent URL" });
+      const blob = dataUrlToBlob(imageUrl);
+      if (!blob) {
+        toast({ title: "Invalid image", description: "Could not decode the image data.", variant: "destructive" });
+        setIsUploadingReplaceImage(false);
+        return;
+      }
+      const serverUrl = await uploadBlobToServer(blob, true);
+      setIsUploadingReplaceImage(false);
+      if (!serverUrl) {
+        // uploadBlobToServer already showed an error toast
+        return;
+      }
+      imageUrl = serverUrl;
+    } else if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+      // Ensure URL is absolute
       if (imageUrl.startsWith('/')) {
         imageUrl = window.location.origin + imageUrl;
       } else {
         imageUrl = 'https://' + imageUrl;
       }
-    }
-
-    if (imageUrl.startsWith('data:image/') && imageUrl.length > 1_500_000) {
-      toast({
-        title: "Image is very large",
-        description:
-          "Base64 uploads make the site JSON huge. Host the file (CDN, WP media) and paste a URL, or Save may fail and images may not persist.",
-        variant: "destructive",
-      });
     }
 
     // Send replacement message to iframe
@@ -4068,7 +4187,7 @@ Generated by Avallon - ${new Date().toISOString()}
     
     toast({
       title: "Image Updated",
-      description: "The image has been replaced. Click Save to keep changes.",
+      description: "Image is stored on the server. Click Save to persist your changes.",
     });
   };
 
@@ -5402,27 +5521,25 @@ Generated by Avallon - ${new Date().toISOString()}
                               <input
                                 type="file"
                                 accept="image/*"
-                                onChange={(e) => {
+                                disabled={isUploadingReplaceImage}
+                                onChange={async (e) => {
                                   const file = e.target.files?.[0];
-                                  if (file) {
-                                    const reader = new FileReader();
-                                    reader.onload = (event) => {
-                                      if (event.target?.result) {
-                                        replaceSelectedImage(event.target.result as string);
-                                      }
-                                    };
-                                    reader.readAsDataURL(file);
-                                  }
+                                  e.target.value = '';
+                                  if (!file) return;
+                                  const url = await uploadSiteImage(file);
+                                  if (url) replaceSelectedImage(url);
                                 }}
                                 className="hidden"
                                 id="image-upload-replace"
                               />
                               <label
                                 htmlFor="image-upload-replace"
-                                className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-surface-dark hover:bg-panel-border border border-panel-border text-white text-sm font-medium transition-colors cursor-pointer"
+                                className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-surface-dark hover:bg-panel-border border border-panel-border text-white text-sm font-medium transition-colors ${isUploadingReplaceImage ? 'opacity-60 cursor-wait' : 'cursor-pointer'}`}
                               >
-                                <span className="material-symbols-outlined text-[18px]">upload</span>
-                                Upload Image
+                                <span className="material-symbols-outlined text-[18px]">
+                                  {isUploadingReplaceImage ? 'progress_activity' : 'upload'}
+                                </span>
+                                {isUploadingReplaceImage ? 'Uploading…' : 'Upload Image'}
                               </label>
                             </div>
                           </div>
