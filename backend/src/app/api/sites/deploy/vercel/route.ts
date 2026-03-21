@@ -3,7 +3,6 @@
 // CHANGELOG: 2026-01-22 - Added image downloading and navigation link fixing
 // CHANGELOG: 2026-03-12 - Added bulletproof mobile menu injection (v2)
 // CHANGELOG: 2026-03-12 - Accept websiteContent directly from frontend to avoid stale data
-const DEPLOY_VERSION = "2026-03-21-fullbleed-bg-v9";
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 import { z } from "zod";
@@ -13,6 +12,9 @@ import { GitHubClient } from "@/lib/clients/github";
 import { VercelProvider } from "@/lib/providers/impl/vercel";
 import { getCorsHeaders } from "@/lib/cors";
 import { injectCarouselIntoHtmlForDeploy } from "@/lib/html-utils";
+
+/** Bumped when deploy-injected fluid CSS changes so republish picks up new rules */
+const DEPLOY_VERSION = "2026-03-21-layout-v10-wp-constrain";
 
 // Route segment config to allow larger request bodies (for base64 images)
 export const maxDuration = 120; // 2 minutes timeout
@@ -97,49 +99,76 @@ function unwrapAvallonProxyImageUrls(html: string): string {
  *
  * v9: Full-bleed for WP .has-background / .alignfull (navy sections stopping short = constrained
  * width + body white showing). Viewport breakout + clamp padding so all laptop sizes look consistent.
+ *
+ * v10: Strip prior Avallon deploy &lt;style&gt; on each publish. Override WP theme.json layout vars +
+ * .is-layout-constrained. Full-bleed all top-level .has-background / cover; reset nested cards.
  */
+function stripAvallonDeployStyles(html: string): string {
+  let out = html.replace(/<style[^>]*data-avallon-responsive[^>]*>[\s\S]*?<\/style>\s*/gi, '');
+  out = out.replace(/\n?<!--\s*avallon-deploy[^\n]*-->\s*/gi, '\n');
+  return out;
+}
+
 function injectResponsiveStyles(files: Record<string, string>): Record<string, string> {
   const fixedFiles: Record<string, string> = {};
   
   const responsiveCSS = `
 <style data-avallon-responsive="true" data-avallon-deploy-fluid="true">
-/* --- Avallon v9: universal fluid layout + full-bleed backgrounds --- */
+/* --- Avallon v10: kill right white gutter (WP constrained layout + full-bleed) --- */
 *, *::before, *::after {
   box-sizing: border-box;
 }
 html {
-  overflow-x: hidden;
+  overflow-x: clip;
   max-width: 100%;
   width: 100%;
 }
 body {
   margin: 0;
-  overflow-x: hidden;
+  padding: 0;
+  overflow-x: clip;
   max-width: 100%;
   width: 100%;
   min-width: 0;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
-/* WordPress root */
+/* WordPress theme.json — default content/wide sizes often cause side gutters on wide laptops */
+:root {
+  --wp--style--global--wide-size: 100%;
+  --wp--style--global--content-size: 100%;
+}
 .wp-site-blocks {
   width: 100%;
-  max-width: 100%;
+  max-width: 100% !important;
   min-width: 0;
 }
-/* Classic theme wrappers */
-#page, #content, #primary, .site, .site-content, .entry-content {
+/* Outer block stack (nav + hero + main) — theme max-width on these causes the right white gutter */
+.wp-site-blocks > * {
+  max-width: 100% !important;
+  width: 100%;
+  box-sizing: border-box;
+}
+.alignwide {
+  max-width: 100% !important;
+}
+/* WP 6 “constrained” inner width — main cause of white bands beside full-width intent */
+.wp-site-blocks .is-layout-constrained,
+.is-layout-constrained:not(.wp-block-group.has-background) {
+  max-width: 100% !important;
+}
+/* Classic wrappers */
+#page, #content, #primary, .site, .site-content, .entry-content, main, header, footer {
   max-width: 100% !important;
   box-sizing: border-box;
 }
-/* Full-bleed: colored / cover sections span full viewport (fixes white gutter beside dark panels) */
-.wp-block-group.alignfull.has-background,
-.wp-block-group.has-background.alignfull,
-.wp-block-cover.alignfull,
-.wp-site-blocks > .wp-block-group.has-background,
-.entry-content > .wp-block-group.has-background,
-.wp-site-blocks > .wp-block-cover,
-.entry-content > .wp-block-cover {
+header .wp-block-group,
+.wp-block-template-part {
+  max-width: 100% !important;
+}
+/* Full-bleed: background sections & covers edge-to-edge */
+.wp-block-group.has-background,
+.wp-block-cover {
   width: 100vw;
   max-width: 100vw;
   margin-left: calc(50% - 50vw);
@@ -148,14 +177,16 @@ body {
   padding-right: clamp(1rem, 4vw, 3rem);
   box-sizing: border-box;
 }
-/* Non-alignfull background groups still use full row width */
-.wp-block-group.has-background,
-.wp-block-cover {
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
+/* Nested cards / inner groups — do not double-breakout */
+.wp-block-group.has-background .wp-block-group.has-background,
+.wp-block-group.has-background .wp-block-cover,
+.wp-block-cover .wp-block-group.has-background {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
 }
-/* Media & embeds */
+/* Media */
 img, video, iframe, svg {
   max-width: 100%;
   height: auto;
@@ -164,7 +195,6 @@ figure img, picture img {
   max-width: 100%;
   height: auto;
 }
-/* WP flex/grid: shrink so columns don’t overflow */
 .is-layout-flex,
 .is-layout-grid,
 .wp-block-columns {
@@ -180,16 +210,11 @@ figure img, picture img {
       continue;
     }
     
-    // Skip if already has our responsive styles
-    if (content.includes('data-avallon-responsive="true"')) {
-      fixedFiles[filename] = content;
-      continue;
-    }
-    
-    let fixedContent = content;
+    /* Always strip old Avallon deploy CSS so updates apply (e.g. v9 → v10) */
+    let fixedContent = stripAvallonDeployStyles(content);
     
     // 1. Ensure viewport meta tag exists
-    const hasViewport = /<meta[^>]*name=["']viewport["'][^>]*>/i.test(content);
+    const hasViewport = /<meta[^>]*name=["']viewport["'][^>]*>/i.test(fixedContent);
     if (!hasViewport) {
       const viewportMeta = '<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">';
       
