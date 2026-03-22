@@ -14,7 +14,7 @@ import { getCorsHeaders } from "@/lib/cors";
 import { injectCarouselIntoHtmlForDeploy } from "@/lib/html-utils";
 
 /** Bumped when deploy-injected layout CSS changes */
-const DEPLOY_VERSION = "2026-03-21-layout-v11-wp-publish";
+const DEPLOY_VERSION = "2026-03-22-layout-v12-fullbleed-center";
 
 // Route segment config to allow larger request bodies (for base64 images)
 export const maxDuration = 120; // 2 minutes timeout
@@ -104,6 +104,10 @@ function unwrapAvallonProxyImageUrls(html: string): string {
  * SKIP injection when that attribute existed, so published sites never got WP full-bleed rules (white
  * gutter). Strip any prior Avallon responsive &lt;style&gt; on every publish, then inject deploy CSS.
  * Break out .has-background / cover from .is-layout-constrained; reset columns/nested groups.
+ *
+ * v12: Apply viewport breakout to ALL .has-background / .cover first; v11’s trailing “width:100%”
+ * rule was undoing breakouts for nested groups (narrow navy + huge white gutter). Resets only for
+ * columns / nested cards. dvw + softer overflow; center column images; align column tops.
  */
 function stripAvallonResponsiveInjections(html: string): string {
   let out = html.replace(/<style[^>]*data-avallon-responsive[^>]*>[\s\S]*?<\/style>\s*/gi, "");
@@ -118,29 +122,28 @@ function injectResponsiveStyles(files: Record<string, string>): Record<string, s
   
   const responsiveCSS = `
 <style data-avallon-responsive="true" data-avallon-deploy-fluid="true">
-/* --- Avallon v11: WordPress static publish — full-width shell + breakouts (no skip on editor HTML) --- */
+/* --- Avallon v12: full-bleed ALL navy/hero groups (fix narrow band + white gutter) + column centering --- */
 *, *::before, *::after {
   box-sizing: border-box;
 }
 html {
-  overflow-x: clip;
+  overflow-x: hidden;
   max-width: 100%;
   width: 100%;
 }
 body {
   margin: 0;
-  overflow-x: clip;
+  overflow-x: hidden;
   max-width: 100%;
   width: 100%;
   min-width: 0;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
-/* theme.json “wide” cap + centered shell — main cause of white gutters on exported WP pages */
 :root {
   --wp--style--global--wide-size: 100%;
+  --wp--style--global--content-size: 100%;
 }
-/* Outer WordPress wrapper: use full viewport width (static export often keeps theme max-width inline) */
 .wp-site-blocks {
   width: 100% !important;
   max-width: 100% !important;
@@ -149,7 +152,7 @@ body {
   min-width: 0;
   box-sizing: border-box;
 }
-#page, #content, #primary, .site, .site-content, .entry-content {
+#page, #content, #primary, .site, .site-content, .entry-content, main {
   max-width: 100% !important;
   box-sizing: border-box;
 }
@@ -159,42 +162,107 @@ header,
   width: 100%;
   box-sizing: border-box;
 }
-/* Direct-child breakouts (v9) */
-.wp-block-group.alignfull.has-background,
-.wp-block-group.has-background.alignfull,
-.wp-block-cover.alignfull,
-.wp-site-blocks > .wp-block-group.has-background,
-.entry-content > .wp-block-group.has-background,
-.wp-site-blocks > .wp-block-cover,
-.entry-content > .wp-block-cover,
-/* Hero/nav sections often sit INSIDE .is-layout-constrained — v9 missed these */
-.is-layout-constrained > .wp-block-group.has-background,
-.is-layout-constrained > .wp-block-cover {
+/* Constrained layout wrapper — let children break out; avoid extra side gutter */
+.is-layout-constrained {
+  max-width: 100% !important;
+}
+/*
+ * Full-bleed: default for EVERY background group / cover (nested + constrained parents).
+ * v11 broke this by later setting width:100% on the same selector — only direct constrained
+ * children kept vw. Deep .has-background stayed “content width” → navy bar ~70% + white strip.
+ */
+.wp-block-group.has-background,
+.wp-block-cover {
   width: 100vw;
   max-width: 100vw;
+  width: 100dvw;
+  max-width: 100dvw;
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
+  margin-left: calc(50% - 50dvw);
+  margin-right: calc(50% - 50dvw);
   padding-left: clamp(1rem, 4vw, 3rem);
   padding-right: clamp(1rem, 4vw, 3rem);
   box-sizing: border-box;
 }
-/* Other background groups: fill parent row without viewport math */
-.wp-block-group.has-background,
-.wp-block-cover {
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-}
-/* Do not break out cards / columns */
+/* Inner cards / columns: undo breakout (must stay after the rule above) */
 .wp-block-column .wp-block-group.has-background,
 .wp-block-column .wp-block-cover,
-.wp-block-columns .wp-block-group.has-background,
 .wp-block-group.has-background .wp-block-group.has-background,
-.wp-block-cover .wp-block-group.has-background {
+.wp-block-cover .wp-block-group.has-background,
+.wp-block-cover .wp-block-cover {
   width: 100% !important;
   max-width: 100% !important;
   margin-left: 0 !important;
   margin-right: 0 !important;
+  padding-left: unset;
+  padding-right: unset;
+}
+/* Headings inside colored bands — avoid colliding with header / previous section */
+.wp-block-group.has-background > .wp-block-heading:first-child,
+.wp-block-cover .wp-block-heading:first-child {
+  margin-top: 0;
+}
+.wp-block-columns {
+  min-width: 0;
+}
+/* --- Center columns & images in main content (not header template parts) --- */
+main .wp-block-columns,
+.entry-content .wp-block-columns,
+article .wp-block-columns,
+.wp-block-post-content .wp-block-columns,
+.wp-block-group.has-background .wp-block-columns,
+.wp-block-cover .wp-block-columns {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+main .wp-block-column,
+.entry-content .wp-block-column,
+article .wp-block-column,
+.wp-block-post-content .wp-block-column,
+.wp-block-group.has-background .wp-block-column,
+.wp-block-cover .wp-block-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  box-sizing: border-box;
+}
+main .wp-block-column > .wp-block-image,
+main .wp-block-column figure.wp-block-image,
+.entry-content .wp-block-column > .wp-block-image,
+.wp-block-post-content .wp-block-column > .wp-block-image,
+.wp-block-group.has-background .wp-block-column > .wp-block-image,
+.wp-block-cover .wp-block-column > .wp-block-image {
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+main .wp-block-column .wp-block-image img,
+main .wp-block-column figure img,
+.entry-content .wp-block-column .wp-block-image img,
+.wp-block-post-content .wp-block-column .wp-block-image img,
+.wp-block-group.has-background .wp-block-column img,
+.wp-block-cover .wp-block-column img {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+/* Stacked illustrations / media in main: center as a group */
+main .is-layout-flex.is-vertical,
+.wp-block-group.has-background .is-layout-flex.is-vertical,
+.wp-block-cover .is-layout-flex.is-vertical {
+  align-items: center;
+}
+main .is-layout-flex.is-vertical > .wp-block-image,
+main .is-layout-flex.is-vertical > figure,
+.wp-block-group.has-background .is-layout-flex.is-vertical > .wp-block-image {
+  margin-left: auto;
+  margin-right: auto;
 }
 /* Media & embeds */
 img, video, iframe, svg {
@@ -206,8 +274,7 @@ figure img, picture img {
   height: auto;
 }
 .is-layout-flex,
-.is-layout-grid,
-.wp-block-columns {
+.is-layout-grid {
   min-width: 0;
 }
 </style>
