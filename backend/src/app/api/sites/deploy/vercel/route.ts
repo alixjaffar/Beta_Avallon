@@ -3,7 +3,6 @@
 // CHANGELOG: 2026-01-22 - Added image downloading and navigation link fixing
 // CHANGELOG: 2026-03-12 - Added bulletproof mobile menu injection (v2)
 // CHANGELOG: 2026-03-12 - Accept websiteContent directly from frontend to avoid stale data
-const DEPLOY_VERSION = "2026-03-21-fullbleed-bg-v9";
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 import { z } from "zod";
@@ -13,6 +12,9 @@ import { GitHubClient } from "@/lib/clients/github";
 import { VercelProvider } from "@/lib/providers/impl/vercel";
 import { getCorsHeaders } from "@/lib/cors";
 import { injectCarouselIntoHtmlForDeploy } from "@/lib/html-utils";
+
+/** Bumped when deploy-injected layout CSS changes */
+const DEPLOY_VERSION = "2026-03-21-layout-v11-wp-publish";
 
 // Route segment config to allow larger request bodies (for base64 images)
 export const maxDuration = 120; // 2 minutes timeout
@@ -97,49 +99,77 @@ function unwrapAvallonProxyImageUrls(html: string): string {
  *
  * v9: Full-bleed for WP .has-background / .alignfull (navy sections stopping short = constrained
  * width + body white showing). Viewport breakout + clamp padding so all laptop sizes look consistent.
+ *
+ * v11: WordPress publish fix — htmlImporter injects data-avallon-responsive in the editor; deploy used to
+ * SKIP injection when that attribute existed, so published sites never got WP full-bleed rules (white
+ * gutter). Strip any prior Avallon responsive &lt;style&gt; on every publish, then inject deploy CSS.
+ * Break out .has-background / cover from .is-layout-constrained; reset columns/nested groups.
  */
+function stripAvallonResponsiveInjections(html: string): string {
+  let out = html.replace(/<style[^>]*data-avallon-responsive[^>]*>[\s\S]*?<\/style>\s*/gi, "");
+  out = out.replace(/\n?<!--\s*avallon-deploy[^\n]*-->\s*/gi, "\n");
+  out = out.replace(/<!--\s*AVALLON RESPONSIVE FIXES\s*-->\s*/gi, "");
+  out = out.replace(/<!--\s*END AVALLON RESPONSIVE FIXES\s*-->\s*/gi, "");
+  return out;
+}
+
 function injectResponsiveStyles(files: Record<string, string>): Record<string, string> {
   const fixedFiles: Record<string, string> = {};
   
   const responsiveCSS = `
 <style data-avallon-responsive="true" data-avallon-deploy-fluid="true">
-/* --- Avallon v9: universal fluid layout + full-bleed backgrounds --- */
+/* --- Avallon v11: WordPress static publish — full-width shell + breakouts (no skip on editor HTML) --- */
 *, *::before, *::after {
   box-sizing: border-box;
 }
 html {
-  overflow-x: hidden;
+  overflow-x: clip;
   max-width: 100%;
   width: 100%;
 }
 body {
   margin: 0;
-  overflow-x: hidden;
+  overflow-x: clip;
   max-width: 100%;
   width: 100%;
   min-width: 0;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
-/* WordPress root */
-.wp-site-blocks {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
+/* theme.json “wide” cap + centered shell — main cause of white gutters on exported WP pages */
+:root {
+  --wp--style--global--wide-size: 100%;
 }
-/* Classic theme wrappers */
+/* Outer WordPress wrapper: use full viewport width (static export often keeps theme max-width inline) */
+.wp-site-blocks {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  min-width: 0;
+  box-sizing: border-box;
+}
 #page, #content, #primary, .site, .site-content, .entry-content {
   max-width: 100% !important;
   box-sizing: border-box;
 }
-/* Full-bleed: colored / cover sections span full viewport (fixes white gutter beside dark panels) */
+header,
+.wp-block-template-part {
+  max-width: 100% !important;
+  width: 100%;
+  box-sizing: border-box;
+}
+/* Direct-child breakouts (v9) */
 .wp-block-group.alignfull.has-background,
 .wp-block-group.has-background.alignfull,
 .wp-block-cover.alignfull,
 .wp-site-blocks > .wp-block-group.has-background,
 .entry-content > .wp-block-group.has-background,
 .wp-site-blocks > .wp-block-cover,
-.entry-content > .wp-block-cover {
+.entry-content > .wp-block-cover,
+/* Hero/nav sections often sit INSIDE .is-layout-constrained — v9 missed these */
+.is-layout-constrained > .wp-block-group.has-background,
+.is-layout-constrained > .wp-block-cover {
   width: 100vw;
   max-width: 100vw;
   margin-left: calc(50% - 50vw);
@@ -148,12 +178,23 @@ body {
   padding-right: clamp(1rem, 4vw, 3rem);
   box-sizing: border-box;
 }
-/* Non-alignfull background groups still use full row width */
+/* Other background groups: fill parent row without viewport math */
 .wp-block-group.has-background,
 .wp-block-cover {
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+}
+/* Do not break out cards / columns */
+.wp-block-column .wp-block-group.has-background,
+.wp-block-column .wp-block-cover,
+.wp-block-columns .wp-block-group.has-background,
+.wp-block-group.has-background .wp-block-group.has-background,
+.wp-block-cover .wp-block-group.has-background {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
 }
 /* Media & embeds */
 img, video, iframe, svg {
@@ -164,7 +205,6 @@ figure img, picture img {
   max-width: 100%;
   height: auto;
 }
-/* WP flex/grid: shrink so columns don’t overflow */
 .is-layout-flex,
 .is-layout-grid,
 .wp-block-columns {
@@ -180,16 +220,11 @@ figure img, picture img {
       continue;
     }
     
-    // Skip if already has our responsive styles
-    if (content.includes('data-avallon-responsive="true"')) {
-      fixedFiles[filename] = content;
-      continue;
-    }
-    
-    let fixedContent = content;
+    /* Replace editor + any previous deploy injections so WP rules always apply on publish */
+    let fixedContent = stripAvallonResponsiveInjections(content);
     
     // 1. Ensure viewport meta tag exists
-    const hasViewport = /<meta[^>]*name=["']viewport["'][^>]*>/i.test(content);
+    const hasViewport = /<meta[^>]*name=["']viewport["'][^>]*>/i.test(fixedContent);
     if (!hasViewport) {
       const viewportMeta = '<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">';
       
