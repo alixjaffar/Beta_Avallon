@@ -999,9 +999,6 @@ a, button { touch-action: manipulation; }
  * Inject responsive styles for proper mobile display
  * - Ensures viewport meta tag exists
  * - Adds global CSS to prevent overflow and ensure images/media scale properly
- *
- * Vercel publish removes this &lt;style data-avallon-responsive&gt; block and injects WordPress-aware
- * layout CSS (backend deploy). Same attribute in saved HTML used to make deploy skip those fixes.
  */
 function injectResponsiveStyles(html: string): string {
   // Skip if already has our responsive styles

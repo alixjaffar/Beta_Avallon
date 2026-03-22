@@ -3,6 +3,7 @@
 // CHANGELOG: 2026-01-22 - Added image downloading and navigation link fixing
 // CHANGELOG: 2026-03-12 - Added bulletproof mobile menu injection (v2)
 // CHANGELOG: 2026-03-12 - Accept websiteContent directly from frontend to avoid stale data
+const DEPLOY_VERSION = "2026-03-21-fullbleed-bg-v9";
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 import { z } from "zod";
@@ -12,9 +13,6 @@ import { GitHubClient } from "@/lib/clients/github";
 import { VercelProvider } from "@/lib/providers/impl/vercel";
 import { getCorsHeaders } from "@/lib/cors";
 import { injectCarouselIntoHtmlForDeploy } from "@/lib/html-utils";
-
-/** Bumped when deploy-injected layout CSS changes */
-const DEPLOY_VERSION = "2026-03-22-layout-v12-fullbleed-center";
 
 // Route segment config to allow larger request bodies (for base64 images)
 export const maxDuration = 120; // 2 minutes timeout
@@ -99,30 +97,13 @@ function unwrapAvallonProxyImageUrls(html: string): string {
  *
  * v9: Full-bleed for WP .has-background / .alignfull (navy sections stopping short = constrained
  * width + body white showing). Viewport breakout + clamp padding so all laptop sizes look consistent.
- *
- * v11: WordPress publish fix — htmlImporter injects data-avallon-responsive in the editor; deploy used to
- * SKIP injection when that attribute existed, so published sites never got WP full-bleed rules (white
- * gutter). Strip any prior Avallon responsive &lt;style&gt; on every publish, then inject deploy CSS.
- * Break out .has-background / cover from .is-layout-constrained; reset columns/nested groups.
- *
- * v12: Apply viewport breakout to ALL .has-background / .cover first; v11’s trailing “width:100%”
- * rule was undoing breakouts for nested groups (narrow navy + huge white gutter). Resets only for
- * columns / nested cards. dvw + softer overflow; center column images; align column tops.
  */
-function stripAvallonResponsiveInjections(html: string): string {
-  let out = html.replace(/<style[^>]*data-avallon-responsive[^>]*>[\s\S]*?<\/style>\s*/gi, "");
-  out = out.replace(/\n?<!--\s*avallon-deploy[^\n]*-->\s*/gi, "\n");
-  out = out.replace(/<!--\s*AVALLON RESPONSIVE FIXES\s*-->\s*/gi, "");
-  out = out.replace(/<!--\s*END AVALLON RESPONSIVE FIXES\s*-->\s*/gi, "");
-  return out;
-}
-
 function injectResponsiveStyles(files: Record<string, string>): Record<string, string> {
   const fixedFiles: Record<string, string> = {};
   
   const responsiveCSS = `
 <style data-avallon-responsive="true" data-avallon-deploy-fluid="true">
-/* --- Avallon v12: full-bleed ALL navy/hero groups (fix narrow band + white gutter) + column centering --- */
+/* --- Avallon v9: universal fluid layout + full-bleed backgrounds --- */
 *, *::before, *::after {
   box-sizing: border-box;
 }
@@ -140,129 +121,39 @@ body {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
-:root {
-  --wp--style--global--wide-size: 100%;
-  --wp--style--global--content-size: 100%;
-}
+/* WordPress root */
 .wp-site-blocks {
-  width: 100% !important;
-  max-width: 100% !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  min-width: 0;
-  box-sizing: border-box;
-}
-#page, #content, #primary, .site, .site-content, .entry-content, main {
-  max-width: 100% !important;
-  box-sizing: border-box;
-}
-header,
-.wp-block-template-part {
-  max-width: 100% !important;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+/* Classic theme wrappers */
+#page, #content, #primary, .site, .site-content, .entry-content {
+  max-width: 100% !important;
   box-sizing: border-box;
 }
-/* Constrained layout wrapper — let children break out; avoid extra side gutter */
-.is-layout-constrained {
-  max-width: 100% !important;
-}
-/*
- * Full-bleed: default for EVERY background group / cover (nested + constrained parents).
- * v11 broke this by later setting width:100% on the same selector — only direct constrained
- * children kept vw. Deep .has-background stayed “content width” → navy bar ~70% + white strip.
- */
-.wp-block-group.has-background,
-.wp-block-cover {
+/* Full-bleed: colored / cover sections span full viewport (fixes white gutter beside dark panels) */
+.wp-block-group.alignfull.has-background,
+.wp-block-group.has-background.alignfull,
+.wp-block-cover.alignfull,
+.wp-site-blocks > .wp-block-group.has-background,
+.entry-content > .wp-block-group.has-background,
+.wp-site-blocks > .wp-block-cover,
+.entry-content > .wp-block-cover {
   width: 100vw;
   max-width: 100vw;
-  width: 100dvw;
-  max-width: 100dvw;
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
-  margin-left: calc(50% - 50dvw);
-  margin-right: calc(50% - 50dvw);
   padding-left: clamp(1rem, 4vw, 3rem);
   padding-right: clamp(1rem, 4vw, 3rem);
   box-sizing: border-box;
 }
-/* Inner cards / columns: undo breakout (must stay after the rule above) */
-.wp-block-column .wp-block-group.has-background,
-.wp-block-column .wp-block-cover,
-.wp-block-group.has-background .wp-block-group.has-background,
-.wp-block-cover .wp-block-group.has-background,
-.wp-block-cover .wp-block-cover {
-  width: 100% !important;
-  max-width: 100% !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  padding-left: unset;
-  padding-right: unset;
-}
-/* Headings inside colored bands — avoid colliding with header / previous section */
-.wp-block-group.has-background > .wp-block-heading:first-child,
-.wp-block-cover .wp-block-heading:first-child {
-  margin-top: 0;
-}
-.wp-block-columns {
-  min-width: 0;
-}
-/* --- Center columns & images in main content (not header template parts) --- */
-main .wp-block-columns,
-.entry-content .wp-block-columns,
-article .wp-block-columns,
-.wp-block-post-content .wp-block-columns,
-.wp-block-group.has-background .wp-block-columns,
-.wp-block-cover .wp-block-columns {
-  min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: center;
+/* Non-alignfull background groups still use full row width */
+.wp-block-group.has-background,
+.wp-block-cover {
   width: 100%;
+  max-width: 100%;
   box-sizing: border-box;
-}
-main .wp-block-column,
-.entry-content .wp-block-column,
-article .wp-block-column,
-.wp-block-post-content .wp-block-column,
-.wp-block-group.has-background .wp-block-column,
-.wp-block-cover .wp-block-column {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  box-sizing: border-box;
-}
-main .wp-block-column > .wp-block-image,
-main .wp-block-column figure.wp-block-image,
-.entry-content .wp-block-column > .wp-block-image,
-.wp-block-post-content .wp-block-column > .wp-block-image,
-.wp-block-group.has-background .wp-block-column > .wp-block-image,
-.wp-block-cover .wp-block-column > .wp-block-image {
-  margin-left: auto !important;
-  margin-right: auto !important;
-}
-main .wp-block-column .wp-block-image img,
-main .wp-block-column figure img,
-.entry-content .wp-block-column .wp-block-image img,
-.wp-block-post-content .wp-block-column .wp-block-image img,
-.wp-block-group.has-background .wp-block-column img,
-.wp-block-cover .wp-block-column img {
-  display: block;
-  margin-left: auto;
-  margin-right: auto;
-}
-/* Stacked illustrations / media in main: center as a group */
-main .is-layout-flex.is-vertical,
-.wp-block-group.has-background .is-layout-flex.is-vertical,
-.wp-block-cover .is-layout-flex.is-vertical {
-  align-items: center;
-}
-main .is-layout-flex.is-vertical > .wp-block-image,
-main .is-layout-flex.is-vertical > figure,
-.wp-block-group.has-background .is-layout-flex.is-vertical > .wp-block-image {
-  margin-left: auto;
-  margin-right: auto;
 }
 /* Media & embeds */
 img, video, iframe, svg {
@@ -273,8 +164,10 @@ figure img, picture img {
   max-width: 100%;
   height: auto;
 }
+/* WP flex/grid: shrink so columns don’t overflow */
 .is-layout-flex,
-.is-layout-grid {
+.is-layout-grid,
+.wp-block-columns {
   min-width: 0;
 }
 </style>
@@ -287,11 +180,16 @@ figure img, picture img {
       continue;
     }
     
-    /* Replace editor + any previous deploy injections so WP rules always apply on publish */
-    let fixedContent = stripAvallonResponsiveInjections(content);
+    // Skip if already has our responsive styles
+    if (content.includes('data-avallon-responsive="true"')) {
+      fixedFiles[filename] = content;
+      continue;
+    }
+    
+    let fixedContent = content;
     
     // 1. Ensure viewport meta tag exists
-    const hasViewport = /<meta[^>]*name=["']viewport["'][^>]*>/i.test(fixedContent);
+    const hasViewport = /<meta[^>]*name=["']viewport["'][^>]*>/i.test(content);
     if (!hasViewport) {
       const viewportMeta = '<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">';
       
