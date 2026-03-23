@@ -14,7 +14,7 @@ import { getCorsHeaders } from "@/lib/cors";
 import { injectCarouselIntoHtmlForDeploy } from "@/lib/html-utils";
 
 /** Bumped when deploy-injected layout CSS changes */
-const DEPLOY_VERSION = "2026-03-23-layout-v14-fullbleed-all-wrappers";
+const DEPLOY_VERSION = "2026-03-23-layout-v15-wp-constraint-override";
 
 // Route segment config to allow larger request bodies (for base64 images)
 export const maxDuration = 120; // 2 minutes timeout
@@ -120,91 +120,53 @@ function injectResponsiveStyles(files: Record<string, string>): Record<string, s
   const fixedFiles: Record<string, string> = {};
   
   const responsiveCSS = `
+<!-- avallon-deploy ${DEPLOY_VERSION} -->
 <style data-avallon-responsive="true" data-avallon-deploy-fluid="true">
-/* --- Avallon v14: full-bleed all wrappers on every screen size --- */
-*, *::before, *::after {
-  box-sizing: border-box;
-}
+/* --- Avallon v15: override WP layout constraints for full-bleed on all screens --- */
+
+/* ── Override WordPress content-size / wide-size so sections stretch to viewport ── */
 :root {
-  --avallon-container: 80rem;
-  --avallon-px: 1rem;
-  --wp--style--global--wide-size: 100%;
-  --wp--style--global--content-size: 100%;
+  --wp--style--global--wide-size: 100% !important;
+  --wp--style--global--content-size: 100% !important;
 }
-@media (min-width: 640px) {
-  :root { --avallon-px: 1.5rem; }
+
+/* Remove the WP constrained-layout max-width cap on children */
+.is-layout-constrained > :where(:not(.alignleft):not(.alignright):not(.alignfull)) {
+  max-width: 100% !important;
 }
-@media (min-width: 1024px) {
-  :root { --avallon-px: 2rem; }
+.is-layout-constrained > .alignwide {
+  max-width: 100% !important;
 }
+
+/* ── Base resets ── */
 html {
   overflow-x: hidden;
-  max-width: 100%;
-  width: 100%;
 }
 body {
   margin: 0;
   overflow-x: hidden;
-  max-width: 100%;
-  width: 100%;
-  min-width: 0;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
-/* ── Full-bleed: force ALL structural wrappers to 100% width ── */
-/* Generic: every direct child of body (covers any theme wrapper) */
-body > div,
-body > section,
-body > article,
-body > main,
-body > header,
-body > footer,
-body > aside,
-body > nav {
-  width: 100% !important;
-  max-width: 100% !important;
-  box-sizing: border-box;
-}
-/* Second-level wrappers (body > div.wrapper > div.inner pattern) */
-body > div > div,
-body > div > section,
-body > div > article,
-body > div > main,
-body > div > header,
-body > div > footer {
-  width: 100% !important;
-  max-width: 100% !important;
-  box-sizing: border-box;
-}
-/* Third-level too (some themes nest 3 deep before content) */
-body > div > div > div,
-body > div > div > section,
-body > div > div > main,
-body > div > div > article {
-  width: 100% !important;
-  max-width: 100% !important;
-  box-sizing: border-box;
-}
-/* Named WP / theme wrappers */
+
+/* ── Outer shell: WP site-blocks + common theme wrappers → full width ── */
 .wp-site-blocks,
-#page, #content, #primary, #main, #wrapper, #main-wrapper, #site-wrapper,
-.site, .site-content, .entry-content, .page-content, .post-content,
-.wrapper, .container, .page-wrapper, .page-container, .site-inner, .content-area,
-main, article {
+#page, #content, #primary,
+.site, .site-content, .entry-content,
+main {
   width: 100% !important;
   max-width: 100% !important;
   box-sizing: border-box;
-}
-.wp-site-blocks {
-  min-width: 0;
 }
 header,
+footer,
 .wp-block-template-part {
   width: 100% !important;
   max-width: 100% !important;
   box-sizing: border-box;
 }
-/* Colored / cover bands: full-width strip */
+
+/* ── Background sections: full-bleed strip ── */
 .wp-block-group.has-background,
 .wp-block-cover,
 .wp-block-group.alignfull,
@@ -215,55 +177,28 @@ header,
   margin-right: 0 !important;
   box-sizing: border-box;
 }
-/* Inner container: centered with padding (content column) */
-.wp-block-group__inner-container,
-.wp-block-cover__inner-container,
-.is-layout-constrained {
-  max-width: var(--avallon-container);
-  margin-left: auto !important;
-  margin-right: auto !important;
-  padding-left: var(--avallon-px);
-  padding-right: var(--avallon-px);
-  width: 100%;
-  box-sizing: border-box;
-}
-.wp-block-group.has-background .wp-block-group__inner-container,
-.wp-block-group.has-background > .is-layout-flow,
-.wp-block-group.has-background > .is-layout-flex,
-.wp-block-group.has-background > .is-layout-grid,
-.wp-block-cover .wp-block-cover__inner-container {
-  max-width: var(--avallon-container);
-  margin-left: auto !important;
-  margin-right: auto !important;
-  padding-left: var(--avallon-px);
-  padding-right: var(--avallon-px);
-  width: 100%;
-  box-sizing: border-box;
-}
-/* Columns */
+
+/* ── Columns ── */
 .wp-block-columns {
   min-width: 0;
-  justify-content: center;
   width: 100%;
 }
 .wp-block-column {
   min-width: 0;
 }
-/* Media & embeds */
+
+/* ── Media ── */
 img, video, iframe, svg {
   max-width: 100%;
   height: auto;
 }
-figure img, picture img {
-  max-width: 100%;
-  height: auto;
-}
+
+/* ── Flex/grid overflow guard ── */
 .is-layout-flex,
 .is-layout-grid {
   min-width: 0;
 }
 </style>
-<!-- avallon-deploy ${DEPLOY_VERSION} -->
 `;
 
   for (const [filename, content] of Object.entries(files)) {
@@ -294,13 +229,17 @@ figure img, picture img {
       logInfo('Injected viewport meta tag', { filename });
     }
     
-    // 2. Inject responsive CSS after <head> or existing viewport meta
-    const headMatch = fixedContent.match(/<head[^>]*>/i);
-    if (headMatch) {
-      fixedContent = fixedContent.replace(headMatch[0], headMatch[0] + '\n' + responsiveCSS);
+    // 2. Inject responsive CSS BEFORE </head> so it wins the cascade over theme CSS
+    if (fixedContent.includes('</head>')) {
+      fixedContent = fixedContent.replace('</head>', responsiveCSS + '\n</head>');
     } else {
-      // If somehow still no head, prepend CSS
-      fixedContent = responsiveCSS + '\n' + fixedContent;
+      // No </head> tag — try after <head>
+      const headMatch = fixedContent.match(/<head[^>]*>/i);
+      if (headMatch) {
+        fixedContent = fixedContent.replace(headMatch[0], headMatch[0] + '\n' + responsiveCSS);
+      } else {
+        fixedContent = responsiveCSS + '\n' + fixedContent;
+      }
     }
     
     fixedFiles[filename] = fixedContent;
