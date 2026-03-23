@@ -14,7 +14,7 @@ import { getCorsHeaders } from "@/lib/cors";
 import { injectCarouselIntoHtmlForDeploy } from "@/lib/html-utils";
 
 /** Bumped when deploy-injected layout CSS changes */
-const DEPLOY_VERSION = "2026-03-23-layout-v16-minimal";
+const DEPLOY_VERSION = "2026-03-23-layout-v17-alignfull-fix";
 
 // Route segment config to allow larger request bodies (for base64 images)
 export const maxDuration = 120; // 2 minutes timeout
@@ -79,15 +79,20 @@ function cleanEditorScripts(html: string): string {
     }
   );
 
-  // Add 'alignfull' to .wp-block-group.has-background elements that don't have it.
-  // WordPress uses alignfull to make background sections break out to full viewport width.
-  // Migrated sites often have background sections without this class, causing white gaps.
+  // Strip inline pixel width/height from elements with 'alignfull' class.
+  // alignfull elements are supposed to span the full viewport width, but the Avallon
+  // editor sometimes adds inline "width: 1315px; height: 865.875px" (drag/resize artifacts)
+  // which constrains them to a fixed pixel width — causing white gaps on 14"+ screens.
   html = html.replace(
-    /(<div[^>]*class="[^"]*wp-block-group[^"]*has-background[^"]*")/gi,
-    (match) => {
-      if (/\balignfull\b/.test(match)) return match; // already has alignfull
-      // Add alignfull to the class list
-      return match.replace(/class="([^"]*)"/, 'class="$1 alignfull"');
+    /(<[^>]*class="[^"]*\balignfull\b[^"]*"[^>]*)\s+style="([^"]*)"/gi,
+    (full, before, styleVal) => {
+      const cleaned = styleVal
+        .replace(/\bwidth:\s*[\d.]+px\s*;?\s*/gi, '')
+        .replace(/\bheight:\s*[\d.]+px\s*;?\s*/gi, '')
+        .trim()
+        .replace(/;$/, '');
+      if (!cleaned) return before;
+      return `${before} style="${cleaned}"`;
     }
   );
 
@@ -152,7 +157,7 @@ function injectResponsiveStyles(files: Record<string, string>): Record<string, s
   const responsiveCSS = `
 <!-- avallon-deploy ${DEPLOY_VERSION} -->
 <style data-avallon-responsive="true" data-avallon-deploy-fluid="true">
-/* --- Avallon v16: minimal — let the WP theme handle its own layout --- */
+/* --- Avallon v17: minimal + alignfull inline-width fix --- */
 html, body {
   overflow-x: hidden;
 }
@@ -164,17 +169,6 @@ body {
 img, video, iframe, svg {
   max-width: 100%;
   height: auto;
-}
-/* Full-bleed: force background sections to span entire viewport */
-.wp-block-group.has-background {
-  width: 100vw !important;
-  max-width: 100vw !important;
-  position: relative !important;
-  left: 50% !important;
-  transform: translateX(-50%) !important;
-  box-sizing: border-box !important;
-  padding-left: max(1.5rem, 5.5vw) !important;
-  padding-right: max(1.5rem, 5.5vw) !important;
 }
 /* Prevent flex item images from growing unbounded */
 .is-layout-flex > .wp-block-image,
