@@ -3,7 +3,6 @@
 // CHANGELOG: 2026-01-22 - Added image downloading and navigation link fixing
 // CHANGELOG: 2026-03-12 - Added bulletproof mobile menu injection (v2)
 // CHANGELOG: 2026-03-12 - Accept websiteContent directly from frontend to avoid stale data
-const DEPLOY_VERSION = "2026-03-21-fullbleed-bg-v9";
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 import { z } from "zod";
@@ -13,6 +12,9 @@ import { GitHubClient } from "@/lib/clients/github";
 import { VercelProvider } from "@/lib/providers/impl/vercel";
 import { getCorsHeaders } from "@/lib/cors";
 import { injectCarouselIntoHtmlForDeploy } from "@/lib/html-utils";
+
+/** Bumped when deploy-injected layout CSS changes */
+const DEPLOY_VERSION = "2026-03-23-layout-v14-fullbleed-all-wrappers";
 
 // Route segment config to allow larger request bodies (for base64 images)
 export const maxDuration = 120; // 2 minutes timeout
@@ -97,15 +99,43 @@ function unwrapAvallonProxyImageUrls(html: string): string {
  *
  * v9: Full-bleed for WP .has-background / .alignfull (navy sections stopping short = constrained
  * width + body white showing). Viewport breakout + clamp padding so all laptop sizes look consistent.
+ *
+ * v13: Production parity — same responsive “container” everywhere (Tailwind: w-full outer +
+ * max-w-7xl mx-auto px-4 sm:px-6 lg:px-8). Strip prior Avallon &lt;style&gt; so editor HTML cannot
+ * skip deploy. Use width:100% instead of 100vw; inner WP wrappers get max-width 80rem centered.
+ *
+ * v14: Full-bleed fix for 14”+ screens — force ALL structural wrappers (body > div, body > div > div,
+ * common theme classes) to width:100% !important so no theme container caps the viewport.
+ * Removed the attribute selector hack for percentage widths; body>* rules catch everything.
  */
+function stripAvallonResponsiveInjections(html: string): string {
+  let out = html.replace(/<style[^>]*data-avallon-responsive[^>]*>[\s\S]*?<\/style>\s*/gi, "");
+  out = out.replace(/\n?<!--\s*avallon-deploy[^\n]*-->\s*/gi, "\n");
+  out = out.replace(/<!--\s*AVALLON RESPONSIVE FIXES\s*-->\s*/gi, "");
+  out = out.replace(/<!--\s*END AVALLON RESPONSIVE FIXES\s*-->\s*/gi, "");
+  return out;
+}
+
 function injectResponsiveStyles(files: Record<string, string>): Record<string, string> {
   const fixedFiles: Record<string, string> = {};
   
   const responsiveCSS = `
 <style data-avallon-responsive="true" data-avallon-deploy-fluid="true">
-/* --- Avallon v9: universal fluid layout + full-bleed backgrounds --- */
+/* --- Avallon v14: full-bleed all wrappers on every screen size --- */
 *, *::before, *::after {
   box-sizing: border-box;
+}
+:root {
+  --avallon-container: 80rem;
+  --avallon-px: 1rem;
+  --wp--style--global--wide-size: 100%;
+  --wp--style--global--content-size: 100%;
+}
+@media (min-width: 640px) {
+  :root { --avallon-px: 1.5rem; }
+}
+@media (min-width: 1024px) {
+  :root { --avallon-px: 2rem; }
 }
 html {
   overflow-x: hidden;
@@ -121,39 +151,103 @@ body {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
-/* WordPress root */
-.wp-site-blocks {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-}
-/* Classic theme wrappers */
-#page, #content, #primary, .site, .site-content, .entry-content {
+/* ── Full-bleed: force ALL structural wrappers to 100% width ── */
+/* Generic: every direct child of body (covers any theme wrapper) */
+body > div,
+body > section,
+body > article,
+body > main,
+body > header,
+body > footer,
+body > aside,
+body > nav {
+  width: 100% !important;
   max-width: 100% !important;
   box-sizing: border-box;
 }
-/* Full-bleed: colored / cover sections span full viewport (fixes white gutter beside dark panels) */
-.wp-block-group.alignfull.has-background,
-.wp-block-group.has-background.alignfull,
-.wp-block-cover.alignfull,
-.wp-site-blocks > .wp-block-group.has-background,
-.entry-content > .wp-block-group.has-background,
-.wp-site-blocks > .wp-block-cover,
-.entry-content > .wp-block-cover {
-  width: 100vw;
-  max-width: 100vw;
-  margin-left: calc(50% - 50vw);
-  margin-right: calc(50% - 50vw);
-  padding-left: clamp(1rem, 4vw, 3rem);
-  padding-right: clamp(1rem, 4vw, 3rem);
+/* Second-level wrappers (body > div.wrapper > div.inner pattern) */
+body > div > div,
+body > div > section,
+body > div > article,
+body > div > main,
+body > div > header,
+body > div > footer {
+  width: 100% !important;
+  max-width: 100% !important;
   box-sizing: border-box;
 }
-/* Non-alignfull background groups still use full row width */
-.wp-block-group.has-background,
-.wp-block-cover {
-  width: 100%;
-  max-width: 100%;
+/* Third-level too (some themes nest 3 deep before content) */
+body > div > div > div,
+body > div > div > section,
+body > div > div > main,
+body > div > div > article {
+  width: 100% !important;
+  max-width: 100% !important;
   box-sizing: border-box;
+}
+/* Named WP / theme wrappers */
+.wp-site-blocks,
+#page, #content, #primary, #main, #wrapper, #main-wrapper, #site-wrapper,
+.site, .site-content, .entry-content, .page-content, .post-content,
+.wrapper, .container, .page-wrapper, .page-container, .site-inner, .content-area,
+main, article {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+.wp-site-blocks {
+  min-width: 0;
+}
+header,
+.wp-block-template-part {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+/* Colored / cover bands: full-width strip */
+.wp-block-group.has-background,
+.wp-block-cover,
+.wp-block-group.alignfull,
+.wp-block-cover.alignfull {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  box-sizing: border-box;
+}
+/* Inner container: centered with padding (content column) */
+.wp-block-group__inner-container,
+.wp-block-cover__inner-container,
+.is-layout-constrained {
+  max-width: var(--avallon-container);
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: var(--avallon-px);
+  padding-right: var(--avallon-px);
+  width: 100%;
+  box-sizing: border-box;
+}
+.wp-block-group.has-background .wp-block-group__inner-container,
+.wp-block-group.has-background > .is-layout-flow,
+.wp-block-group.has-background > .is-layout-flex,
+.wp-block-group.has-background > .is-layout-grid,
+.wp-block-cover .wp-block-cover__inner-container {
+  max-width: var(--avallon-container);
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: var(--avallon-px);
+  padding-right: var(--avallon-px);
+  width: 100%;
+  box-sizing: border-box;
+}
+/* Columns */
+.wp-block-columns {
+  min-width: 0;
+  justify-content: center;
+  width: 100%;
+}
+.wp-block-column {
+  min-width: 0;
 }
 /* Media & embeds */
 img, video, iframe, svg {
@@ -164,10 +258,8 @@ figure img, picture img {
   max-width: 100%;
   height: auto;
 }
-/* WP flex/grid: shrink so columns don’t overflow */
 .is-layout-flex,
-.is-layout-grid,
-.wp-block-columns {
+.is-layout-grid {
   min-width: 0;
 }
 </style>
@@ -180,16 +272,10 @@ figure img, picture img {
       continue;
     }
     
-    // Skip if already has our responsive styles
-    if (content.includes('data-avallon-responsive="true"')) {
-      fixedFiles[filename] = content;
-      continue;
-    }
-    
-    let fixedContent = content;
+    let fixedContent = stripAvallonResponsiveInjections(content);
     
     // 1. Ensure viewport meta tag exists
-    const hasViewport = /<meta[^>]*name=["']viewport["'][^>]*>/i.test(content);
+    const hasViewport = /<meta[^>]*name=["']viewport["'][^>]*>/i.test(fixedContent);
     if (!hasViewport) {
       const viewportMeta = '<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">';
       
