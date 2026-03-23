@@ -14,7 +14,7 @@ import { getCorsHeaders } from "@/lib/cors";
 import { injectCarouselIntoHtmlForDeploy } from "@/lib/html-utils";
 
 /** Bumped when deploy-injected layout CSS changes */
-const DEPLOY_VERSION = "2026-03-23-layout-v15-wp-constraint-override";
+const DEPLOY_VERSION = "2026-03-23-layout-v16-minimal";
 
 // Route segment config to allow larger request bodies (for base64 images)
 export const maxDuration = 120; // 2 minutes timeout
@@ -122,81 +122,18 @@ function injectResponsiveStyles(files: Record<string, string>): Record<string, s
   const responsiveCSS = `
 <!-- avallon-deploy ${DEPLOY_VERSION} -->
 <style data-avallon-responsive="true" data-avallon-deploy-fluid="true">
-/* --- Avallon v15: override WP layout constraints for full-bleed on all screens --- */
-
-/* ── Override WordPress content-size / wide-size so sections stretch to viewport ── */
-:root {
-  --wp--style--global--wide-size: 100% !important;
-  --wp--style--global--content-size: 100% !important;
-}
-
-/* Remove the WP constrained-layout max-width cap on children */
-.is-layout-constrained > :where(:not(.alignleft):not(.alignright):not(.alignfull)) {
-  max-width: 100% !important;
-}
-.is-layout-constrained > .alignwide {
-  max-width: 100% !important;
-}
-
-/* ── Base resets ── */
-html {
+/* --- Avallon v16: minimal — let the WP theme handle its own layout --- */
+html, body {
   overflow-x: hidden;
 }
 body {
   margin: 0;
-  overflow-x: hidden;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
-
-/* ── Outer shell: WP site-blocks + common theme wrappers → full width ── */
-.wp-site-blocks,
-#page, #content, #primary,
-.site, .site-content, .entry-content,
-main {
-  width: 100% !important;
-  max-width: 100% !important;
-  box-sizing: border-box;
-}
-header,
-footer,
-.wp-block-template-part {
-  width: 100% !important;
-  max-width: 100% !important;
-  box-sizing: border-box;
-}
-
-/* ── Background sections: full-bleed strip ── */
-.wp-block-group.has-background,
-.wp-block-cover,
-.wp-block-group.alignfull,
-.wp-block-cover.alignfull {
-  width: 100% !important;
-  max-width: 100% !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  box-sizing: border-box;
-}
-
-/* ── Columns ── */
-.wp-block-columns {
-  min-width: 0;
-  width: 100%;
-}
-.wp-block-column {
-  min-width: 0;
-}
-
-/* ── Media ── */
 img, video, iframe, svg {
   max-width: 100%;
   height: auto;
-}
-
-/* ── Flex/grid overflow guard ── */
-.is-layout-flex,
-.is-layout-grid {
-  min-width: 0;
 }
 </style>
 `;
