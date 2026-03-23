@@ -165,6 +165,17 @@ img, video, iframe, svg {
   max-width: 100%;
   height: auto;
 }
+/* Full-bleed: force background sections to span entire viewport */
+.wp-block-group.has-background {
+  width: 100vw !important;
+  max-width: 100vw !important;
+  position: relative !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  box-sizing: border-box !important;
+  padding-left: max(1.5rem, 5.5vw) !important;
+  padding-right: max(1.5rem, 5.5vw) !important;
+}
 /* Prevent flex item images from growing unbounded */
 .is-layout-flex > .wp-block-image,
 .is-layout-flex > figure {
