@@ -153,13 +153,28 @@ img, video, iframe, svg {
   max-width: 100%;
   height: auto;
 }
-/* Background sections without alignfull: break out to full viewport width */
+/* Background sections without alignfull: force full viewport width */
+.wp-site-blocks > .wp-block-group.has-background:not(.alignfull):not(.alignwide),
+.wp-site-blocks > .wp-block-cover:not(.alignfull):not(.alignwide),
 .is-layout-constrained > .wp-block-group.has-background:not(.alignfull):not(.alignwide),
 .is-layout-constrained > .wp-block-cover:not(.alignfull):not(.alignwide) {
-  max-width: none !important;
-  width: calc(100% + var(--wp--style--root--padding-left, 0px) + var(--wp--style--root--padding-right, 0px)) !important;
-  margin-left: calc(var(--wp--style--root--padding-left, 0px) * -1) !important;
-  margin-right: calc(var(--wp--style--root--padding-right, 0px) * -1) !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+/* Prevent flex item images from growing unbounded */
+.is-layout-flex > .wp-block-image,
+.is-layout-flex > figure {
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 100%;
+}
+.is-layout-flex > .wp-block-image img,
+.is-layout-flex > figure img {
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
 }
 </style>
 `;
