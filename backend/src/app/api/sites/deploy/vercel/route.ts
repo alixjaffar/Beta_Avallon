@@ -58,9 +58,27 @@ function cleanEditorScripts(html: string): string {
   // Clean empty script tags
   html = html.replace(/<script>\s*<\/script>/gi, '');
   
-  // NOTE: We no longer strip inline width/min-width from divs/sections here — that broke migrated
-  // layouts (mentor grids, absolute cards, WP block geometry) on Vercel. Overflow is handled in CSS only.
-  
+  // NOTE: We no longer strip inline width/min-width from ALL divs/sections — that broke migrated
+  // layouts (mentor grids, absolute cards, WP block geometry) on Vercel.
+  // But we DO strip inline width/height from dt-cr-* elements — those are Avallon editor
+  // drag/resize artifacts that hardcode pixel dimensions (e.g. "width: 514.203px")
+  // which break layout on different screen sizes.
+  html = html.replace(
+    /(<[^>]*class="[^"]*dt-cr-\d+[^"]*"[^>]*)\s+style="[^"]*"/gi,
+    (full, before) => {
+      // Extract the style attribute value and remove only width/height
+      const styleMatch = full.match(/style="([^"]*)"/);
+      if (!styleMatch) return full;
+      const cleaned = styleMatch[1]
+        .replace(/\bwidth:\s*[\d.]+px\s*;?\s*/gi, '')
+        .replace(/\bheight:\s*[\d.]+px\s*;?\s*/gi, '')
+        .trim()
+        .replace(/;$/, '');
+      if (!cleaned) return before;
+      return `${before} style="${cleaned}"`;
+    }
+  );
+
   return html;
 }
 
