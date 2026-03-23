@@ -79,6 +79,18 @@ function cleanEditorScripts(html: string): string {
     }
   );
 
+  // Add 'alignfull' to .wp-block-group.has-background elements that don't have it.
+  // WordPress uses alignfull to make background sections break out to full viewport width.
+  // Migrated sites often have background sections without this class, causing white gaps.
+  html = html.replace(
+    /(<div[^>]*class="[^"]*wp-block-group[^"]*has-background[^"]*")/gi,
+    (match) => {
+      if (/\balignfull\b/.test(match)) return match; // already has alignfull
+      // Add alignfull to the class list
+      return match.replace(/class="([^"]*)"/, 'class="$1 alignfull"');
+    }
+  );
+
   return html;
 }
 
@@ -152,16 +164,6 @@ body {
 img, video, iframe, svg {
   max-width: 100%;
   height: auto;
-}
-/* Background sections without alignfull: force full viewport width */
-.wp-site-blocks > .wp-block-group.has-background:not(.alignfull):not(.alignwide),
-.wp-site-blocks > .wp-block-cover:not(.alignfull):not(.alignwide),
-.is-layout-constrained > .wp-block-group.has-background:not(.alignfull):not(.alignwide),
-.is-layout-constrained > .wp-block-cover:not(.alignfull):not(.alignwide) {
-  max-width: 100% !important;
-  width: 100% !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
 }
 /* Prevent flex item images from growing unbounded */
 .is-layout-flex > .wp-block-image,
