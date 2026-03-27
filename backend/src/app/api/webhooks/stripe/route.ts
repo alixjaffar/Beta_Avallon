@@ -209,25 +209,18 @@ async function handleSubscriptionCheckout(session: Stripe.Checkout.Session) {
       },
     });
 
-    // Add credits to user account (both database and file-based for compatibility)
-    try {
-      await prisma.user.update({
-        where: { id: userId },
-        data: {
-          credits: {
-            increment: credits,
-          },
-        },
-      });
-    } catch (dbError: any) {
-      logInfo('Database user update failed (user may not exist in db), using file-based credits', { userId, error: dbError.message });
-    }
-    
-    // Also add to file-based system (main credit system used by the app)
+    // Add credits to user account via unified addCredits (uses database)
     const userEmail = session.customer_email || session.metadata?.userEmail;
-    await addCredits(userId, credits, `Subscription activated: ${finalPlan} plan`, userEmail || undefined);
+    const creditResult = await addCredits(userId, credits, `Subscription activated: ${finalPlan} plan`, userEmail || undefined);
 
-    logInfo('Subscription activated and credits added', { userId, userEmail, plan: finalPlan, creditsAdded: credits });
+    logInfo('Subscription activated and credits added', { 
+      userId, 
+      userEmail, 
+      plan: finalPlan, 
+      creditsAdded: credits,
+      newBalance: creditResult.newBalance,
+      success: creditResult.success,
+    });
   } catch (error: any) {
     logError('Failed to handle subscription checkout', error, { sessionId: session.id });
   }
@@ -254,7 +247,7 @@ async function handleCreditPurchase(session: Stripe.Checkout.Session) {
 
     logInfo('Processing credit purchase', { userId, userEmail, quantity, sessionId: session.id });
 
-    // Use the unified addCredits function (handles both file and database)
+    // Use the unified addCredits function (uses database)
     const result = await addCredits(
       userId || userEmail || 'unknown', 
       quantity, 
@@ -263,28 +256,19 @@ async function handleCreditPurchase(session: Stripe.Checkout.Session) {
     );
     
     if (result.success) {
-      logInfo('Credits added successfully', { userId, userEmail, creditsAdded: quantity, newBalance: result.newBalance });
+      logInfo('Credit purchase completed', { 
+        userId, 
+        userEmail, 
+        creditsAdded: quantity, 
+        newBalance: result.newBalance,
+      });
     } else {
-      logError('Failed to add credits', new Error('addCredits returned false'), { userId, userEmail, quantity });
+      logError('Failed to add credits for purchase', new Error('addCredits returned false'), { 
+        userId, 
+        userEmail, 
+        quantity,
+      });
     }
-
-    // Also try database update for users in the system
-    if (userId) {
-      try {
-        const user = await prisma.user.findUnique({ where: { id: userId } });
-        if (user) {
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { credits: { increment: quantity } },
-          });
-          logInfo('Database credits also updated', { userId: user.id, creditsAdded: quantity });
-        }
-      } catch (dbError: any) {
-        logInfo('Database update skipped', { userId, error: dbError.message });
-      }
-    }
-
-    logInfo('Credit purchase completed', { userId, userEmail, quantity });
   } catch (error: any) {
     logError('Failed to handle credit purchase', error, { sessionId: session.id });
   }
@@ -397,9 +381,9 @@ async function handleInvoicePayment(invoice: Stripe.Invoice) {
     // Add monthly credits on renewal
     const credits = PLAN_CREDITS[dbSubscription.plan] || PLAN_CREDITS.pro;
 
-    // Update database
+    // Update database directly (we already have the user from the subscription)
     try {
-      await prisma.user.update({
+      const updatedUser = await prisma.user.update({
         where: { id: dbSubscription.userId },
         data: {
           credits: {
@@ -407,13 +391,18 @@ async function handleInvoicePayment(invoice: Stripe.Invoice) {
           },
         },
       });
+      logInfo('Renewal credits added to database', { 
+        userId: dbSubscription.userId, 
+        email: dbSubscription.user?.email,
+        creditsAdded: credits,
+        newBalance: updatedUser.credits,
+      });
     } catch (dbError: any) {
-      logInfo('Database user update failed on renewal', { userId: dbSubscription.userId, error: dbError.message });
+      logError('Database user update failed on renewal', dbError, { 
+        userId: dbSubscription.userId, 
+        error: dbError.message,
+      });
     }
-    
-    // Also add to file-based system
-    const userEmail = dbSubscription.user?.email;
-    await addCredits(dbSubscription.userId, credits, `Subscription renewal: ${dbSubscription.plan} plan`, userEmail || undefined);
 
     // Update subscription period
     const stripe = getStripeClient();
@@ -426,8 +415,6 @@ async function handleInvoicePayment(invoice: Stripe.Invoice) {
         },
       });
     }
-
-    logInfo('Credits added on invoice payment', { userId: dbSubscription.userId, credits });
   } catch (error: any) {
     logError('Failed to handle invoice payment', error, { invoiceId: invoice.id });
   }

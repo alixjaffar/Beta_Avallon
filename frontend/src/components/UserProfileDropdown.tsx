@@ -143,7 +143,7 @@ export const UserProfileDropdown: React.FC<UserProfileDropdownProps> = ({
               </div>
               <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 flex items-center gap-1">
                 <span className="material-symbols-outlined text-[12px]">info</span>
-                Daily credits reset at midnight
+                Credits persist across sessions
               </p>
             </div>
           </div>

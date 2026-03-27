@@ -18,7 +18,7 @@ interface SavedScript {
 interface ImportWebsiteModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onImport: (html: string, pageName?: string) => void;
+  onImport: (html: string, pageName?: string, suggestedSiteName?: string) => void;
   onMultiPageImport?: (pages: ImportedPage[]) => void;
   onInjectToAllPages?: (code: { html: string; css: string; js: string }) => void;
   existingPages?: string[];
@@ -28,6 +28,28 @@ interface ImportWebsiteModalProps {
   onRemoveScript?: (scriptId: string) => void;
   onCleanupLegacyWidgets?: () => void;
   hasLegacyWidgets?: boolean;
+}
+
+/**
+ * Extract a clean domain name for use as a site name
+ */
+function extractDomainName(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    let domain = urlObj.hostname;
+    // Remove 'www.' prefix
+    domain = domain.replace(/^www\./, '');
+    // Capitalize first letter of each part
+    return domain
+      .split('.')
+      .slice(0, -1) // Remove TLD (.com, .org, etc.)
+      .join(' ')
+      .split(/[.-]/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -342,7 +364,13 @@ export const ImportWebsiteModal: React.FC<ImportWebsiteModalProps> = ({
 
       // Single page import
       console.log('%c✓ Playwright import complete!', 'color: #22c55e; font-weight: bold;');
-      onImport(data.html, pageName);
+      
+      // Extract suggested site name from page title or domain
+      const suggestedName = data.title && data.title.length > 2 
+        ? data.title.slice(0, 50) 
+        : extractDomainName(normalizedUrl);
+      
+      onImport(data.html, pageName, suggestedName);
         handleClose();
       
     } catch (err) {

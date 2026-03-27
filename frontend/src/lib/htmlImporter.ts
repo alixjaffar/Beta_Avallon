@@ -999,6 +999,8 @@ a, button { touch-action: manipulation; }
  * Inject responsive styles for proper mobile display
  * - Ensures viewport meta tag exists
  * - Adds global CSS to prevent overflow and ensure images/media scale properly
+ *
+ * Vercel publish strips this block and injects production layout CSS (see deploy route v13).
  */
 function injectResponsiveStyles(html: string): string {
   // Skip if already has our responsive styles

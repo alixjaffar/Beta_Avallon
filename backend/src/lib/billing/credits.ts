@@ -1,10 +1,8 @@
 // Credit management system for AI website generation
 // CHANGELOG: 2025-01-07 - Updated for new pricing tiers and token-based consumption
+// CHANGELOG: 2026-03-22 - Migrated from file-based to PostgreSQL (fixes ephemeral Vercel storage)
 import { logInfo, logError } from "@/lib/log";
-import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { join } from 'path';
-
-const USER_CREDITS_FILE = join(process.cwd(), 'user-credits.json');
+import { prisma } from "@/lib/db";
 
 // Token-based credit costs (1 credit = ~1000 tokens)
 export const CREDIT_COSTS = {
@@ -24,34 +22,6 @@ export const PLAN_CREDITS: Record<string, number> = {
   business: 250,
 };
 
-// File-based user credits storage
-interface UserCredits {
-  [userId: string]: {
-    credits: number;
-    lastUpdated: string;
-  };
-}
-
-function loadUserCredits(): UserCredits {
-  try {
-    if (existsSync(USER_CREDITS_FILE)) {
-      const data = readFileSync(USER_CREDITS_FILE, 'utf-8');
-      return JSON.parse(data);
-    }
-  } catch (error) {
-    console.error('Error loading user credits:', error);
-  }
-  return {};
-}
-
-function saveUserCredits(credits: UserCredits): void {
-  try {
-    writeFileSync(USER_CREDITS_FILE, JSON.stringify(credits, null, 2));
-  } catch (error) {
-    console.error('Error saving user credits:', error);
-  }
-}
-
 /**
  * Calculate credits based on token usage
  */
@@ -62,45 +32,41 @@ export function calculateTokenCredits(inputTokens: number, outputTokens: number)
 }
 
 /**
- * Get user's current credit balance (file-based)
- * Checks BOTH userId AND email to find the user's credits
+ * Find user in database by clerkId or email
+ */
+async function findUser(userId: string, email?: string) {
+  // Try clerkId first
+  let user = await prisma.user.findUnique({ where: { clerkId: userId } });
+  
+  // If not found and email provided, try email
+  if (!user && email) {
+    user = await prisma.user.findUnique({ where: { email } });
+  }
+  
+  return user;
+}
+
+/**
+ * Get user's current credit balance from database
+ * Checks BOTH userId (clerkId) AND email to find the user
  */
 export async function getUserCredits(userId: string, email?: string): Promise<number> {
   // Skip for mock users
   if (userId === 'mock_user_id' || userId.startsWith('mock_')) {
-    return 5; // Default free plan credits
+    return 5;
   }
   
   try {
-    const allCredits = loadUserCredits();
+    const user = await findUser(userId, email);
     
-    // Try userId first, then email - return highest balance found (in case of sync issues)
-    const userIdCredits = allCredits[userId]?.credits;
-    const emailCredits = email ? allCredits[email]?.credits : undefined;
-    
-    if (userIdCredits !== undefined || emailCredits !== undefined) {
-      // Return the maximum of the two (in case they got out of sync)
-      const credits = Math.max(userIdCredits ?? 0, emailCredits ?? 0);
-      
-      // If there's a mismatch, sync them
-      if (userIdCredits !== emailCredits && (userIdCredits !== undefined && emailCredits !== undefined)) {
-        const syncEntry = {
-          credits,
-          lastUpdated: new Date().toISOString(),
-        };
-        allCredits[userId] = syncEntry;
-        if (email) allCredits[email] = syncEntry;
-        saveUserCredits(allCredits);
-        logInfo('Synced mismatched credits', { userId, email, credits });
-      }
-      
-      return credits;
+    if (user) {
+      return user.credits;
     }
     
-    // New user - give them 30 credits (free plan)
-    return 30;
+    // User not in database - return default free plan credits
+    return PLAN_CREDITS.free;
   } catch (error: any) {
-    logError('Failed to get user credits', error, { userId, email });
+    logError('Failed to get user credits from database', error, { userId, email });
     return PLAN_CREDITS.free;
   }
 }
@@ -131,9 +97,9 @@ export async function hasEnoughCredits(
 }
 
 /**
- * Deduct credits from user's account (file-based)
+ * Deduct credits from user's account in database
  * Returns true if successful, false if insufficient credits
- * IMPORTANT: Updates BOTH userId AND email entries for consistency
+ * Uses atomic decrement operation to prevent race conditions
  */
 export async function deductCredits(
   userId: string,
@@ -141,16 +107,29 @@ export async function deductCredits(
   reason?: string,
   email?: string
 ): Promise<{ success: boolean; remainingCredits: number; error?: string }> {
+  // Skip for mock users
+  if (userId === 'mock_user_id' || userId.startsWith('mock_')) {
+    return { success: true, remainingCredits: 5 };
+  }
+  
   try {
-    const allCredits = loadUserCredits();
+    const user = await findUser(userId, email);
     
-    // Get current credits from either userId or email (check both)
-    const currentCredits = allCredits[userId]?.credits ?? allCredits[email || '']?.credits ?? PLAN_CREDITS.free;
+    if (!user) {
+      logInfo('User not found for credit deduction', { userId, email });
+      return {
+        success: false,
+        remainingCredits: 0,
+        error: 'User not found',
+      };
+    }
+    
+    const currentCredits = user.credits;
     
     if (currentCredits < amount) {
       logInfo('Insufficient credits', {
-        userId,
-        email,
+        userId: user.id,
+        email: user.email,
         currentCredits,
         required: amount,
         reason,
@@ -162,33 +141,27 @@ export async function deductCredits(
       };
     }
 
-    // Deduct credits
-    const newCredits = currentCredits - amount;
-    const creditEntry = {
-      credits: newCredits,
-      lastUpdated: new Date().toISOString(),
-    };
-    
-    // Update BOTH userId AND email entries for consistency
-    allCredits[userId] = creditEntry;
-    if (email && email !== userId) {
-      allCredits[email] = creditEntry;
-    }
-    
-    saveUserCredits(allCredits);
+    // Atomic decrement to prevent race conditions
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        credits: { decrement: amount },
+      },
+    });
 
-    logInfo('Credits deducted (updated both userId and email)', {
-      userId,
-      email,
+    logInfo('Credits deducted from database', {
+      userId: user.id,
+      clerkId: user.clerkId,
+      email: user.email,
       amount,
       previousCredits: currentCredits,
-      remainingCredits: newCredits,
+      remainingCredits: updated.credits,
       reason,
     });
 
     return {
       success: true,
-      remainingCredits: newCredits,
+      remainingCredits: updated.credits,
     };
   } catch (error: any) {
     logError('Failed to deduct credits', error, { userId, email, amount, reason });
@@ -219,8 +192,8 @@ export async function deductTokenCredits(
 }
 
 /**
- * Add credits to user's account (file-based)
- * IMPORTANT: Stores under BOTH userId AND email for redundancy
+ * Add credits to user's account in database
+ * Uses atomic increment operation to prevent race conditions
  */
 export async function addCredits(
   userId: string,
@@ -228,42 +201,45 @@ export async function addCredits(
   reason?: string,
   email?: string
 ): Promise<{ success: boolean; newBalance: number }> {
+  // Skip for mock users
+  if (userId === 'mock_user_id' || userId.startsWith('mock_')) {
+    return { success: true, newBalance: 5 + amount };
+  }
+  
   try {
-    const allCredits = loadUserCredits();
+    const user = await findUser(userId, email);
     
-    // Get current credits from either userId or email (whichever exists)
-    const currentCredits = allCredits[userId]?.credits ?? allCredits[email || '']?.credits ?? 0;
-    const newBalance = currentCredits + amount;
-    
-    // Store under BOTH userId AND email for redundancy
-    // This ensures credits can be found regardless of which identifier is used
-    const creditEntry = {
-      credits: newBalance,
-      lastUpdated: new Date().toISOString(),
-    };
-    
-    // Always store under userId
-    allCredits[userId] = creditEntry;
-    
-    // Also store under email if provided (creates a link)
-    if (email && email !== userId) {
-      allCredits[email] = creditEntry;
+    if (!user) {
+      logInfo('User not found for adding credits, skipping', { userId, email, amount });
+      return {
+        success: false,
+        newBalance: 0,
+      };
     }
     
-    saveUserCredits(allCredits);
+    const previousCredits = user.credits;
+    
+    // Atomic increment to prevent race conditions
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        credits: { increment: amount },
+      },
+    });
 
-    logInfo('Credits added (stored under both userId and email)', {
-      userId,
-      email,
+    logInfo('Credits added to database', {
+      userId: user.id,
+      clerkId: user.clerkId,
+      email: user.email,
       amount,
-      previousCredits: currentCredits,
-      newBalance,
+      previousCredits,
+      newBalance: updated.credits,
       reason,
     });
 
     return {
       success: true,
-      newBalance,
+      newBalance: updated.credits,
     };
   } catch (error: any) {
     logError('Failed to add credits', error, { userId, email, amount, reason });
@@ -275,8 +251,7 @@ export async function addCredits(
 }
 
 /**
- * Set user's credits to a specific amount (file-based)
- * IMPORTANT: Updates BOTH userId AND email entries for consistency
+ * Set user's credits to a specific amount in database
  */
 export async function setCredits(
   userId: string,
@@ -284,33 +259,41 @@ export async function setCredits(
   reason?: string,
   email?: string
 ): Promise<{ success: boolean; newBalance: number }> {
+  // Skip for mock users
+  if (userId === 'mock_user_id' || userId.startsWith('mock_')) {
+    return { success: true, newBalance: amount };
+  }
+  
   try {
-    const allCredits = loadUserCredits();
+    const user = await findUser(userId, email);
     
-    const creditEntry = {
-      credits: amount,
-      lastUpdated: new Date().toISOString(),
-    };
-    
-    // Update BOTH userId AND email for consistency
-    allCredits[userId] = creditEntry;
-    if (email && email !== userId) {
-      allCredits[email] = creditEntry;
+    if (!user) {
+      logInfo('User not found for setting credits', { userId, email, amount });
+      return {
+        success: false,
+        newBalance: 0,
+      };
     }
     
-    saveUserCredits(allCredits);
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        credits: amount,
+      },
+    });
 
-    logInfo('Credits set (updated both userId and email)', {
-      userId,
-      email,
+    logInfo('Credits set in database', {
+      userId: user.id,
+      clerkId: user.clerkId,
+      email: user.email,
       amount,
-      newBalance: amount,
+      newBalance: updated.credits,
       reason,
     });
 
     return {
       success: true,
-      newBalance: amount,
+      newBalance: updated.credits,
     };
   } catch (error: any) {
     logError('Failed to set credits', error, { userId, email, amount, reason });
@@ -329,53 +312,36 @@ export function getPlanCredits(plan: string): number {
 }
 
 /**
- * Ensure user has at least the minimum credits (file-based)
- * IMPORTANT: Initializes BOTH userId AND email entries
+ * Ensure user has credits initialized in database
+ * Returns the user's current credit balance
  */
 export async function ensureUserHasCredits(
   userId: string,
   email: string,
   minCredits?: number
 ): Promise<{ success: boolean; credits: number }> {
-  const defaultCredits = minCredits ?? 30; // Default to 30 credits for all new users
+  const defaultCredits = minCredits ?? 30;
   
+  // Skip test emails
   if (!email || email === 'user@example.com' || email === 'test@example.com') {
     return { success: true, credits: defaultCredits };
   }
   
+  // Skip mock users
+  if (userId === 'mock_user_id' || userId.startsWith('mock_')) {
+    return { success: true, credits: defaultCredits };
+  }
+  
   try {
-    const allCredits = loadUserCredits();
+    const user = await findUser(userId, email);
     
-    // Check if user exists under either userId or email
-    const existingCredits = allCredits[userId]?.credits ?? allCredits[email]?.credits;
-    
-    if (existingCredits !== undefined) {
-      // Ensure both entries are synced
-      const creditEntry = {
-        credits: existingCredits,
-        lastUpdated: new Date().toISOString(),
-      };
-      allCredits[userId] = creditEntry;
-      allCredits[email] = creditEntry;
-      saveUserCredits(allCredits);
-      
-      return { success: true, credits: existingCredits };
+    if (user) {
+      return { success: true, credits: user.credits };
     }
     
-    // New user - give them default credits (free plan)
-    const initialCredits = defaultCredits; // Use the minCredits parameter if provided
-    const creditEntry = {
-      credits: initialCredits,
-      lastUpdated: new Date().toISOString(),
-    };
-    
-    // Store under BOTH userId AND email
-    allCredits[userId] = creditEntry;
-    allCredits[email] = creditEntry;
-    saveUserCredits(allCredits);
-    
-    logInfo('Initialized user credits (stored under both userId and email)', { email, userId, credits: initialCredits });
-    return { success: true, credits: initialCredits };
+    // User not in database yet - they'll get default credits when created
+    logInfo('User not found in database during ensureUserHasCredits', { userId, email });
+    return { success: true, credits: defaultCredits };
   } catch (error: any) {
     logError('Failed to ensure user has credits', error, { userId, email });
     return { success: false, credits: defaultCredits };
@@ -392,11 +358,6 @@ export async function initializeCreditsForPlan(
   email?: string
 ): Promise<{ success: boolean; credits: number }> {
   const planCredits = getPlanCredits(plan);
-  // Use addCredits instead of setCredits to preserve existing credits
   const result = await addCredits(userId, planCredits, `Upgraded to ${plan} plan`, email);
   return { success: result.success, credits: result.newBalance };
 }
-
-
-
-

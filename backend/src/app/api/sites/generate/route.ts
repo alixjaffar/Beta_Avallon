@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logError, logInfo } from "@/lib/log";
 // AI generators are dynamically imported to avoid build-time issues with Google Cloud libs
-import { createSite } from "@/data/sites";
+import { createSite, updateSite } from "@/data/sites";
 
 // Force dynamic rendering - prevents Next.js from analyzing this route at build time
 export const dynamic = 'force-dynamic';
@@ -168,33 +168,57 @@ export async function POST(req: NextRequest) {
       const generateNameFromDescription = (desc: string): string => {
         const lowerDesc = desc.toLowerCase();
         
-        if (lowerDesc.includes('car') && (lowerDesc.includes('detail') || lowerDesc.includes('wash') || lowerDesc.includes('auto'))) {
-          return 'Auto Detailing Website';
-        } else if (lowerDesc.includes('snow') || lowerDesc.includes('snowplow') || lowerDesc.includes('plow')) {
-          return 'Snow Removal Services';
-        } else if (lowerDesc.includes('restaurant') || lowerDesc.includes('food') || lowerDesc.includes('dining')) {
-          return 'Restaurant Website';
-        } else if (lowerDesc.includes('landscap') || lowerDesc.includes('lawn') || lowerDesc.includes('garden')) {
-          return 'Landscaping Services';
-        } else if (lowerDesc.includes('construction') || lowerDesc.includes('contractor') || lowerDesc.includes('building')) {
-          return 'Construction Company';
-        } else if (lowerDesc.includes('portfolio')) {
-          return 'Portfolio Website';
-        } else if (lowerDesc.includes('ecommerce') || lowerDesc.includes('store') || lowerDesc.includes('shop')) {
-          return 'E-commerce Store';
-        } else if (lowerDesc.includes('blog')) {
-          return 'Blog Website';
-        } else if (lowerDesc.includes('saas') || lowerDesc.includes('software')) {
-          return 'SaaS Product';
-        } else {
-          // Try to extract meaningful words
-          const words = desc.split(/\s+/).filter(w => w.length > 3 && !['make', 'create', 'build', 'website', 'site'].includes(w.toLowerCase()));
-          if (words.length > 0) {
-            const nameWords = words.slice(0, 3).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
-            return nameWords.join(' ') + ' Website';
+        // Common website types with smart naming
+        const typeMapping: [RegExp, string][] = [
+          [/car\s*(detail|wash|auto|clean)/i, 'Auto Detailing'],
+          [/snow|snowplow|plow|removal/i, 'Snow Removal Services'],
+          [/restaurant|food|dining|cafe|bistro|eatery/i, 'Restaurant'],
+          [/landscap|lawn|garden|yard/i, 'Landscaping Services'],
+          [/construction|contractor|building|remodel/i, 'Construction Company'],
+          [/portfolio|personal\s*site/i, 'Portfolio'],
+          [/ecommerce|e-commerce|online\s*store|shop/i, 'E-commerce Store'],
+          [/blog|article|news|magazine/i, 'Blog'],
+          [/saas|software|app|startup/i, 'SaaS Product'],
+          [/real\s*estate|property|realtor|housing/i, 'Real Estate'],
+          [/gym|fitness|health|wellness|workout/i, 'Fitness Studio'],
+          [/law|legal|attorney|lawyer/i, 'Law Firm'],
+          [/medical|clinic|doctor|healthcare|dentist/i, 'Medical Practice'],
+          [/agency|marketing|consulting|digital/i, 'Agency'],
+          [/photography|photographer|photo/i, 'Photography'],
+          [/wedding|planner|event/i, 'Event Planning'],
+          [/salon|spa|beauty|hair/i, 'Beauty Salon'],
+          [/coffee|bakery|pastry/i, 'Coffee Shop'],
+          [/tech|technology|it\s*services/i, 'Tech Company'],
+          [/education|school|course|learn/i, 'Education'],
+          [/travel|tourism|vacation|hotel/i, 'Travel'],
+          [/nonprofit|charity|foundation/i, 'Nonprofit'],
+        ];
+        
+        for (const [pattern, typeName] of typeMapping) {
+          if (pattern.test(lowerDesc)) {
+            return typeName;
           }
-          return name || `Website ${Date.now()}`;
         }
+        
+        // Extract meaningful words from the prompt (first 3-4 words)
+        const stopWords = ['make', 'create', 'build', 'generate', 'design', 'website', 'site', 'page', 'for', 'a', 'an', 'the', 'with', 'and', 'that', 'this', 'like', 'want', 'need', 'please', 'can', 'you', 'me', 'my', 'i'];
+        const words = desc
+          .split(/\s+/)
+          .filter(w => w.length > 2 && !stopWords.includes(w.toLowerCase()))
+          .slice(0, 4)
+          .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase().replace(/[^a-z]/gi, ''));
+        
+        if (words.length > 0) {
+          const siteName = words.join(' ');
+          // Only add "Website" suffix if it's not already descriptive enough
+          if (siteName.length < 15) {
+            return siteName + ' Website';
+          }
+          return siteName;
+        }
+        
+        // Fallback to "My Website" instead of timestamp
+        return name || 'My Website';
       };
       
       const finalName = name || generateNameFromDescription(description);
@@ -436,32 +460,62 @@ export async function POST(req: NextRequest) {
         // Continue anyway - the website was already generated
       }
 
-      // Save to database with initial chat history
-      const initialChatHistory = [
+      // Save to database - update existing site if siteId provided, otherwise create new
+      const newChatEntry = [
         {
-          id: '1',
+          id: String(Date.now()),
           role: 'user',
           content: description,
           timestamp: new Date().toISOString()
         },
         {
-          id: '2',
+          id: String(Date.now() + 1),
           role: 'assistant',
           content: "Website generated successfully with Kirin!",
           timestamp: new Date().toISOString()
         }
       ];
       
-      const savedSite = await createSite({
-        ownerId: user.id,
-        name: finalName,
-        slug: websiteResult.slug,
-        status: websiteResult.status,
-        previewUrl: websiteResult.previewUrl,
-        repoUrl: websiteResult.repoUrl,
-        chatHistory: initialChatHistory,
-        websiteContent: websiteResult.files || {},
-      });
+      let savedSite;
+      
+      if (siteId) {
+        // Update existing site instead of creating a new one
+        logInfo('Updating existing site with AI-generated content', { siteId, finalName });
+        savedSite = await updateSite(siteId, user.id, {
+          name: finalName,
+          status: websiteResult.status || 'draft',
+          previewUrl: websiteResult.previewUrl,
+          repoUrl: websiteResult.repoUrl,
+          websiteContent: websiteResult.files || {},
+        });
+        
+        if (!savedSite) {
+          // Site not found or not owned by user - create new one as fallback
+          logInfo('Site not found for update, creating new site', { siteId });
+          savedSite = await createSite({
+            ownerId: user.id,
+            name: finalName,
+            slug: websiteResult.slug,
+            status: websiteResult.status,
+            previewUrl: websiteResult.previewUrl,
+            repoUrl: websiteResult.repoUrl,
+            chatHistory: newChatEntry,
+            websiteContent: websiteResult.files || {},
+          });
+        }
+      } else {
+        // Create new site
+        savedSite = await createSite({
+          ownerId: user.id,
+          name: finalName,
+          slug: websiteResult.slug,
+          status: websiteResult.status,
+          previewUrl: websiteResult.previewUrl,
+          repoUrl: websiteResult.repoUrl,
+          chatHistory: newChatEntry,
+          websiteContent: websiteResult.files || {},
+        });
+      }
 
       logInfo('Gemini website generation completed', {
         name,

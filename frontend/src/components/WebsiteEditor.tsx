@@ -2710,6 +2710,9 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
   const handleDeploy = async () => {
     setIsDeploying(true);
     
+    // Open window immediately to preserve user gesture context (avoids popup blocking)
+    const newWindow = window.open('about:blank', '_blank');
+    
     // Show immediate feedback
     toast({
       title: "🚀 Publishing...",
@@ -2738,6 +2741,9 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       console.log('Deploy response:', { status: response.status, result });
 
       if (!response.ok) {
+        // Close the blank window on error
+        if (newWindow) newWindow.close();
+        
         // Provide more detailed error messages
         let errorMessage = result.error || result.details || 'Failed to deploy';
         if (errorMessage.includes('VERCEL_TOKEN') || errorMessage.includes('not configured')) {
@@ -2751,15 +2757,35 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       }
       
       if (!result.previewUrl) {
+        // Close the blank window on error
+        if (newWindow) newWindow.close();
         throw new Error('Deployment completed but no URL was returned. Please check your VERCEL_TOKEN is valid.');
+      }
+      
+      // Navigate the pre-opened window to the deployed URL
+      if (newWindow) {
+        newWindow.location.href = result.previewUrl;
+      } else {
+        // Fallback: try to open again (may be blocked) and show clickable link in toast
+        window.open(result.previewUrl, '_blank');
       }
       
       toast({
         title: "🎉 Published Successfully!",
-        description: `Your site is live at ${result.previewUrl}`,
+        description: (
+          <span>
+            Your site is live at{' '}
+            <a 
+              href={result.previewUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="underline font-medium hover:text-primary"
+            >
+              {result.previewUrl.replace('https://', '')}
+            </a>
+          </span>
+        ),
       });
-
-      window.open(result.previewUrl, '_blank');
       
       // IMPORTANT: Also save to backend to keep database in sync with what was published
       // This ensures that on refresh, the server has the latest content
@@ -2798,6 +2824,11 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
       
     } catch (error: any) {
       console.error('Deploy error:', error);
+      
+      // Close the pre-opened window on any error
+      if (newWindow) {
+        try { newWindow.close(); } catch {}
+      }
       
       let errorMessage = error.message || "Failed to publish website.";
       if (error.name === 'AbortError') {
@@ -3183,9 +3214,31 @@ export const WebsiteEditor: React.FC<WebsiteEditorProps> = ({ site, onUpdate, on
   };
 
   // Handle importing website HTML
-  const handleImportWebsite = async (html: string, pageName: string = 'index.html') => {
+  const handleImportWebsite = async (html: string, pageName: string = 'index.html', suggestedSiteName?: string) => {
     // The HTML has already been fully processed by ImportWebsiteModal
     // (with CSS inlined, URLs converted, etc.)
+    
+    // If a suggested site name was provided and current name is generic, update it
+    if (suggestedSiteName && suggestedSiteName.length > 2) {
+      const genericNames = ['new website', 'untitled', 'my website', 'website'];
+      const isGenericName = genericNames.some(g => site.name.toLowerCase().includes(g)) || 
+                            /^website\s*\d*$/i.test(site.name);
+      if (isGenericName) {
+        // Update site name via API
+        try {
+          const response = await fetchWithAuth(`${baseUrl}/api/sites/${site.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: suggestedSiteName }),
+          });
+          if (response.ok) {
+            onUpdate({ ...site, name: suggestedSiteName });
+          }
+        } catch (err) {
+          console.warn('Failed to update site name:', err);
+        }
+      }
+    }
     
     let finalHtml = html;
     

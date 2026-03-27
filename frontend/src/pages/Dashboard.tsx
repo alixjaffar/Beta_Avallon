@@ -5,7 +5,7 @@ import { apiClient, Site } from "@/lib/api";
 import { fetchWithAuth, clearAuth } from "@/lib/fetchWithAuth";
 import { WebsiteEditor } from "@/components/WebsiteEditor";
 import { SettingsModal } from "@/components/SettingsModal";
-import { Plus, Sparkles, MoreVertical, Edit, ExternalLink, Trash2, Settings, BarChart3, Lock, Globe, LogOut, User } from "lucide-react";
+import { Plus, Sparkles, MoreVertical, Edit, ExternalLink, Trash2, Settings, BarChart3, Lock, Globe, LogOut, User, CheckSquare, Square, X } from "lucide-react";
 
 // User type - simplified for Firebase
 interface FirebaseUser {
@@ -46,6 +46,9 @@ const Dashboard = () => {
   const [credits, setCredits] = useState<number | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedSites, setSelectedSites] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const upgradeProcessedRef = useRef(false);
 
   const baseUrl = process.env.NODE_ENV === 'production' 
@@ -87,12 +90,26 @@ const Dashboard = () => {
     try {
       setCreatingSite(true);
       
-      const siteName = `Website ${Date.now()}`;
+      // Generate a smart name from the prompt, or use a friendly default
+      let siteName = 'New Website';
+      if (initialPrompt) {
+        // Extract key words from the prompt to create a meaningful name
+        const stopWords = ['make', 'create', 'build', 'generate', 'design', 'website', 'site', 'page', 'for', 'a', 'an', 'the', 'with', 'and', 'that', 'this', 'like', 'want', 'need', 'please', 'can', 'you', 'me', 'my', 'i'];
+        const words = initialPrompt
+          .split(/\s+/)
+          .filter(w => w.length > 2 && !stopWords.includes(w.toLowerCase()))
+          .slice(0, 3)
+          .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase().replace(/[^a-z]/gi, ''));
+        if (words.length > 0) {
+          siteName = words.join(' ');
+        }
+      }
+      
       const response = await fetchWithAuth(`${baseUrl}/api/sites`, {
         method: 'POST',
         body: JSON.stringify({
           name: siteName,
-          slug: siteName.toLowerCase().replace(/\s+/g, '-'),
+          slug: siteName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
           status: 'generating',
         }),
       });
@@ -226,6 +243,76 @@ const Dashboard = () => {
     }
     setUser(null);
     navigate("/");
+  };
+
+  const toggleSiteSelection = (siteId: string) => {
+    setSelectedSites(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(siteId)) {
+        newSet.delete(siteId);
+      } else {
+        newSet.add(siteId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedSites.size === sites.length) {
+      setSelectedSites(new Set());
+    } else {
+      setSelectedSites(new Set(sites.map(s => s.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedSites.size === 0) return;
+    
+    if (!confirm(`Are you sure you want to delete ${selectedSites.size} website${selectedSites.size > 1 ? 's' : ''}? This action cannot be undone.`)) {
+      return;
+    }
+
+    setBulkDeleting(true);
+    const deletedIds: string[] = [];
+    const failedIds: string[] = [];
+
+    for (const siteId of selectedSites) {
+      try {
+        const response = await fetchWithAuth(`${baseUrl}/api/sites/${siteId}`, {
+          method: 'DELETE',
+        });
+        if (response.ok) {
+          deletedIds.push(siteId);
+        } else {
+          failedIds.push(siteId);
+        }
+      } catch (error) {
+        failedIds.push(siteId);
+      }
+    }
+
+    setSites(prev => prev.filter(s => !deletedIds.includes(s.id)));
+    setSelectedSites(new Set());
+    setSelectionMode(false);
+    setBulkDeleting(false);
+
+    if (failedIds.length > 0) {
+      toast({
+        title: "Partial Success",
+        description: `Deleted ${deletedIds.length} website${deletedIds.length !== 1 ? 's' : ''}. ${failedIds.length} failed.`,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Success",
+        description: `Deleted ${deletedIds.length} website${deletedIds.length !== 1 ? 's' : ''}.`,
+      });
+    }
+  };
+
+  const cancelSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedSites(new Set());
   };
 
   const getTimeAgo = (date: string | Date) => {
@@ -515,29 +602,111 @@ const Dashboard = () => {
               </p>
             </div>
             
-            {/* Mobile Create Button */}
-            <button 
-              onClick={() => handleCreateWebsite()}
-              disabled={creatingSite}
-              className="sm:hidden flex items-center justify-center gap-2 w-full py-3 text-sm font-medium rounded-lg disabled:opacity-50"
-              style={{ background: colors[100], color: colors[900] }}
-            >
-              <Plus size={18} />
-              Create New Website
-            </button>
+            {/* Action Buttons */}
+            <div className="flex items-center gap-3">
+              {/* Selection Mode Toggle */}
+              {!selectionMode && sites.length > 0 && (
+                <button
+                  onClick={() => setSelectionMode(true)}
+                  className="hidden sm:flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors"
+                  style={{ background: colors[700], color: colors[200], border: `1px solid ${colors[400]}30` }}
+                >
+                  <CheckSquare size={16} />
+                  Select
+                </button>
+              )}
+              
+              {/* Mobile Create Button */}
+              <button 
+                onClick={() => handleCreateWebsite()}
+                disabled={creatingSite || selectionMode}
+                className="sm:hidden flex items-center justify-center gap-2 w-full py-3 text-sm font-medium rounded-lg disabled:opacity-50"
+                style={{ background: colors[100], color: colors[900] }}
+              >
+                <Plus size={18} />
+                Create New Website
+              </button>
+            </div>
           </div>
+
+          {/* Selection Toolbar */}
+          {selectionMode && (
+            <div 
+              className="flex items-center justify-between gap-4 mb-6 p-4 rounded-xl"
+              style={{ background: colors[800], border: `1px solid ${colors[400]}30` }}
+            >
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={toggleSelectAll}
+                  className="flex items-center gap-2 text-sm font-medium transition-colors"
+                  style={{ color: colors[200] }}
+                >
+                  {selectedSites.size === sites.length ? (
+                    <CheckSquare size={20} className="text-primary" />
+                  ) : (
+                    <Square size={20} />
+                  )}
+                  {selectedSites.size === sites.length ? 'Deselect All' : 'Select All'}
+                </button>
+                <span className="text-sm" style={{ color: colors[400] }}>
+                  {selectedSites.size} of {sites.length} selected
+                </span>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={selectedSites.size === 0 || bulkDeleting}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30"
+                >
+                  <Trash2 size={16} />
+                  {bulkDeleting ? 'Deleting...' : `Delete (${selectedSites.size})`}
+                </button>
+                <button
+                  onClick={cancelSelectionMode}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors"
+                  style={{ background: colors[700], color: colors[200] }}
+                >
+                  <X size={16} />
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Websites Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {sites.map((site) => (
               <article 
                 key={site.id} 
-                className="group relative flex flex-col rounded-xl overflow-hidden transition-all duration-300 hover:translate-y-[-2px]"
+                onClick={selectionMode ? () => toggleSiteSelection(site.id) : undefined}
+                className={`group relative flex flex-col rounded-xl overflow-hidden transition-all duration-300 hover:translate-y-[-2px] ${selectionMode ? 'cursor-pointer' : ''}`}
                 style={{ 
                   background: colors[800],
-                  border: `1px solid ${colors[400]}20`,
+                  border: selectedSites.has(site.id) ? '2px solid #3b82f6' : `1px solid ${colors[400]}20`,
                 }}
               >
+                {/* Selection Checkbox */}
+                {selectionMode && (
+                  <div 
+                    className="absolute top-3 left-3 z-20"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleSiteSelection(site.id);
+                    }}
+                  >
+                    <div 
+                      className={`w-6 h-6 rounded flex items-center justify-center transition-colors ${
+                        selectedSites.has(site.id) 
+                          ? 'bg-blue-500 text-white' 
+                          : 'bg-zinc-700/80 border border-zinc-500/50 text-transparent hover:border-zinc-400'
+                      }`}
+                    >
+                      {selectedSites.has(site.id) && <CheckSquare size={16} />}
+                    </div>
+                  </div>
+                )}
+                
                 {/* Thumbnail */}
                 <div className="relative aspect-[16/10] overflow-hidden" style={{ background: colors[700] }}>
                   {site.websiteContent && Object.keys(site.websiteContent).length > 0 ? (
@@ -570,32 +739,34 @@ const Dashboard = () => {
                     </div>
                   )}
                   
-                  {/* Hover Overlay */}
-                  <div 
-                    className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center gap-3"
-                    style={{ background: `${colors[900]}cc`, backdropFilter: 'blur(4px)' }}
-                  >
-                    <button 
-                      onClick={() => handleEditWebsite(site)}
-                      disabled={openingEditorSiteId === site.id}
-                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 disabled:opacity-60"
-                      style={{ background: colors[100], color: colors[900] }}
+                  {/* Hover Overlay - Hidden in selection mode */}
+                  {!selectionMode && (
+                    <div 
+                      className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center gap-3"
+                      style={{ background: `${colors[900]}cc`, backdropFilter: 'blur(4px)' }}
                     >
-                      <Edit size={16} />
-                      {openingEditorSiteId === site.id ? "Loading…" : "Edit Site"}
-                    </button>
-                    {site.previewUrl && (
-                      <a 
-                        href={site.previewUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-center w-10 h-10 rounded-lg transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 delay-75"
-                        style={{ background: colors[700], border: `1px solid ${colors[400]}30` }}
+                      <button 
+                        onClick={() => handleEditWebsite(site)}
+                        disabled={openingEditorSiteId === site.id}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 disabled:opacity-60"
+                        style={{ background: colors[100], color: colors[900] }}
                       >
-                        <ExternalLink size={18} style={{ color: colors[200] }} />
-                      </a>
-                    )}
-                  </div>
+                        <Edit size={16} />
+                        {openingEditorSiteId === site.id ? "Loading…" : "Edit Site"}
+                      </button>
+                      {site.previewUrl && (
+                        <a 
+                          href={site.previewUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center w-10 h-10 rounded-lg transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 delay-75"
+                          style={{ background: colors[700], border: `1px solid ${colors[400]}30` }}
+                        >
+                          <ExternalLink size={18} style={{ color: colors[200] }} />
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </div>
                 
                 {/* Content */}
@@ -692,46 +863,50 @@ const Dashboard = () => {
               </article>
             ))}
 
-            {/* Create New Card */}
-            <button 
-              onClick={() => handleCreateWebsite()}
-              disabled={creatingSite}
-              className="group flex flex-col items-center justify-center rounded-xl border-2 border-dashed min-h-[300px] transition-all duration-300 hover:border-zinc-500 disabled:opacity-50"
-              style={{ borderColor: colors[600] }}
-            >
-              <div 
-                className="w-14 h-14 rounded-full flex items-center justify-center mb-4 transition-all group-hover:scale-110"
-                style={{ background: colors[700] }}
+            {/* Create New Card - Hidden in selection mode */}
+            {!selectionMode && (
+              <button 
+                onClick={() => handleCreateWebsite()}
+                disabled={creatingSite}
+                className="group flex flex-col items-center justify-center rounded-xl border-2 border-dashed min-h-[300px] transition-all duration-300 hover:border-zinc-500 disabled:opacity-50"
+                style={{ borderColor: colors[600] }}
               >
-                {creatingSite ? (
-                  <div className="w-6 h-6 border-2 border-zinc-600 border-t-zinc-400 rounded-full animate-spin"></div>
-                ) : (
-                  <Plus size={28} style={{ color: colors[300] }} />
-                )}
-              </div>
-              <p className="font-medium text-lg" style={{ color: colors[100] }}>Create New Website</p>
-              <p className="text-sm mt-1" style={{ color: colors[400] }}>Start from scratch or use AI</p>
-            </button>
+                <div 
+                  className="w-14 h-14 rounded-full flex items-center justify-center mb-4 transition-all group-hover:scale-110"
+                  style={{ background: colors[700] }}
+                >
+                  {creatingSite ? (
+                    <div className="w-6 h-6 border-2 border-zinc-600 border-t-zinc-400 rounded-full animate-spin"></div>
+                  ) : (
+                    <Plus size={28} style={{ color: colors[300] }} />
+                  )}
+                </div>
+                <p className="font-medium text-lg" style={{ color: colors[100] }}>Create New Website</p>
+                <p className="text-sm mt-1" style={{ color: colors[400] }}>Start from scratch or use AI</p>
+              </button>
+            )}
           </div>
         </div>
       </main>
 
-      {/* Floating Action Button */}
-      <div className="fixed bottom-8 right-8 z-40">
-        <button 
-          onClick={() => handleCreateWebsite()}
-          disabled={creatingSite}
-          className="flex items-center gap-3 px-6 py-4 rounded-full shadow-2xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
-          style={{ background: colors[100], color: colors[900] }}
-        >
-          {creatingSite ? (
-            <div className="w-5 h-5 border-2 border-zinc-400 border-t-zinc-700 rounded-full animate-spin"></div>
-          ) : (
-            <Sparkles size={20} />
-          )}
-          <span className="font-semibold">Generate with AI</span>
-        </button>
-      </div>
+      {/* Floating Action Button - Hidden in selection mode */}
+      {!selectionMode && (
+        <div className="fixed bottom-8 right-8 z-40">
+          <button 
+            onClick={() => handleCreateWebsite()}
+            disabled={creatingSite}
+            className="flex items-center gap-3 px-6 py-4 rounded-full shadow-2xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+            style={{ background: colors[100], color: colors[900] }}
+          >
+            {creatingSite ? (
+              <div className="w-5 h-5 border-2 border-zinc-400 border-t-zinc-700 rounded-full animate-spin"></div>
+            ) : (
+              <Sparkles size={20} />
+            )}
+            <span className="font-semibold">Generate with AI</span>
+          </button>
+        </div>
+      )}
 
       {/* Settings Modal */}
       <SettingsModal
